@@ -44,6 +44,17 @@ class EmployeeOnboarding extends Model
     public const STATUS_INACTIVE = 'inactive';
     public const STATUS_RESIGNED = 'resigned';
 
+    public const SALARY_CYCLE_25_TO_25 = '25_to_25';
+    public const SALARY_CYCLE_10_TO_10 = '10_to_10';
+
+    public static function salaryCycles(): array
+    {
+        return [
+            self::SALARY_CYCLE_25_TO_25 => '25 to 25 days cycle',
+            self::SALARY_CYCLE_10_TO_10 => '10 to 10 cycle',
+        ];
+    }
+
     public const DOCUMENT_FIELDS = [
         'photograph',
         'signature',
@@ -119,6 +130,7 @@ class EmployeeOnboarding extends Model
         'total_deduction',
         'net_salary',
         'salary_payment_mode',
+        'salary_cycle',
         'deduction_notes',
         'declaration_date',
         'declaration_place',

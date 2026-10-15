@@ -231,12 +231,20 @@ class CstDayClosingApiController extends Controller
         $completedPercentage = $monthlyTarget > 0 ? round(($tillNowAchieved / $monthlyTarget) * 100, 1) : 0.0;
 
         // 5. Current Week Meetings
+        if (is_array($dateRange) && count($dateRange) === 2 && !empty($dateRange[0]) && !empty($dateRange[1])) {
+            $meetingStart = Carbon::parse($dateRange[0])->startOfDay();
+            $meetingEnd   = Carbon::parse($dateRange[1])->endOfDay();
+        } else {
+            $meetingStart = (clone $weekStart)->startOfDay();
+            $meetingEnd   = (clone $weekEnd)->endOfDay();
+        }
+
         $meetingsQuery = LeadReminder::query()
             ->where(function($q) {
                 $q->where('type', 'meeting')
                   ->orWhere('title', 'like', '%meeting%');
             })
-            ->whereBetween('remind_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
+            ->whereBetween('remind_at', [$meetingStart, $meetingEnd]);
 
         if ($branchId) {
             $meetingsQuery->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
@@ -260,7 +268,7 @@ class CstDayClosingApiController extends Controller
         $remindersMeetingCount = (int) $meetingsQuery->count();
 
         $cstUpdatesQuery = \App\Models\LeadCstUpdate::query()
-            ->whereBetween('created_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
+            ->whereBetween('created_at', [$meetingStart, $meetingEnd]);
 
         if ($branchId) {
             $cstUpdatesQuery->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
@@ -417,6 +425,8 @@ class CstDayClosingApiController extends Controller
             'deal_val'                          => $dealVal,
             'renewal_val'                       => $renewalVal,
             'dev_val'                           => $devVal,
+            'cst_updates_total_count'           => $cstUpdatesTotalCount,
+            'cst_updates_count'                 => $cstUpdatesCount,
             'weekly_updates_count'              => $weeklyUpdatesCount,
             'reviews_count'                     => $reviewsCount,
             'escalations_count'                 => $escalationsCount,
@@ -831,9 +841,17 @@ class CstDayClosingApiController extends Controller
 
             case 'current_week_meetings':
                 $title = "Current Week Meetings, Reviews & Updates";
+                if (is_array($dateRangeFilter) && count($dateRangeFilter) === 2 && !empty($dateRangeFilter[0]) && !empty($dateRangeFilter[1])) {
+                    $meetingStart = Carbon::parse($dateRangeFilter[0])->startOfDay();
+                    $meetingEnd   = Carbon::parse($dateRangeFilter[1])->endOfDay();
+                } else {
+                    $meetingStart = (clone $weekStart)->startOfDay();
+                    $meetingEnd   = (clone $weekEnd)->endOfDay();
+                }
+
                 $meetingsQ = LeadReminder::with(['lead.branch', 'user'])
                     ->where(fn($q) => $q->where('type', 'meeting')->orWhere('title', 'like', '%meeting%'))
-                    ->whereBetween('remind_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
+                    ->whereBetween('remind_at', [$meetingStart, $meetingEnd]);
 
                 if ($branchId) {
                     $meetingsQ->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
@@ -868,7 +886,7 @@ class CstDayClosingApiController extends Controller
                 }
 
                 $updatesQ = \App\Models\LeadCstUpdate::with(['lead.branch', 'user'])
-                    ->whereBetween('created_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
+                    ->whereBetween('created_at', [$meetingStart, $meetingEnd]);
 
                 if ($branchId) {
                     $updatesQ->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));

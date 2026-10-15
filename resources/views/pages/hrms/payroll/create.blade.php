@@ -86,6 +86,13 @@
                         @endforeach
                     </select>
                 </div>
+                <div class="pr-field">
+                    <label class="pr-label">Salary Cycle</label>
+                    <select id="filterSalaryCycle" class="pr-select">
+                        <option value="25_to_25" @selected(($selectedCycle ?? '25_to_25') === '25_to_25')>25 to 25 days cycle</option>
+                        <option value="10_to_10" @selected(($selectedCycle ?? '') === '10_to_10')>10 to 10 cycle</option>
+                    </select>
+                </div>
                 <button type="button" id="btnLoadEmployees" class="pr-btn pr-btn-primary">Load Employees</button>
                 <a href="{{ route('settings.payroll.index') }}" class="pr-btn pr-btn-ghost">Payroll Settings</a>
             </div>
@@ -163,6 +170,7 @@
                 <form method="POST" action="{{ route('payroll.store') }}" id="payrollForm" style="margin-top:16px;">
                     @csrf
                     <input type="hidden" id="formMonth" name="month" value="{{ $selectedMonth->format('Y-m') }}">
+                    <input type="hidden" id="formSalaryCycle" name="salary_cycle" value="{{ $selectedCycle ?? '25_to_25' }}">
                     <div class="pr-card" style="margin-bottom:12px;">
                         <div class="pr-form-row">
                             <div class="pr-field">
@@ -198,11 +206,13 @@
     const btnLoad           = document.getElementById('btnLoadEmployees');
     const filterMonth       = document.getElementById('filterMonth');
     const filterBranch      = document.getElementById('filterBranch');
+    const filterSalaryCycle = document.getElementById('filterSalaryCycle');
     const tableLoader       = document.getElementById('pr-table-loader');
     const tableSection      = document.getElementById('pr-table-section');
     const tbody             = document.getElementById('payrollTbody');
     const hiddenContainer   = document.getElementById('hiddenInputsContainer');
     const formMonth         = document.getElementById('formMonth');
+    const formSalaryCycle   = document.getElementById('formSalaryCycle');
     const metaEmpCount      = document.getElementById('metaEmpCount');
     const metaWorkingDays   = document.getElementById('metaWorkingDays');
     const metaMonthLabel    = document.getElementById('metaMonthLabel');
@@ -350,6 +360,9 @@
         metaMonthLabel.textContent  = data.month_label;
         bulkWdInput.value           = workingDays;
         formMonth.value             = filterMonth.value;
+        if (formSalaryCycle && filterSalaryCycle) {
+            formSalaryCycle.value = filterSalaryCycle.value;
+        }
 
         // Build HTML in one shot — much faster than appending row by row
         tbody.innerHTML = payrollRows.map((row, i) => buildRowHtml(row, i)).join('');
@@ -380,16 +393,18 @@
 
     // ── Fetch rows from server ────────────────────────────────────────────────
     function loadRows() {
-        const month    = filterMonth.value;
-        const branchId = filterBranch.value;
+        const month       = filterMonth.value;
+        const branchId    = filterBranch.value;
+        const salaryCycle = filterSalaryCycle ? filterSalaryCycle.value : '25_to_25';
 
         tableSection.classList.remove('active');
         tableLoader.classList.add('active');
         tbody.innerHTML = '';
 
         const url = new URL('{{ route("payroll.loadRows") }}', window.location.origin);
-        if (month)    url.searchParams.set('month', month);
-        if (branchId) url.searchParams.set('branch_id', branchId);
+        if (month)       url.searchParams.set('month', month);
+        if (branchId)    url.searchParams.set('branch_id', branchId);
+        if (salaryCycle) url.searchParams.set('salary_cycle', salaryCycle);
 
         fetch(url.toString(), {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -418,8 +433,17 @@
         scheduleOverall();
     });
 
-    // ── Button click ──────────────────────────────────────────────────────────
+    // ── Button click & filter changes ─────────────────────────────────────────
     btnLoad.addEventListener('click', loadRows);
+    if (filterSalaryCycle) {
+        filterSalaryCycle.addEventListener('change', loadRows);
+    }
+    if (filterBranch) {
+        filterBranch.addEventListener('change', loadRows);
+    }
+    if (filterMonth) {
+        filterMonth.addEventListener('change', loadRows);
+    }
 
     // ── Auto-load on page open ────────────────────────────────────────────────
     loadRows();

@@ -1001,6 +1001,24 @@ class LeadProductController extends Controller
             default                                         => strtolower(str_replace([' ', '-'], '_', $rawType)),
         };
 
+        if ($paymentType === 'ad_budget_partner') {
+            $currentUser = auth()->user();
+            $userBranchIds = array_filter(array_unique(array_merge(
+                $currentUser ? $currentUser->getMyBranchIds() : [],
+                [$currentUser?->branch_id]
+            )));
+            $isMappedToDefault = \App\Models\Branch::withoutGlobalScope('branch')
+                ->whereIn('id', $userBranchIds)
+                ->where('is_default', true)
+                ->exists();
+
+            if (! $isMappedToDefault && ! ($currentUser && $currentUser->isSuperAdmin())) {
+                return response()->json([
+                    'errors' => ['payment_type' => ['Ad Budget for partner is only permitted for Default Branch users.']],
+                ], 403);
+            }
+        }
+
         $isTdsDeducted = filter_var($request->input('is_tds_deducted', false), FILTER_VALIDATE_BOOLEAN);
         $tdsPercentage = null;
         $tdsAmount = null;

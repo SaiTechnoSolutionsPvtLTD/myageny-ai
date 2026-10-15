@@ -327,26 +327,31 @@
                                     {{-- Step 1: DM TL Approval Buttons --}}
                                     @if($item->status === 'tl_pending' && $isDmTlUser)
                                          <button type="button" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;"
-                                                 data-item="{{ json_encode($item) }}" onclick='openTlActionModal(JSON.parse(this.getAttribute("data-item")), "approve")'>
+                                                 data-item="{{ json_encode($item) }}" onclick="openTlActionModal(this, 'approve')">
                                              ✓ TL Approve
                                          </button>
                                          <button type="button" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;"
-                                                 data-item="{{ json_encode($item) }}" onclick='openTlActionModal(JSON.parse(this.getAttribute("data-item")), "reject")'>
+                                                 data-item="{{ json_encode($item) }}" onclick="openTlActionModal(this, 'reject')">
                                              ✕ Reject
                                          </button>
                                     @endif
 
-                                    {{-- Step 2: Accounts Team Approval Button (hr@saitechnosolutions.net) --}}
+                                    {{-- Step 2: Accounts Team Approval Button --}}
                                     @if($item->status === 'accounts_pending' && $isAccountsUser)
                                         <button type="button" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;"
-                                                data-item="{{ json_encode($item) }}" onclick='openAccountsApproveModal(JSON.parse(this.getAttribute("data-item")))'>
+                                                data-id="{{ $item->id }}"
+                                                data-ad-account-id="{{ $item->ad_account_id }}"
+                                                data-ad-account-name="{{ $item->adAccount ? ($item->adAccount->account_name . ' (' . $item->adAccount->platform . ')') : '—' }}"
+                                                data-amount="{{ $item->amount }}"
+                                                data-item="{{ json_encode($item) }}"
+                                                onclick="openAccountsApproveModal(this)">
                                             Approve & Fill Details
                                         </button>
                                     @endif
 
                                     {{-- View Details Button for Executive & TL & Accounts --}}
                                     <button type="button" class="adb-btn adb-btn-secondary" style="padding:4px 10px; font-size:11px;"
-                                            data-item="{{ json_encode($item) }}" onclick='openViewDetailsModal(JSON.parse(this.getAttribute("data-item")))'>
+                                            data-item="{{ json_encode($item) }}" onclick="openViewDetailsModal(this)">
                                         👁️ View
                                     </button>
                                 </div>
@@ -488,11 +493,11 @@
     </div>
 </div>
 
-{{-- Accounts Team Approval Modal (hr@saitechnosolutions.net) --}}
+{{-- Accounts Team Approval Modal --}}
 <div class="modal-overlay" id="accApproveModal">
     <div class="modal-box">
         <div class="modal-header">
-            <div class="modal-title">Accounts Approval (hr@saitechnosolutions.net)</div>
+            <div class="modal-title">Accounts Approval</div>
             <button type="button" class="modal-close" onclick="closeAccApproveModal()">×</button>
         </div>
         <form method="POST" id="accApproveForm" enctype="multipart/form-data">
@@ -607,7 +612,7 @@
                 </div>
             </div>
 
-            <div style="font-size:14px; font-weight:800; color:#0f172a; margin-top:8px;">Accounts Team Approval (hr@saitechnosolutions.net):</div>
+            <div style="font-size:14px; font-weight:800; color:#0f172a; margin-top:8px;">Accounts Team Approval:</div>
             <div class="summary-card">
                 <div class="summary-row">
                     <span class="summary-label">Accounts Approved By:</span>
@@ -771,7 +776,16 @@ function closeConfirmModal() {
     document.getElementById('confirmModal').classList.remove('active');
 }
 
-function openTlActionModal(item, action) {
+function openTlActionModal(btnOrItem, action) {
+    let item = btnOrItem;
+    if (btnOrItem instanceof HTMLElement) {
+        try {
+            item = JSON.parse(btnOrItem.getAttribute('data-item') || '{}');
+        } catch(e) {
+            item = {};
+        }
+    }
+
     const form = document.getElementById('tlActionForm');
     const actionInput = document.getElementById('tlActionInput');
     const title = document.getElementById('tlActionTitle');
@@ -784,7 +798,7 @@ function openTlActionModal(item, action) {
     remarksInput.value = '';
 
     const datesList = (item.selected_dates || []).join(', ');
-    const formattedAmount = '₹' + parseFloat(item.amount).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    const formattedAmount = '₹' + parseFloat(item.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
 
     summary.innerHTML = `
         <div style="font-weight:800; color:#0f172a; margin-bottom:6px; font-size:14px;">Request #${item.id} — ${item.ad_account ? item.ad_account.account_name : '—'}</div>
@@ -820,11 +834,40 @@ function closeTlActionModal() {
     document.getElementById('tlActionModal').classList.remove('active');
 }
 
-function openAccountsApproveModal(item) {
-    document.getElementById('accApproveForm').action = '/accounts/ad-budget/' + item.id + '/accounts-approve';
-    document.getElementById('acc_modal_req_id').innerText = '#' + item.id;
+function openAccountsApproveModal(target) {
+    let id = null;
+    let targetAccountId = '';
+    let reqAccName = '—';
+    let amount = '';
 
-    const reqAccName = item.ad_account ? (item.ad_account.account_name + ' (' + item.ad_account.platform + ')') : '—';
+    if (target instanceof HTMLElement) {
+        id = target.getAttribute('data-id');
+        targetAccountId = target.getAttribute('data-ad-account-id') || '';
+        reqAccName = target.getAttribute('data-ad-account-name') || '—';
+        amount = target.getAttribute('data-amount') || '';
+        if (!targetAccountId || reqAccName === '—') {
+            try {
+                const parsed = JSON.parse(target.getAttribute('data-item') || '{}');
+                id = id || parsed.id;
+                targetAccountId = targetAccountId || String(parsed.ad_account_id || (parsed.ad_account ? parsed.ad_account.id : '') || '');
+                if ((!reqAccName || reqAccName === '—') && parsed.ad_account) {
+                    reqAccName = parsed.ad_account.account_name + ' (' + parsed.ad_account.platform + ')';
+                }
+                amount = amount || parsed.amount;
+            } catch(e) {}
+        }
+    } else if (target && typeof target === 'object') {
+        id = target.id;
+        targetAccountId = String(target.ad_account_id || (target.ad_account ? target.ad_account.id : '') || '');
+        reqAccName = target.ad_account ? (target.ad_account.account_name + ' (' + target.ad_account.platform + ')') : '—';
+        amount = target.amount || '';
+    }
+
+    if (!id) return;
+
+    document.getElementById('accApproveForm').action = '/accounts/ad-budget/' + id + '/accounts-approve';
+    document.getElementById('acc_modal_req_id').innerText = '#' + id;
+
     const accReqDisplay = document.getElementById('acc_requested_account_display');
     if (accReqDisplay) {
         accReqDisplay.innerText = reqAccName;
@@ -832,35 +875,62 @@ function openAccountsApproveModal(item) {
 
     const accAmountDisplay = document.getElementById('acc_requested_amount_display');
     if (accAmountDisplay) {
-        accAmountDisplay.innerText = '₹' + parseFloat(item.amount).toLocaleString('en-IN', {minimumFractionDigits: 2});
+        accAmountDisplay.innerText = '₹' + parseFloat(amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
     }
 
-    const targetAccountId = item.ad_account_id || (item.ad_account ? item.ad_account.id : '');
     const selectElem = document.getElementById('acc_ad_account_id');
     if (selectElem) {
-        selectElem.value = String(targetAccountId || '');
-        for (let i = 0; i < selectElem.options.length; i++) {
-            if (String(selectElem.options[i].value) === String(targetAccountId)) {
-                selectElem.selectedIndex = i;
-                selectElem.options[i].selected = true;
-                break;
+        targetAccountId = String(targetAccountId || '').trim();
+
+        if (targetAccountId) {
+            let optionFound = false;
+            for (let i = 0; i < selectElem.options.length; i++) {
+                if (String(selectElem.options[i].value).trim() === targetAccountId) {
+                    optionFound = true;
+                    break;
+                }
             }
+
+            // If the requested ad account is not present in dropdown options, append it so it can be selected
+            if (!optionFound) {
+                const opt = document.createElement('option');
+                opt.value = targetAccountId;
+                opt.text = (reqAccName && reqAccName !== '—') ? reqAccName : ('Requested Account #' + targetAccountId);
+                selectElem.appendChild(opt);
+            }
+
+            selectElem.value = targetAccountId;
+            for (let i = 0; i < selectElem.options.length; i++) {
+                selectElem.options[i].selected = (String(selectElem.options[i].value).trim() === targetAccountId);
+            }
+            selectElem.dispatchEvent(new Event('change'));
+        } else {
+            selectElem.selectedIndex = 0;
         }
     }
 
-    document.getElementById('acc_approved_amount').value = item.amount || '';
+    document.getElementById('acc_approved_amount').value = amount || '';
     document.getElementById('accApproveModal').classList.add('active');
 }
 function closeAccApproveModal() {
     document.getElementById('accApproveModal').classList.remove('active');
 }
 
-function openViewDetailsModal(item) {
+function openViewDetailsModal(btnOrItem) {
+    let item = btnOrItem;
+    if (btnOrItem instanceof HTMLElement) {
+        try {
+            item = JSON.parse(btnOrItem.getAttribute('data-item') || '{}');
+        } catch(e) {
+            item = {};
+        }
+    }
+
     document.getElementById('view_req_id').innerText = '#' + item.id;
     document.getElementById('view_requester').innerText = item.requester ? item.requester.name : '—';
-    document.getElementById('view_req_amount').innerText = '₹' + parseFloat(item.amount).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    document.getElementById('view_req_amount').innerText = '₹' + parseFloat(item.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
     document.getElementById('view_dates').innerHTML = (item.selected_dates || []).map(d => `<span class="date-tag" style="margin:2px;">📅 ${d}</span>`).join(' ') || '—';
-    document.getElementById('view_status').innerText = item.status.toUpperCase();
+    document.getElementById('view_status').innerText = (item.status || '').toUpperCase();
     document.getElementById('view_exec_remarks').innerText = item.remarks || 'None';
 
     document.getElementById('view_tl_status').innerText = (item.status === 'tl_pending') ? 'Pending DM TL Approval' : 'Approved by DM TL';

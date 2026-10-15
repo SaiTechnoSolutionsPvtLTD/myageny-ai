@@ -128,72 +128,49 @@
 
                     {{-- Customer Selector Bar --}}
                     <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:16px 20px;">
-                        <div class="form-grid-3">
-                            <div class="form-group">
-                                <label class="form-label" style="color:#9a3412;">
-                                    <i class="bi bi-person-check-fill"></i> Select Customer (Customer Master) <span style="color:#dc2626;">*</span>
-                                </label>
-                                <select name="customer_id" id="customerSelect" class="form-input" style="border-color:#fdba74;" onchange="onCustomerSelected(this.value)">
-                                    <option value="">-- Choose Existing Customer --</option>
-                                    @foreach($customers as $cust)
-                                        <option value="{{ $cust->id }}" {{ old('customer_id', request('customer_id')) == $cust->id ? 'selected' : '' }}>
-                                            {{ $cust->customer_name }} {{ $cust->company_name ? "({$cust->company_name})" : '' }} {{ $cust->mobile_number ? "- {$cust->mobile_number}" : '' }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label">Customer Name <span style="color:#dc2626;">*</span></label>
-                                <input type="text" name="customer_name" id="customerName" class="form-input"
-                                       value="{{ old('customer_name') }}" placeholder="Customer Name" required>
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label">Company Name</label>
-                                <input type="text" name="company_name" id="companyName" class="form-input"
-                                       value="{{ old('company_name') }}" placeholder="Client Business / Company Name">
-                            </div>
+                        <div class="form-group" style="max-width:550px;">
+                            <label class="form-label" style="color:#9a3412; font-size:13px; font-weight:800;">
+                                <i class="bi bi-person-check-fill"></i> Select Customer (Customer Master) <span style="color:#dc2626;">*</span>
+                            </label>
+                            <select name="customer_id" id="customerSelect" class="form-input" style="border-color:#fdba74; font-size:13.5px; padding:10px 14px;" onchange="onCustomerSelected(this.value)" required>
+                                <option value="">-- Choose Existing Customer --</option>
+                                @foreach($customers as $cust)
+                                    <option value="{{ $cust->id }}" {{ old('customer_id', request('customer_id')) == $cust->id ? 'selected' : '' }}>
+                                        {{ $cust->customer_name }} {{ $cust->company_name ? "({$cust->company_name})" : '' }} {{ $cust->mobile_number ? "- {$cust->mobile_number}" : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
 
-                        <div class="form-grid-4" style="margin-top:12px;">
-                            <div class="form-group">
-                                <label class="form-label">Phone / Mobile</label>
-                                <input type="text" name="customer_phone" id="customerPhone" class="form-input"
-                                       value="{{ old('customer_phone') }}" placeholder="+91 98765 43210">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Email Address</label>
-                                <input type="email" name="customer_email" id="customerEmail" class="form-input"
-                                       value="{{ old('customer_email') }}" placeholder="client@company.com">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">GST Number (GSTIN)</label>
-                                <input type="text" name="customer_gstin" id="customerGstin" class="form-input" style="text-transform:uppercase;"
-                                       value="{{ old('customer_gstin') }}" placeholder="33AAAAA0000A1Z5">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">PAN Number</label>
-                                <input type="text" name="customer_pan" id="customerPan" class="form-input" style="text-transform:uppercase;"
-                                       value="{{ old('customer_pan') }}" placeholder="ABCDE1234F">
-                            </div>
-                        </div>
+                        {{-- Hidden inputs to preserve customer snapshot data --}}
+                        <input type="hidden" name="customer_name" id="customerName" value="{{ old('customer_name') }}">
+                        <input type="hidden" name="company_name" id="companyName" value="{{ old('company_name') }}">
+                        <input type="hidden" name="customer_phone" id="customerPhone" value="{{ old('customer_phone') }}">
+                        <input type="hidden" name="customer_email" id="customerEmail" value="{{ old('customer_email') }}">
+                        <input type="hidden" name="customer_gstin" id="customerGstin" value="{{ old('customer_gstin') }}">
+                        <input type="hidden" name="customer_pan" id="customerPan" value="{{ old('customer_pan') }}">
                     </div>
 
                     {{-- Invoice Identification & Dates --}}
                     <div class="form-grid-4">
                         <div class="form-group">
-                            <label class="form-label">Invoice Number <span style="color:#dc2626;">*</span></label>
+                            <label class="form-label" style="display:flex; align-items:center; justify-content:space-between;">
+                                <span>Invoice Number <span style="color:#dc2626;">*</span></span>
+                                <span style="font-size:10.5px; font-weight:700; color:#059669; background:#dcfce7; padding:1px 7px; border-radius:4px;">
+                                    <i class="bi bi-magic"></i> Auto-generated
+                                </span>
+                            </label>
                             <input type="text" name="invoice_number" id="invoiceNumber" class="form-input"
-                                   value="{{ old('invoice_number', $invoiceNumber) }}" style="font-weight:700; background:#f8fafc;" required>
-                            <span style="font-size:11px; color:#94a3b8;">Auto-generated sequential format</span>
+                                   value="{{ old('invoice_number', $invoiceNumber) }}" readonly
+                                   style="font-weight:700; background:#f1f5f9; cursor:not-allowed; color:#0f172a;" required>
+
                         </div>
 
                         <div class="form-group">
                             <label class="form-label">Invoice Date <span style="color:#dc2626;">*</span></label>
                             <input type="date" name="invoice_date" id="invoiceDate" class="form-input"
                                    value="{{ old('invoice_date', date('Y-m-d')) }}" required onchange="calculateDueDate()">
-                            <span style="font-size:11px; color:#94a3b8;">Default is today; editable</span>
+
                         </div>
 
                         <div class="form-group">
@@ -259,6 +236,11 @@
                                                value="{{ old('billing_attention') }}" placeholder="Attention / Recipient Name">
                                     </div>
                                     <div class="form-group">
+                                        <label class="form-label">GST Number (GSTIN)</label>
+                                        <input type="text" name="billing_gstin" id="billingGstin" class="form-input" style="text-transform:uppercase;"
+                                               value="{{ old('billing_gstin', old('customer_gstin')) }}" placeholder="e.g. 33AAAAA0000A1Z5" oninput="syncGstin(this.value)">
+                                    </div>
+                                    <div class="form-group">
                                         <label class="form-label">Address (Street / Building)</label>
                                         <textarea name="billing_address" id="billingAddress" class="form-input" rows="2"
                                                   placeholder="Street address line">{{ old('billing_address') }}</textarea>
@@ -296,6 +278,11 @@
                                         <label class="form-label">Attention</label>
                                         <input type="text" name="shipping_attention" id="shippingAttention" class="form-input"
                                                value="{{ old('shipping_attention') }}" placeholder="Attention / Recipient Name">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">GST Number (GSTIN)</label>
+                                        <input type="text" name="shipping_gstin" id="shippingGstin" class="form-input" style="text-transform:uppercase;"
+                                               value="{{ old('shipping_gstin', old('customer_gstin')) }}" placeholder="e.g. 33AAAAA0000A1Z5">
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">Address (Street / Building)</label>
@@ -526,6 +513,28 @@ function onCustomerSelected(customerId) {
             document.getElementById('customerGstin').value = data.gst_number || '';
             document.getElementById('customerPan').value = data.pan_number || '';
 
+            // Sales Person dynamic auto-select
+            if (data.sales_person_id) {
+                const spSelect = document.getElementById('salesPersonId');
+                if (spSelect) {
+                    let optFound = false;
+                    for (let i = 0; i < spSelect.options.length; i++) {
+                        if (spSelect.options[i].value == data.sales_person_id) {
+                            spSelect.selectedIndex = i;
+                            optFound = true;
+                            break;
+                        }
+                    }
+                    if (!optFound && data.sales_person_name) {
+                        const newOpt = document.createElement('option');
+                        newOpt.value = data.sales_person_id;
+                        newOpt.textContent = data.sales_person_name + (data.sales_person_email ? ' (' + data.sales_person_email + ')' : '');
+                        newOpt.selected = true;
+                        spSelect.appendChild(newOpt);
+                    }
+                }
+            }
+
             if (data.payment_terms) {
                 const termsSelect = document.getElementById('paymentTerms');
                 termsSelect.value = data.payment_terms;
@@ -534,6 +543,8 @@ function onCustomerSelected(customerId) {
 
             // Billing Address
             document.getElementById('billingAttention').value = data.billing_attention || data.customer_name || '';
+            const bGstin = document.getElementById('billingGstin');
+            if (bGstin) bGstin.value = data.gst_number || '';
             document.getElementById('billingAddress').value = data.billing_address || '';
             document.getElementById('billingCity').value = data.billing_city || '';
             document.getElementById('billingState').value = data.billing_state || '';
@@ -541,6 +552,8 @@ function onCustomerSelected(customerId) {
 
             // Shipping Address
             document.getElementById('shippingAttention').value = data.shipping_attention || data.billing_attention || data.customer_name || '';
+            const sGstin = document.getElementById('shippingGstin');
+            if (sGstin) sGstin.value = data.gst_number || '';
             document.getElementById('shippingAddress').value = data.shipping_address || data.billing_address || '';
             document.getElementById('shippingCity').value = data.shipping_city || data.billing_city || '';
             document.getElementById('shippingState').value = data.shipping_state || data.billing_state || '';
@@ -563,10 +576,18 @@ function onCustomerSelected(customerId) {
 // Copy Billing Address to Shipping Address
 function copyBillingToShipping() {
     document.getElementById('shippingAttention').value = document.getElementById('billingAttention').value;
+    const bGstin = document.getElementById('billingGstin');
+    const sGstin = document.getElementById('shippingGstin');
+    if (bGstin && sGstin) sGstin.value = bGstin.value;
     document.getElementById('shippingAddress').value = document.getElementById('billingAddress').value;
     document.getElementById('shippingCity').value = document.getElementById('billingCity').value;
     document.getElementById('shippingState').value = document.getElementById('billingState').value;
     document.getElementById('shippingPincode').value = document.getElementById('billingPincode').value;
+}
+
+function syncGstin(val) {
+    const cg = document.getElementById('customerGstin');
+    if (cg) cg.value = val;
 }
 
 // Auto-calculate Due Date based on Payment Terms

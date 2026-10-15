@@ -209,8 +209,11 @@
 
                 <!-- Sales Submenu -->
                 <div class="submenu {{ request()->routeIs('accounts.sales.*') ? 'show' : '' }}">
-                    <a href="{{ route('accounts.sales.invoices.index') }}" class="submenu-item {{ request()->routeIs('accounts.sales.invoices.index') ? 'active' : '' }}">
+                    <a href="{{ route('accounts.sales.invoices.index') }}" class="submenu-item {{ request()->routeIs('accounts.sales.invoices.*') && !request()->routeIs('accounts.sales.invoices.create') ? 'active' : '' }}">
                         Invoices
+                    </a>
+                    <a href="{{ route('accounts.sales.payments.index') }}" class="submenu-item {{ request()->routeIs('accounts.sales.payments.*') ? 'active' : '' }}">
+                        Payments
                     </a>
                     <a href="{{ route('accounts.sales.invoices.create') }}" class="submenu-item {{ request()->routeIs('accounts.sales.invoices.create') ? 'active' : '' }}">
                         New Invoice

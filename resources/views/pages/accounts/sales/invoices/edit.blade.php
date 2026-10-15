@@ -170,9 +170,16 @@
 
                     <div class="form-grid-4">
                         <div class="form-group">
-                            <label class="form-label">Invoice Number <span style="color:#dc2626;">*</span></label>
+                            <label class="form-label" style="display:flex; align-items:center; justify-content:space-between;">
+                                <span>Invoice Number <span style="color:#dc2626;">*</span></span>
+                                <span style="font-size:10.5px; font-weight:700; color:#64748b; background:#f1f5f9; padding:1px 7px; border-radius:4px;">
+                                    <i class="bi bi-lock-fill"></i> Read-only
+                                </span>
+                            </label>
                             <input type="text" name="invoice_number" id="invoiceNumber" class="form-input"
-                                       value="{{ old('invoice_number', $invoice->invoice_number) }}" style="font-weight:700;" required>
+                                   value="{{ old('invoice_number', $invoice->invoice_number) }}" readonly
+                                   style="font-weight:700; background:#f1f5f9; cursor:not-allowed; color:#0f172a;" required>
+                            <span style="font-size:11px; color:#64748b;">Invoice number cannot be changed</span>
                         </div>
 
                         <div class="form-group">
@@ -252,6 +259,11 @@
                                            value="{{ old('billing_attention', $invoice->billing_attention) }}">
                                 </div>
                                 <div class="form-group">
+                                    <label class="form-label">GST Number (GSTIN)</label>
+                                    <input type="text" name="billing_gstin" id="billingGstin" class="form-input" style="text-transform:uppercase;"
+                                           value="{{ old('billing_gstin', $invoice->billing_gstin ?: $invoice->customer_gstin) }}" placeholder="e.g. 33AAAAA0000A1Z5">
+                                </div>
+                                <div class="form-group">
                                     <label class="form-label">Address</label>
                                     <textarea name="billing_address" id="billingAddress" class="form-input" rows="2">{{ old('billing_address', $invoice->billing_address) }}</textarea>
                                 </div>
@@ -287,6 +299,11 @@
                                     <label class="form-label">Attention</label>
                                     <input type="text" name="shipping_attention" id="shippingAttention" class="form-input"
                                            value="{{ old('shipping_attention', $invoice->shipping_attention) }}">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">GST Number (GSTIN)</label>
+                                    <input type="text" name="shipping_gstin" id="shippingGstin" class="form-input" style="text-transform:uppercase;"
+                                           value="{{ old('shipping_gstin', $invoice->shipping_gstin ?: $invoice->customer_gstin) }}" placeholder="e.g. 33AAAAA0000A1Z5">
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Address</label>
@@ -526,17 +543,43 @@ function onCustomerSelected(customerId) {
             document.getElementById('customerGstin').value = data.gst_number || '';
             document.getElementById('customerPan').value = data.pan_number || '';
 
+            // Sales Person dynamic auto-select
+            if (data.sales_person_id) {
+                const spSelect = document.getElementById('salesPersonId');
+                if (spSelect) {
+                    let optFound = false;
+                    for (let i = 0; i < spSelect.options.length; i++) {
+                        if (spSelect.options[i].value == data.sales_person_id) {
+                            spSelect.selectedIndex = i;
+                            optFound = true;
+                            break;
+                        }
+                    }
+                    if (!optFound && data.sales_person_name) {
+                        const newOpt = document.createElement('option');
+                        newOpt.value = data.sales_person_id;
+                        newOpt.textContent = data.sales_person_name + (data.sales_person_email ? ' (' + data.sales_person_email + ')' : '');
+                        newOpt.selected = true;
+                        spSelect.appendChild(newOpt);
+                    }
+                }
+            }
+
             if (data.payment_terms) {
                 document.getElementById('paymentTerms').value = data.payment_terms;
             }
 
             document.getElementById('billingAttention').value = data.billing_attention || data.customer_name || '';
+            const bGstin = document.getElementById('billingGstin');
+            if (bGstin) bGstin.value = data.gst_number || '';
             document.getElementById('billingAddress').value = data.billing_address || '';
             document.getElementById('billingCity').value = data.billing_city || '';
             document.getElementById('billingState').value = data.billing_state || '';
             document.getElementById('billingPincode').value = data.billing_pincode || '';
 
             document.getElementById('shippingAttention').value = data.shipping_attention || data.billing_attention || data.customer_name || '';
+            const sGstin = document.getElementById('shippingGstin');
+            if (sGstin) sGstin.value = data.gst_number || '';
             document.getElementById('shippingAddress').value = data.shipping_address || data.billing_address || '';
             document.getElementById('shippingCity').value = data.shipping_city || data.billing_city || '';
             document.getElementById('shippingState').value = data.shipping_state || data.billing_state || '';
@@ -546,6 +589,9 @@ function onCustomerSelected(customerId) {
 
 function copyBillingToShipping() {
     document.getElementById('shippingAttention').value = document.getElementById('billingAttention').value;
+    const bGstin = document.getElementById('billingGstin');
+    const sGstin = document.getElementById('shippingGstin');
+    if (bGstin && sGstin) sGstin.value = bGstin.value;
     document.getElementById('shippingAddress').value = document.getElementById('billingAddress').value;
     document.getElementById('shippingCity').value = document.getElementById('billingCity').value;
     document.getElementById('shippingState').value = document.getElementById('billingState').value;

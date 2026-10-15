@@ -735,7 +735,7 @@ class AccountsApiController extends Controller
             $search            = $request->query('search');
 
             // 1. Fetch Approved Budget Allocations (Credit)
-            $allocations = AdBudgetRequest::with(['adAccount', 'requester'])
+            $allocations = AdBudgetRequest::with(['adAccount', 'approver', 'tlApprover', 'requester'])
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->where('status', 'approved')
                 ->when($selectedAccountId, fn($q) => $q->where('ad_account_id', $selectedAccountId))
@@ -755,6 +755,7 @@ class AccountsApiController extends Controller
                     ? $alloc->payment_date->format('Y-m-d')
                     : $alloc->created_at->format('Y-m-d');
                 $amount = (float) ($alloc->approved_amount > 0 ? $alloc->approved_amount : $alloc->amount);
+                $allocatedByName = $alloc->approver?->name ?: ($alloc->tlApprover?->name ?: ($alloc->requester?->name ?: 'System'));
 
                 $transactions->push([
                     'id'               => 'alloc_' . $alloc->id,
@@ -771,7 +772,7 @@ class AccountsApiController extends Controller
                     'description'      => 'Approved Budget Allocation (Request #' . $alloc->id . ($alloc->client_name ? ' - ' . $alloc->client_name : '') . ')',
                     'allocated_amount' => $amount,
                     'spent_amount'     => 0.0,
-                    'user_name'        => $alloc->requester?->name ?? 'System',
+                    'user_name'        => $allocatedByName,
                     'created_at'       => $alloc->created_at->format('Y-m-d H:i:s'),
                 ]);
             }

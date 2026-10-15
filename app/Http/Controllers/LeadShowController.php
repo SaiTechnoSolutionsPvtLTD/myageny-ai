@@ -314,6 +314,23 @@ class LeadShowController extends Controller
             'ad_budget_for_partner', 'ad_budget_partner'    => 'ad_budget_partner',
             default                                         => strtolower(str_replace([' ', '-'], '_', $rawType)),
         };
+
+        if ($data['payment_type'] === 'ad_budget_partner') {
+            $currentUser = auth()->user();
+            $userBranchIds = array_filter(array_unique(array_merge(
+                $currentUser ? $currentUser->getMyBranchIds() : [],
+                [$currentUser?->branch_id]
+            )));
+            $isMappedToDefault = \App\Models\Branch::withoutGlobalScope('branch')
+                ->whereIn('id', $userBranchIds)
+                ->where('is_default', true)
+                ->exists();
+
+            if (! $isMappedToDefault && ! ($currentUser && $currentUser->isSuperAdmin())) {
+                return back()->with('error', 'Ad Budget for partner payment type is only available to Default Branch users.');
+            }
+        }
+
         $data['branch_id'] = $request->filled('branch_id') ? (int) $request->branch_id : null;
 
         $isTdsDeducted = filter_var($request->input('is_tds_deducted', false), FILTER_VALIDATE_BOOLEAN);

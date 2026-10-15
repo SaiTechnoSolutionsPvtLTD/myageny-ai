@@ -71,8 +71,16 @@
                     <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px;">Salary Month</div>
                     <input type="month" name="month" class="payroll-input" value="{{ request('month') }}">
                 </div>
+                <div>
+                    <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px;">Salary Cycle</div>
+                    <select name="salary_cycle" class="payroll-input">
+                        <option value="">All Cycles</option>
+                        <option value="25_to_25" @selected(request('salary_cycle') === '25_to_25')>25 to 25 days cycle</option>
+                        <option value="10_to_10" @selected(request('salary_cycle') === '10_to_10')>10 to 10 cycle</option>
+                    </select>
+                </div>
                 <button type="submit" class="payroll-btn payroll-btn-primary">Filter</button>
-                @if(request()->filled('month'))
+                @if(request()->filled('month') || request()->filled('salary_cycle'))
                     <a href="{{ route('payroll.index') }}" class="payroll-btn payroll-btn-ghost">Reset</a>
                 @endif
             </form>
@@ -104,7 +112,7 @@
                     <table class="payroll-table">
                         <thead>
                             <tr>
-                                <th>Month</th>
+                                <th>Month & Cycle</th>
                                 <th>Employees</th>
                                 <th>Working Days</th>
                                 <th>Gross</th>
@@ -117,8 +125,15 @@
                             @foreach($payrolls as $payroll)
                                 <tr>
                                     <td>
-                                        <div style="font-weight:700;color:#121212;">{{ $payroll->salary_month->format('F Y') }}</div>
-                                        <div style="font-size:11px;color:#9e9e9e;">Processed {{ optional($payroll->updated_at)->format('d M Y h:i A') }}</div>
+                                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                            <span style="font-weight:700;color:#121212;">{{ $payroll->salary_month->format('F Y') }}</span>
+                                            @if(($payroll->salary_cycle ?? '25_to_25') === '10_to_10')
+                                                <span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;font-weight:700;">10 to 10</span>
+                                            @else
+                                                <span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;">25 to 25</span>
+                                            @endif
+                                        </div>
+                                        <div style="font-size:11px;color:#9e9e9e;margin-top:2px;">Processed {{ optional($payroll->updated_at)->format('d M Y h:i A') }}</div>
                                     </td>
                                     <td>{{ $selfServiceMode ? 1 : $payroll->employee_count }}</td>
                                     <td><span class="payroll-chip">{{ $payroll->total_working_days }} days</span></td>

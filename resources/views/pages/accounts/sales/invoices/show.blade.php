@@ -5,32 +5,262 @@
 @push('styles')
 <style>
 .inv-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f8fafc; font-family:'Inter',sans-serif; min-height:100%; }
-.inv-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:16px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 8px rgba(0,0,0,.03); flex-wrap:wrap; gap:14px; }
-.inv-breadcrumbs { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px; }
-.inv-breadcrumbs a { color:#64748b; text-decoration:none; display:inline-flex; align-items:center; gap:4px; transition:color .15s; }
-.inv-breadcrumbs a:hover { color:#fe5f04; }
-.inv-top-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.inv-sub { font-size:12.5px; color:#64748b; }
+.inv-topbar {
+    background: #ffffff;
+    padding: 16px 24px;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.inv-top-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f1f5f9;
+    flex-wrap: wrap;
+}
+.inv-nav-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.inv-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+    text-decoration: none;
+    transition: all .15s ease;
+}
+.inv-back-btn:hover {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #fe5f04;
+    transform: translateX(-1px);
+}
+.inv-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+}
+.inv-breadcrumbs a {
+    color: #64748b;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: color .15s;
+}
+.inv-breadcrumbs a:hover {
+    color: #fe5f04;
+}
+.inv-nav-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.inv-utility-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #475569;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all .15s ease;
+}
+.inv-utility-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #0f172a;
+}
+.inv-utility-btn.danger-btn {
+    background: #ffffff;
+    border-color: #fee2e2;
+    color: #dc2626;
+    padding: 5px 10px;
+}
+.inv-utility-btn.danger-btn:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
 
+/* Main Row */
+.inv-main-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+.inv-identity-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+.inv-icon-badge {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #fff7ed, #ffedd5);
+    border: 1px solid #fed7aa;
+    color: #fe5f04;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(254,95,4,0.1);
+}
+.inv-identity-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+.inv-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.inv-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    margin: 0;
+}
 .inv-num-pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #f1f5f9;
+    background: #f8fafc;
     border: 1px solid #cbd5e1;
     padding: 3px 10px;
     border-radius: 8px;
-    font-family: monospace;
-    font-size: 13.5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
     font-weight: 800;
     color: #0f172a;
     cursor: pointer;
-    transition: all .2s;
+    transition: all .15s ease;
 }
 .inv-num-pill:hover {
     background: #fff7ed;
     border-color: #fdba74;
     color: #fe5f04;
+}
+.inv-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: #64748b;
+    flex-wrap: wrap;
+}
+.inv-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.inv-meta-dot {
+    color: #cbd5e1;
+    font-size: 10px;
+}
+
+/* Primary Action Buttons */
+.inv-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.inv-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    background: linear-gradient(135deg, #fe5f04, #ff7c30);
+    color: #ffffff !important;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(254,95,4,0.25);
+    transition: all .2s ease;
+}
+.inv-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(254,95,4,0.35);
+    color: #ffffff !important;
+}
+.inv-btn-success {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    color: #ffffff !important;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(22,163,74,0.25);
+    transition: all .2s ease;
+}
+.inv-btn-success:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(22,163,74,0.35);
+    color: #ffffff !important;
+}
+.inv-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    background: #ffffff;
+    color: #334155 !important;
+    border: 1px solid #cbd5e1;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    transition: all .15s ease;
+}
+.inv-btn-secondary:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #0f172a !important;
 }
 
 .acm-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
@@ -505,49 +735,131 @@
 @endpush
 
 @section('content')
+@php
+    $sub = (float) $invoice->subtotal;
+    $totalAmt = (float) $invoice->total_amount;
+    $paidAmt = (float) $invoice->paid_amount;
+    $balDue = (float) $invoice->balance_due;
+    $totalTds = (float) ($invoice->total_tds ?? 0);
+    $totalSettled = $paidAmt + $totalTds;
+    $paidPct = $totalAmt > 0 ? min(100, round(($totalSettled / $totalAmt) * 100)) : 0;
+
+    $dueDate = $invoice->due_date ? \Carbon\Carbon::parse($invoice->due_date) : \Carbon\Carbon::parse($invoice->invoice_date);
+    $isOverdue = $balDue > 0 && $dueDate->isPast() && !$dueDate->isToday();
+    $daysDiff = abs((int) now()->startOfDay()->diffInDays($dueDate->startOfDay(), false));
+
+    $cgstPct = ($sub > 0 && $invoice->total_cgst > 0) ? round(($invoice->total_cgst / $sub) * 100, 2) : 9;
+    $sgstPct = ($sub > 0 && $invoice->total_sgst > 0) ? round(($invoice->total_sgst / $sub) * 100, 2) : 9;
+    $igstPct = ($sub > 0 && $invoice->total_igst > 0) ? round(($invoice->total_igst / $sub) * 100, 2) : 18;
+    $isTNState = !empty($invoice->place_of_supply) ? (str_contains(strtolower($invoice->place_of_supply), 'tamil nadu') || str_contains($invoice->place_of_supply, '33')) : true;
+
+    // Place of Supply formatted (e.g. "[33] Tamil Nadu" -> "Tamil Nadu (33)")
+    $pos = $invoice->place_of_supply ?: '[33] Tamil Nadu';
+    if (preg_match('/\[(\d+)\]\s*(.*)/', $pos, $matches)) {
+        $formattedPos = trim($matches[2]) . ' (' . $matches[1] . ')';
+    } else {
+        $formattedPos = $pos;
+    }
+
+    $logoUrl = $setting?->logo_url ?: asset('images/LOGO_STS.png');
+    $signatureUrl = $setting?->signature_url ?: asset('images/sign.jpeg');
+@endphp
 <div class="inv-page">
 
     {{-- Topbar --}}
     <div class="inv-topbar">
-        <div>
-            <div class="inv-breadcrumbs">
-                <a href="{{ route('accounts.dashboard') }}"><i class="bi bi-house-door"></i> Accounts</a>
-                <span>/</span>
-                <a href="{{ route('accounts.sales.invoices.index') }}">Sales Invoices</a>
-                <span>/</span>
-                <span style="color:#0f172a; font-weight:800;">#{{ $invoice->invoice_number }}</span>
+        {{-- Row 1: Back Navigation & Secondary Utilities --}}
+        <div class="inv-top-nav">
+            <div class="inv-nav-left">
+                <a href="{{ route('accounts.sales.invoices.index') }}" class="inv-back-btn" title="Back to All Invoices">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>All Invoices</span>
+                </a>
+                <div class="inv-breadcrumbs">
+                    <a href="{{ route('accounts.dashboard') }}"><i class="bi bi-house-door"></i> Accounts</a>
+                    <span>/</span>
+                    <a href="{{ route('accounts.sales.invoices.index') }}">Sales Invoices</a>
+                    <span>/</span>
+                    <span style="color:#0f172a; font-weight:800;">#{{ $invoice->invoice_number }}</span>
+                </div>
             </div>
-            <div class="inv-top-title">
-                <i class="bi bi-receipt" style="color:#fe5f04;"></i>
-                <span>Invoice</span>
-                <span class="inv-num-pill" onclick="copyInvoiceNumber('{{ $invoice->invoice_number }}')" title="Click to copy invoice number">
-                    <span>#{{ $invoice->invoice_number }}</span>
-                    <i class="bi bi-clipboard" style="font-size:11px; opacity:0.6;"></i>
-                </span>
-                {!! $invoice->status_badge !!}
-            </div>
-            <div class="inv-sub">Issued on {{ \Carbon\Carbon::parse($invoice->invoice_date)->format('F d, Y') }} • Client: <strong>{{ $invoice->customer_name }}</strong> {{ $invoice->customer_phone ? "• Tel: {$invoice->customer_phone}" : '' }}</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <a href="{{ route('accounts.sales.invoices.index') }}" class="acm-btn acm-btn-secondary" title="Back to All Invoices">
-                <i class="bi bi-arrow-left"></i> All Invoices
-            </a>
-            <a href="{{ route('accounts.sales.invoices.edit', $invoice->id) }}" class="acm-btn acm-btn-secondary" title="Edit this invoice">
-                <i class="bi bi-pencil-square"></i> Edit
-            </a>
-            <a href="{{ route('accounts.sales.invoices.print', $invoice->id) }}" target="_blank" class="acm-btn acm-btn-primary" title="Print or download PDF">
-                <i class="bi bi-printer"></i> Print / Download PDF
-            </a>
-            <button type="button" class="acm-btn acm-btn-outline" onclick="copyInvoiceLink()" title="Copy Shareable Link">
-                <i class="bi bi-share"></i> Share Link
-            </button>
-            <form method="POST" action="{{ route('accounts.sales.invoices.destroy', $invoice->id) }}" onsubmit="return confirm('Are you sure you want to delete invoice #{{ $invoice->invoice_number }}? This action cannot be undone.')" style="margin:0; display:inline-block;">
-                @csrf
-                @method('DELETE')
-                <button type="submit" class="acm-btn acm-btn-danger" title="Delete Invoice">
-                    <i class="bi bi-trash"></i>
+
+            <div class="inv-nav-right">
+                <button type="button" class="inv-utility-btn" onclick="copyInvoiceLink()" title="Copy Shareable Link">
+                    <i class="bi bi-share"></i>
+                    <span>Share Link</span>
                 </button>
-            </form>
+                <form method="POST" action="{{ route('accounts.sales.invoices.destroy', $invoice->id) }}" onsubmit="return confirm('Are you sure you want to delete invoice #{{ $invoice->invoice_number }}? This action cannot be undone.')" style="margin:0; display:inline-block;">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="inv-utility-btn danger-btn" title="Delete Invoice">
+                        <i class="bi bi-trash3"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {{-- Row 2: Main Invoice Header & Primary Actions --}}
+        <div class="inv-main-header">
+            <div class="inv-identity-wrap">
+                <div class="inv-icon-badge">
+                    <i class="bi bi-receipt"></i>
+                </div>
+                <div class="inv-identity-info">
+                    <div class="inv-title-row">
+                        <h1 class="inv-title">Invoice</h1>
+                        <span class="inv-num-pill" onclick="copyInvoiceNumber('{{ $invoice->invoice_number }}')" title="Click to copy invoice number">
+                            <span>#{{ $invoice->invoice_number }}</span>
+                            <i class="bi bi-clipboard" style="font-size:11px; opacity:0.6;"></i>
+                        </span>
+                        {!! $invoice->status_badge !!}
+                    </div>
+                    <div class="inv-meta-row">
+                        <span class="inv-meta-item">
+                            <i class="bi bi-calendar3"></i>
+                            <span>Issued {{ \Carbon\Carbon::parse($invoice->invoice_date)->format('M d, Y') }}</span>
+                        </span>
+                        @if($invoice->due_date)
+                            <span class="inv-meta-dot">•</span>
+                            <span class="inv-meta-item">
+                                <i class="bi bi-clock-history"></i>
+                                <span>Due {{ \Carbon\Carbon::parse($invoice->due_date)->format('M d, Y') }}</span>
+                            </span>
+                        @endif
+                        <span class="inv-meta-dot">•</span>
+                        <span class="inv-meta-item">
+                            <i class="bi bi-person"></i>
+                            <span>Client: <strong style="color:#0f172a;">{{ $invoice->customer_name }}</strong></span>
+                        </span>
+                        @if($invoice->customer_phone)
+                            <span class="inv-meta-dot">•</span>
+                            <span class="inv-meta-item">
+                                <i class="bi bi-telephone"></i>
+                                <span>{{ $invoice->customer_phone }}</span>
+                            </span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <div class="inv-header-actions">
+                <a href="{{ route('accounts.sales.invoices.edit', $invoice->id) }}" class="inv-btn-secondary" title="Edit this invoice">
+                    <i class="bi bi-pencil-square"></i>
+                    <span>Edit</span>
+                </a>
+
+                <a href="{{ route('accounts.sales.invoices.print', $invoice->id) }}" target="_blank" class="inv-btn-primary" title="Print or download PDF">
+                    <i class="bi bi-printer"></i>
+                    <span>Print / Download PDF</span>
+                </a>
+
+                @if($balDue > 0)
+                    <button type="button" class="inv-btn-success" onclick="openRecordPaymentModal()" title="Record Payment / TDS">
+                        <i class="bi bi-cash-stack"></i>
+                        <span>Record Payment</span>
+                    </button>
+                @endif
+            </div>
         </div>
     </div>
 
@@ -564,34 +876,6 @@
             <span>{{ session('error') }}</span>
         </div>
     @endif
-
-    @php
-        $sub = (float) $invoice->subtotal;
-        $totalAmt = (float) $invoice->total_amount;
-        $paidAmt = (float) $invoice->paid_amount;
-        $balDue = (float) $invoice->balance_due;
-        $paidPct = $totalAmt > 0 ? min(100, round(($paidAmt / $totalAmt) * 100)) : 0;
-
-        $dueDate = $invoice->due_date ? \Carbon\Carbon::parse($invoice->due_date) : \Carbon\Carbon::parse($invoice->invoice_date);
-        $isOverdue = $balDue > 0 && $dueDate->isPast() && !$dueDate->isToday();
-        $daysDiff = abs((int) now()->startOfDay()->diffInDays($dueDate->startOfDay(), false));
-
-        $cgstPct = ($sub > 0 && $invoice->total_cgst > 0) ? round(($invoice->total_cgst / $sub) * 100, 2) : 9;
-        $sgstPct = ($sub > 0 && $invoice->total_sgst > 0) ? round(($invoice->total_sgst / $sub) * 100, 2) : 9;
-        $igstPct = ($sub > 0 && $invoice->total_igst > 0) ? round(($invoice->total_igst / $sub) * 100, 2) : 18;
-        $isTNState = !empty($invoice->place_of_supply) ? (str_contains(strtolower($invoice->place_of_supply), 'tamil nadu') || str_contains($invoice->place_of_supply, '33')) : true;
-
-        // Place of Supply formatted (e.g. "[33] Tamil Nadu" -> "Tamil Nadu (33)")
-        $pos = $invoice->place_of_supply ?: '[33] Tamil Nadu';
-        if (preg_match('/\[(\d+)\]\s*(.*)/', $pos, $matches)) {
-            $formattedPos = trim($matches[2]) . ' (' . $matches[1] . ')';
-        } else {
-            $formattedPos = $pos;
-        }
-
-        $logoUrl = $setting?->logo_url ?: asset('images/LOGO_STS.png');
-        $signatureUrl = $setting?->signature_url ?: asset('images/sign.jpeg');
-    @endphp
 
     {{-- Financial Overview Ribbon (4 Quick KPI Cards) --}}
     <div class="inv-kpi-grid">
@@ -619,6 +903,9 @@
                 <div class="inv-prog-track">
                     <div class="inv-prog-bar" style="width:{{ $paidPct }}%;"></div>
                 </div>
+                @if($totalTds > 0)
+                    <div class="inv-kpi-sub" style="color:#ea580c; font-weight:700; margin-top:2px;">+ ₹{{ number_format($totalTds, 2) }} TDS (Total: ₹{{ number_format($totalSettled, 2) }})</div>
+                @endif
             </div>
         </div>
 
@@ -781,7 +1068,16 @@
                         <tr>
                             <td class="meta-label">Sales person</td>
                             <td class="meta-colon">:</td>
-                            <td class="meta-val">{{ $invoice->salesPerson?->name ?? 'Mr. Revanth' }}</td>
+                            <td class="meta-val">
+                                <span id="salesPersonDisplay">{{ $invoice->salesPerson?->name ?? ($invoice->creator?->name ?? '—') }}</span>
+                                <button type="button" 
+                                        onclick="openChangeSalesPersonModal()" 
+                                        class="no-print" 
+                                        title="Change Sales Person"
+                                        style="margin-left:6px; background:#eff6ff; border:1px solid #bfdbfe; color:#2563eb; border-radius:4px; padding:1px 6px; font-size:10.5px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:3px; vertical-align:middle;">
+                                    <i class="bi bi-pencil-fill" style="font-size:9.5px;"></i> Change
+                                </button>
+                            </td>
                         </tr>
                     </table>
                 </div>
@@ -821,8 +1117,12 @@
                                 <div>{{ implode(' ', $bCityState) }}</div>
                             @endif
                             <div>{{ $invoice->billing_country ?: 'India' }}</div>
-                            @if($invoice->customer_gstin)
-                                <div style="margin-top:4px;"><strong>GSTIN</strong> {{ $invoice->customer_gstin }}</div>
+                            @php
+                                $billingGstin = $invoice->billing_gstin ?: $invoice->customer_gstin;
+                                $shippingGstin = $invoice->shipping_gstin ?: ($invoice->billing_gstin ?: $invoice->customer_gstin);
+                            @endphp
+                            @if($billingGstin)
+                                <div style="margin-top:4px;"><strong>GSTIN</strong> {{ $billingGstin }}</div>
                             @endif
                         </td>
                         <td colspan="4" class="party-body party-right col-border-left">
@@ -839,8 +1139,8 @@
                                 <div>{{ implode(' ', $sCityState) }}</div>
                             @endif
                             <div>{{ $invoice->shipping_country ?: ($invoice->billing_country ?: 'India') }}</div>
-                            @if($invoice->customer_gstin)
-                                <div style="margin-top:4px;"><strong>GSTIN</strong> {{ $invoice->customer_gstin }}</div>
+                            @if($shippingGstin)
+                                <div style="margin-top:4px;"><strong>GSTIN</strong> {{ $shippingGstin }}</div>
                             @endif
                         </td>
                     </tr>
@@ -1002,6 +1302,370 @@
         </div>
     </div>
 
+    {{-- Recorded Payments & TDS Deductions Section --}}
+    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,.03); overflow:hidden;">
+        <div style="padding:16px 22px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; background:#f8fafc;">
+            <div>
+                <div style="font-size:16px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                    <i class="bi bi-cash-stack" style="color:#16a34a;"></i>
+                    <span>Recorded Payments & TDS Deductions</span>
+                    <span style="font-size:12px; font-weight:700; background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:999px;">{{ $invoice->payments->count() }} {{ Str::plural('Entry', $invoice->payments->count()) }}</span>
+                </div>
+                <div style="font-size:12px; color:#64748b; margin-top:2px;">
+                    Track payment receipts, bank credits, TDS deductions under Sec 194C/194J, and proof attachments.
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                @if($balDue > 0)
+                    <button type="button" class="acm-btn" style="background:linear-gradient(135deg, #16a34a, #15803d); color:#fff; box-shadow:0 4px 14px rgba(22,163,74,0.25);" onclick="openRecordPaymentModal()">
+                        <i class="bi bi-plus-lg"></i> Record Payment / TDS
+                    </button>
+                @else
+                    <span style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:800; color:#15803d; background:#dcfce7; border:1px solid #bbf7d0; padding:6px 14px; border-radius:8px;">
+                        <i class="bi bi-check-circle-fill"></i> Invoice Fully Settled
+                    </span>
+                @endif
+            </div>
+        </div>
+
+        @if($invoice->payments->count() > 0)
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
+                    <thead>
+                        <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; color:#475569; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">
+                            <th style="padding:12px 16px;">Date & Voucher #</th>
+                            <th style="padding:12px 16px;">Payment Mode</th>
+                            <th style="padding:12px 16px;">Reference / UTR</th>
+                            <th style="padding:12px 16px; text-align:right;">Amount Received (₹)</th>
+                            <th style="padding:12px 16px; text-align:right;">TDS Deducted (₹)</th>
+                            <th style="padding:12px 16px; text-align:right;">Total Settled (₹)</th>
+                            <th style="padding:12px 16px; text-align:center;">Attachment</th>
+                            <th style="padding:12px 16px;">Recorded By</th>
+                            <th style="padding:12px 16px; text-align:right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($invoice->payments as $payment)
+                            <tr style="border-bottom:1px solid #f1f5f9; transition:background .15s;">
+                                <td style="padding:12px 16px;">
+                                    <div style="font-weight:700; color:#0f172a;">{{ $payment->payment_date ? \Carbon\Carbon::parse($payment->payment_date)->format('d M Y') : '—' }}</div>
+                                    <div style="font-size:11px; font-family:monospace; color:#64748b;">{{ $payment->payment_number ?: ('PAY#' . $payment->id) }}</div>
+                                </td>
+                                <td style="padding:12px 16px;">
+                                    <span style="display:inline-flex; align-items:center; gap:5px; background:#eff6ff; color:#1e40af; border:1px solid #dbeafe; font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:6px;">
+                                        <i class="bi bi-wallet-fill" style="font-size:10px;"></i> {{ $payment->payment_mode_label }}
+                                    </span>
+                                    @if($payment->bank_name)
+                                        <div style="font-size:11px; color:#64748b; margin-top:2px;">{{ $payment->bank_name }}</div>
+                                    @endif
+                                </td>
+                                <td style="padding:12px 16px;">
+                                    @if($payment->reference_number)
+                                        <span style="font-family:monospace; font-weight:600; color:#334155; font-size:12px;">{{ $payment->reference_number }}</span>
+                                    @else
+                                        <span style="color:#94a3b8;">—</span>
+                                    @endif
+                                    @if($payment->notes)
+                                        <div style="font-size:11.5px; color:#64748b; margin-top:2px; font-style:italic;" title="{{ $payment->notes }}">{{ Str::limit($payment->notes, 35) }}</div>
+                                    @endif
+                                </td>
+                                <td style="padding:12px 16px; text-align:right; font-weight:800; color:#16a34a; white-space:nowrap;">
+                                    ₹{{ number_format((float) $payment->amount_received, 2) }}
+                                </td>
+                                <td style="padding:12px 16px; text-align:right; white-space:nowrap;">
+                                    @if($payment->is_tds_deducted && $payment->tds_amount > 0)
+                                        <div style="font-weight:800; color:#ea580c;">₹{{ number_format((float) $payment->tds_amount, 2) }}</div>
+                                        @if($payment->tds_percentage > 0)
+                                            <span style="font-size:10.5px; font-weight:700; background:#fff7ed; color:#ea580c; border:1px solid #fed7aa; padding:1px 6px; border-radius:4px;">{{ (float) $payment->tds_percentage }}% TDS</span>
+                                        @endif
+                                    @else
+                                        <span style="color:#94a3b8;">—</span>
+                                    @endif
+                                </td>
+                                <td style="padding:12px 16px; text-align:right; font-weight:800; color:#0f172a; white-space:nowrap;">
+                                    ₹{{ number_format((float) $payment->total_settled_amount, 2) }}
+                                </td>
+                                <td style="padding:12px 16px; text-align:center;">
+                                    @if($payment->attachment_url)
+                                        <a href="{{ $payment->attachment_url }}" target="_blank" class="acm-btn acm-btn-outline" style="padding:4px 10px; font-size:11.5px; border-radius:6px; color:#2563eb; border-color:#bfdbfe; background:#eff6ff;" title="{{ $payment->attachment_name ?: 'Download Proof' }}">
+                                            <i class="bi bi-paperclip"></i> <span>View File</span>
+                                        </a>
+                                    @else
+                                        <span style="color:#94a3b8; font-size:12px;">—</span>
+                                    @endif
+                                </td>
+                                <td style="padding:12px 16px;">
+                                    <div style="font-size:12px; font-weight:600; color:#334155;">{{ $payment->recordedBy?->name ?: 'System' }}</div>
+                                    <div style="font-size:10.5px; color:#94a3b8;">{{ $payment->created_at ? $payment->created_at->format('d M, h:i A') : '' }}</div>
+                                </td>
+                                <td style="padding:12px 16px; text-align:right;">
+                                    <form method="POST" action="{{ route('accounts.sales.invoices.payments.destroy', [$invoice->id, $payment->id]) }}" onsubmit="return confirm('Are you sure you want to delete payment entry #{{ $payment->payment_number }} (₹{{ number_format((float)$payment->total_settled_amount, 2) }})? The invoice balance will be adjusted accordingly.')" style="margin:0; display:inline-block;">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="acm-btn acm-btn-danger" style="padding:5px 9px; font-size:11.5px; border-radius:6px;" title="Delete this payment record">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                    <tfoot style="background:#f8fafc; font-weight:800; border-top:2px solid #e2e8f0; font-size:13px;">
+                        <tr>
+                            <td colspan="3" style="padding:12px 16px; text-align:right; color:#475569;">Total Settled Breakdown:</td>
+                            <td style="padding:12px 16px; text-align:right; color:#16a34a;">₹{{ number_format((float)$invoice->payments->sum('amount_received'), 2) }}</td>
+                            <td style="padding:12px 16px; text-align:right; color:#ea580c;">₹{{ number_format((float)$invoice->payments->where('is_tds_deducted', true)->sum('tds_amount'), 2) }}</td>
+                            <td style="padding:12px 16px; text-align:right; color:#0f172a;">₹{{ number_format((float)$invoice->payments->sum('total_settled_amount'), 2) }}</td>
+                            <td colspan="3" style="padding:12px 16px; text-align:right; color:{{ $balDue > 0 ? '#dc2626' : '#16a34a' }};">
+                                Remaining Balance: ₹{{ number_format($balDue, 2) }}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        @else
+            <div style="padding:36px 20px; text-align:center; color:#64748b;">
+                <div style="width:50px; height:50px; border-radius:50%; background:#f1f5f9; display:inline-flex; align-items:center; justify-content:center; font-size:22px; color:#94a3b8; margin-bottom:12px;">
+                    <i class="bi bi-receipt"></i>
+                </div>
+                <div style="font-size:14px; font-weight:700; color:#334155; margin-bottom:4px;">No Payments Recorded Yet</div>
+                <div style="font-size:12.5px; color:#64748b; max-width:420px; margin:0 auto 16px;">
+                    Record customer payments received into your bank account or cash, including TDS deductions and receipt attachments.
+                </div>
+                @if($balDue > 0)
+                    <button type="button" class="acm-btn" style="background:linear-gradient(135deg, #16a34a, #15803d); color:#fff;" onclick="openRecordPaymentModal()">
+                        <i class="bi bi-plus-lg"></i> Record First Payment
+                    </button>
+                @endif
+            </div>
+        @endif
+    </div>
+
+{{-- Modal: Record Payment & TDS Deduction --}}
+<div id="recordPaymentModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(3px); z-index:99999; align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; border-radius:16px; box-shadow:0 20px 40px rgba(0,0,0,0.2); max-width:560px; width:100%; overflow:hidden; max-height:90vh; display:flex; flex-direction:column;">
+        {{-- Modal Header --}}
+        <div style="padding:18px 22px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; background:#f8fafc; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:38px; height:38px; border-radius:10px; background:#dcfce7; color:#15803d; display:flex; align-items:center; justify-content:center; font-size:20px;">
+                    <i class="bi bi-cash-stack"></i>
+                </div>
+                <div>
+                    <h3 style="font-size:16px; font-weight:800; color:#0f172a; margin:0;">Record Payment & TDS</h3>
+                    <p style="font-size:12px; color:#64748b; margin:0;">Invoice #{{ $invoice->invoice_number }} • {{ $invoice->customer_name }}</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeRecordPaymentModal()" style="background:none; border:none; font-size:18px; color:#94a3b8; cursor:pointer; padding:4px;">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+
+        {{-- Modal Body (Scrollable) --}}
+        <form method="POST" action="{{ route('accounts.sales.invoices.payments.store', $invoice->id) }}" enctype="multipart/form-data" id="recordPaymentForm" style="display:flex; flex-direction:column; overflow-y:auto;">
+            @csrf
+            <div style="padding:22px; display:flex; flex-direction:column; gap:16px;">
+
+                {{-- Summary Pills --}}
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px;">
+                    <div>
+                        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Invoice Total</div>
+                        <div style="font-size:14.5px; font-weight:800; color:#0f172a;">₹{{ number_format($totalAmt, 2) }}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Already Settled</div>
+                        <div style="font-size:14.5px; font-weight:800; color:#16a34a;">₹{{ number_format($totalSettled, 2) }}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Balance Due</div>
+                        <div style="font-size:14.5px; font-weight:800; color:#dc2626;" id="rpmModalBalDue">₹{{ number_format($balDue, 2) }}</div>
+                    </div>
+                </div>
+
+                {{-- Row 1: Payment Date & Amount Received --}}
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+                    <div>
+                        <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:6px;">
+                            Payment Date <span style="color:#dc2626;">*</span>
+                        </label>
+                        <input type="date" name="payment_date" required value="{{ date('Y-m-d') }}" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:9px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff;">
+                    </div>
+
+                    <div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <label style="font-size:12.5px; font-weight:700; color:#334155; margin:0;">
+                                Amount Received (₹) <span style="color:#dc2626;">*</span>
+                            </label>
+                            <button type="button" onclick="fillFullBalance()" style="font-size:11px; font-weight:700; color:#2563eb; background:none; border:none; cursor:pointer; padding:0;">
+                                Fill Full Due
+                            </button>
+                        </div>
+                        <input type="number" step="0.01" min="0" max="{{ $balDue }}" name="amount_received" id="rpmAmountReceived" required placeholder="0.00" value="{{ $balDue }}" oninput="calculateLiveSettled()" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:9px 12px; font-size:13.5px; font-weight:700; color:#0f172a; outline:none; background:#fff;">
+                    </div>
+                </div>
+
+                {{-- TDS Deduction Toggle Section --}}
+                <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:12px 14px;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0; font-size:13px; font-weight:700; color:#92400e;">
+                        <input type="checkbox" name="is_tds_deducted" value="1" id="rpmIsTds" onchange="toggleTdsSection()" style="width:16px; height:16px; accent-color:#d97706; cursor:pointer;">
+                        <span>Client Deducted TDS (Tax Deducted at Source)</span>
+                    </label>
+
+                    <div id="rpmTdsFields" style="display:none; margin-top:12px; padding-top:12px; border-top:1px dashed #fcd34d;">
+                        <div style="font-size:11.5px; color:#78350f; margin-bottom:10px;">
+                            💡 TDS is credited to your PAN in Form 26AS. Total Settled = <strong>Amount Received + TDS</strong>.
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:10px;">
+                            <div>
+                                <label style="display:block; font-size:11.5px; font-weight:700; color:#78350f; margin-bottom:4px;">
+                                    TDS Rate (%)
+                                </label>
+                                <input type="number" step="0.01" min="0" max="100" name="tds_percentage" id="rpmTdsPct" placeholder="e.g. 2, 10" oninput="calculateTdsFromPercentage()" style="width:100%; border:1px solid #fcd34d; border-radius:8px; padding:8px 10px; font-size:13px; font-weight:700; color:#78350f; outline:none; background:#fff;">
+                                <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                                    <button type="button" onclick="setTdsPreset(2)" style="font-size:10.5px; font-weight:700; background:#fef3c7; border:1px solid #fcd34d; color:#92400e; border-radius:4px; padding:2px 6px; cursor:pointer;">2% (194C)</button>
+                                    <button type="button" onclick="setTdsPreset(10)" style="font-size:10.5px; font-weight:700; background:#fef3c7; border:1px solid #fcd34d; color:#92400e; border-radius:4px; padding:2px 6px; cursor:pointer;">10% (194J)</button>
+                                    <button type="button" onclick="setTdsPreset(1)" style="font-size:10.5px; font-weight:700; background:#fef3c7; border:1px solid #fcd34d; color:#92400e; border-radius:4px; padding:2px 6px; cursor:pointer;">1%</button>
+                                    <button type="button" onclick="setTdsPreset(0.1)" style="font-size:10.5px; font-weight:700; background:#fef3c7; border:1px solid #fcd34d; color:#92400e; border-radius:4px; padding:2px 6px; cursor:pointer;">0.1%</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:11.5px; font-weight:700; color:#78350f; margin-bottom:4px;">
+                                    TDS Amount (₹)
+                                </label>
+                                <input type="number" step="0.01" min="0" name="tds_amount" id="rpmTdsAmount" placeholder="0.00" oninput="calculateLiveSettled()" style="width:100%; border:1px solid #fcd34d; border-radius:8px; padding:8px 10px; font-size:13px; font-weight:700; color:#78350f; outline:none; background:#fff;">
+                                <div style="font-size:10.5px; color:#b45309; margin-top:4px;">Calculated on Subtotal (₹{{ number_format($sub, 2) }})</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Live Settled Summary Banner --}}
+                <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:11px; font-weight:700; color:#15803d; text-transform:uppercase;">Total Settled This Entry</div>
+                        <div style="font-size:12px; color:#166534;">
+                            Received: <strong id="rpmPrevReceived">₹{{ number_format($balDue, 2) }}</strong> + TDS: <strong id="rpmPrevTds">₹0.00</strong>
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:16px; font-weight:900; color:#15803d;" id="rpmPrevTotalSettled">₹{{ number_format($balDue, 2) }}</div>
+                        <div style="font-size:11px; color:#166534;" id="rpmPrevBalRemaining">Remaining Balance: ₹0.00</div>
+                    </div>
+                </div>
+
+                {{-- Row 2: Payment Mode & Reference / UTR --}}
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+                    <div>
+                        <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:6px;">
+                            Payment Mode <span style="color:#dc2626;">*</span>
+                        </label>
+                        <select name="payment_mode" required style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:9px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff;">
+                            <option value="bank_transfer" selected>Bank Transfer (NEFT/RTGS/IMPS)</option>
+                            <option value="upi">UPI / QR Code</option>
+                            <option value="cheque">Cheque / Demand Draft</option>
+                            <option value="cash">Cash</option>
+                            <option value="card">Credit / Debit Card</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:6px;">
+                            Reference / UTR / Cheque #
+                        </label>
+                        <input type="text" name="reference_number" placeholder="e.g. UTR123456789" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:9px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff;">
+                    </div>
+                </div>
+
+                {{-- Row 3: Bank Name & Attachment File --}}
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+                    <div>
+                        <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:6px;">
+                            Bank Name
+                        </label>
+                        <input type="text" name="bank_name" placeholder="e.g. HDFC Bank, ICICI Bank" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:9px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff;">
+                    </div>
+
+                    <div>
+                        <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:6px;">
+                            Attachment (Receipt / TDS Challan)
+                        </label>
+                        <input type="file" name="attachment" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; font-size:12px; color:#0f172a; outline:none; background:#fff;">
+                    </div>
+                </div>
+
+                {{-- Notes / Remarks --}}
+                <div>
+                    <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:6px;">
+                        Notes / Remarks
+                    </label>
+                    <textarea name="notes" rows="2" placeholder="Optional internal notes, deduction details or remarks..." style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff; resize:vertical;"></textarea>
+                </div>
+
+            </div>
+
+            {{-- Modal Footer --}}
+            <div style="padding:14px 22px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px; flex-shrink:0;">
+                <button type="button" onclick="closeRecordPaymentModal()" style="padding:9px 18px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; font-size:13px; font-weight:700; color:#475569; cursor:pointer;">
+                    Cancel
+                </button>
+                <button type="submit" id="rpmSubmitBtn" style="padding:9px 22px; border-radius:8px; border:none; background:linear-gradient(135deg, #16a34a, #15803d); color:#fff; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(22,163,74,0.3); display:inline-flex; align-items:center; gap:6px;">
+                    <i class="bi bi-check-lg"></i>
+                    <span>Record Payment</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- Modal: Quick Change Sales Person --}}
+<div id="changeSalesPersonModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(3px); z-index:99999; align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; border-radius:16px; box-shadow:0 20px 40px rgba(0,0,0,0.2); max-width:440px; width:100%; overflow:hidden;">
+        <div style="padding:18px 22px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; background:#f8fafc;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:36px; height:36px; border-radius:10px; background:#eff6ff; color:#2563eb; display:flex; align-items:center; justify-content:center; font-size:18px;">
+                    <i class="bi bi-person-gear"></i>
+                </div>
+                <div>
+                    <h3 style="font-size:15px; font-weight:700; color:#0f172a; margin:0;">Assign Sales Person</h3>
+                    <p style="font-size:11.5px; color:#64748b; margin:0;">Invoice #{{ $invoice->invoice_number }}</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeChangeSalesPersonModal()" style="background:none; border:none; font-size:18px; color:#94a3b8; cursor:pointer; padding:4px;">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+
+        <form id="changeSalesPersonForm" onsubmit="submitChangeSalesPerson(event)">
+            <div style="padding:22px;">
+                <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:8px;">
+                    Select Sales Person (Sales & CST Teams)
+                </label>
+                <select id="modalSalesPersonSelect" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff;">
+                    <option value="">-- No Sales Person (Unassigned) --</option>
+                    @foreach($salesUsers as $u)
+                        <option value="{{ $u->id }}" {{ $invoice->sales_person_id == $u->id ? 'selected' : '' }}>
+                            {{ $u->name }} ({{ $u->email }})
+                        </option>
+                    @endforeach
+                </select>
+                <div style="margin-top:8px; font-size:11.5px; color:#64748b;">
+                    Updates dynamically on view and print preview without full page reload.
+                </div>
+            </div>
+
+            <div style="padding:14px 22px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" onclick="closeChangeSalesPersonModal()" style="padding:8px 16px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; font-size:13px; font-weight:600; color:#475569; cursor:pointer;">
+                    Cancel
+                </button>
+                <button type="submit" id="saveSalesPersonBtn" style="padding:8px 18px; border-radius:8px; border:none; background:linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 6px rgba(37,99,235,0.3); display:inline-flex; align-items:center; gap:6px;">
+                    <span>Save Changes</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 </div>
 @endsection
 
@@ -1080,6 +1744,163 @@ function showToast(msg) {
         toast.style.opacity = '0';
         toast.style.transform = 'translateY(10px)';
     }, 2500);
+}
+
+function openChangeSalesPersonModal() {
+    const modal = document.getElementById('changeSalesPersonModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function closeChangeSalesPersonModal() {
+    const modal = document.getElementById('changeSalesPersonModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function submitChangeSalesPerson(e) {
+    e.preventDefault();
+    const btn = document.getElementById('saveSalesPersonBtn');
+    const select = document.getElementById('modalSalesPersonSelect');
+    const salesPersonId = select.value;
+    
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+    }
+
+    fetch('{{ route("accounts.sales.invoices.update-sales-person", $invoice->id) }}', {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ sales_person_id: salesPersonId || null })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'Save Changes';
+        }
+        if (data.success) {
+            const displaySpan = document.getElementById('salesPersonDisplay');
+            if (displaySpan) {
+                displaySpan.textContent = data.sales_person_name;
+            }
+            closeChangeSalesPersonModal();
+            showToast('✓ Sales Person updated to ' + data.sales_person_name);
+        } else {
+            alert(data.message || 'Failed to update Sales Person.');
+        }
+    })
+    .catch(err => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'Save Changes';
+        }
+        console.error(err);
+        alert('An error occurred while updating the sales person.');
+    });
+}
+
+const invoiceSubtotal = {{ $sub }};
+let currentInvoiceBalanceDue = {{ $balDue }};
+
+function openRecordPaymentModal() {
+    const modal = document.getElementById('recordPaymentModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        calculateLiveSettled();
+    }
+}
+
+function closeRecordPaymentModal() {
+    const modal = document.getElementById('recordPaymentModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function toggleTdsSection() {
+    const isChecked = document.getElementById('rpmIsTds')?.checked;
+    const tdsFields = document.getElementById('rpmTdsFields');
+    if (tdsFields) {
+        tdsFields.style.display = isChecked ? 'block' : 'none';
+    }
+    if (!isChecked) {
+        const tdsPct = document.getElementById('rpmTdsPct');
+        const tdsAmt = document.getElementById('rpmTdsAmount');
+        if (tdsPct) tdsPct.value = '';
+        if (tdsAmt) tdsAmt.value = '';
+    }
+    calculateLiveSettled();
+}
+
+function setTdsPreset(percent) {
+    const tdsPctInput = document.getElementById('rpmTdsPct');
+    if (tdsPctInput) {
+        tdsPctInput.value = percent;
+        calculateTdsFromPercentage();
+    }
+}
+
+function calculateTdsFromPercentage() {
+    const pct = parseFloat(document.getElementById('rpmTdsPct')?.value) || 0;
+    const baseAmount = invoiceSubtotal > 0 ? invoiceSubtotal : currentInvoiceBalanceDue;
+    const tdsAmount = Math.round((baseAmount * (pct / 100)) * 100) / 100;
+    const tdsAmtInput = document.getElementById('rpmTdsAmount');
+    if (tdsAmtInput) {
+        tdsAmtInput.value = tdsAmount > 0 ? tdsAmount : '';
+    }
+    const netReceived = Math.max(0, Math.round((currentInvoiceBalanceDue - tdsAmount) * 100) / 100);
+    const amountReceivedInput = document.getElementById('rpmAmountReceived');
+    if (amountReceivedInput) {
+        amountReceivedInput.value = netReceived;
+    }
+    calculateLiveSettled();
+}
+
+function fillFullBalance() {
+    const isTds = document.getElementById('rpmIsTds')?.checked;
+    const tdsAmt = isTds ? (parseFloat(document.getElementById('rpmTdsAmount')?.value) || 0) : 0;
+    const net = Math.max(0, Math.round((currentInvoiceBalanceDue - tdsAmt) * 100) / 100);
+    const amountReceivedInput = document.getElementById('rpmAmountReceived');
+    if (amountReceivedInput) {
+        amountReceivedInput.value = net;
+    }
+    calculateLiveSettled();
+}
+
+function calculateLiveSettled() {
+    const amtReceived = parseFloat(document.getElementById('rpmAmountReceived')?.value) || 0;
+    const isTds = document.getElementById('rpmIsTds')?.checked;
+    const tdsAmt = isTds ? (parseFloat(document.getElementById('rpmTdsAmount')?.value) || 0) : 0;
+    const totalSettled = Math.round((amtReceived + tdsAmt) * 100) / 100;
+    const remaining = Math.max(0, Math.round((currentInvoiceBalanceDue - totalSettled) * 100) / 100);
+
+    const prevReceived = document.getElementById('rpmPrevReceived');
+    const prevTds = document.getElementById('rpmPrevTds');
+    const prevTotal = document.getElementById('rpmPrevTotalSettled');
+    const prevRemaining = document.getElementById('rpmPrevBalRemaining');
+    const submitBtn = document.getElementById('rpmSubmitBtn');
+
+    if (prevReceived) prevReceived.textContent = '₹' + amtReceived.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (prevTds) prevTds.textContent = '₹' + tdsAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (prevTotal) prevTotal.textContent = '₹' + totalSettled.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (prevRemaining) {
+        if (remaining <= 0) {
+            prevRemaining.innerHTML = '<span style="color:#15803d; font-weight:800;">✓ Invoice Will Be Fully Settled</span>';
+        } else {
+            prevRemaining.textContent = 'Remaining Balance: ₹' + remaining.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+    }
+    if (submitBtn) {
+        submitBtn.innerHTML = '<i class="bi bi-check-lg"></i> <span>Record Payment (₹' + totalSettled.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')</span>';
+    }
 }
 
 document.addEventListener('keydown', function(e) {

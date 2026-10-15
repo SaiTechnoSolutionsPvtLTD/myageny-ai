@@ -35,12 +35,14 @@ class Invoice extends Model
         'billing_state',
         'billing_pincode',
         'billing_country',
+        'billing_gstin',
         'shipping_attention',
         'shipping_address',
         'shipping_city',
         'shipping_state',
         'shipping_pincode',
         'shipping_country',
+        'shipping_gstin',
         'subtotal',
         'total_cgst',
         'total_sgst',
@@ -49,6 +51,7 @@ class Invoice extends Model
         'round_off',
         'total_amount',
         'paid_amount',
+        'total_tds',
         'balance_due',
         'customer_notes',
         'terms_conditions',
@@ -68,12 +71,51 @@ class Invoice extends Model
         'round_off'    => 'decimal:2',
         'total_amount' => 'decimal:2',
         'paid_amount'  => 'decimal:2',
+        'total_tds'    => 'decimal:2',
         'balance_due'  => 'decimal:2',
     ];
 
     public function items()
     {
         return $this->hasMany(InvoiceItem::class, 'invoice_id')->orderBy('sort_order', 'asc');
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(InvoicePayment::class, 'invoice_id')->orderBy('payment_date', 'desc')->orderBy('id', 'desc');
+    }
+
+    /**
+     * Recalculate invoice payment status and balance due based on recorded payments and TDS.
+     */
+    public function recalculatePaymentStatus(): void
+    {
+        $totalReceived = (float) $this->payments()->sum('amount_received');
+        $totalTds      = (float) $this->payments()->where('is_tds_deducted', true)->sum('tds_amount');
+        $totalSettled  = (float) $this->payments()->sum('total_settled_amount');
+
+        if ($totalSettled <= 0 && ($totalReceived > 0 || $totalTds > 0)) {
+            $totalSettled = $totalReceived + $totalTds;
+        }
+
+        $grandTotal = (float) $this->total_amount;
+        $balanceDue = max(0, $grandTotal - $totalSettled);
+
+        $status = $this->status;
+        if ($balanceDue <= 0.001 && $grandTotal > 0) {
+            $status = 'paid';
+        } elseif ($totalSettled > 0) {
+            $status = 'partially_paid';
+        } elseif ($status === 'paid' || $status === 'partially_paid') {
+            $status = 'sent';
+        }
+
+        $this->update([
+            'paid_amount' => $totalReceived,
+            'total_tds'   => $totalTds,
+            'balance_due' => $balanceDue,
+            'status'      => $status,
+        ]);
     }
 
     public function customer()
@@ -107,11 +149,12 @@ class Invoice extends Model
      */
     public static function generateNextInvoiceNumber(?int $companyId = null): string
     {
+        $companyId = $companyId ?: auth()->user()?->company_id;
         $setting = InvoiceSetting::forCompany($companyId);
         $nextNum = $setting->next_number ?: 1;
 
-        // Ensure uniqueness
-        while (static::where('company_id', $companyId)->where('invoice_number', $setting->formatInvoiceNumber($nextNum))->exists()) {
+        // Ensure uniqueness across system
+        while (static::where('invoice_number', $setting->formatInvoiceNumber($nextNum))->exists()) {
             $nextNum++;
         }
 

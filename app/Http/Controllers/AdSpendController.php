@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\AdAccountMaster;
 use App\Models\AdSpend;
+use App\Models\QuotationSetting;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class AdSpendController extends Controller
 {
@@ -113,6 +116,122 @@ class AdSpendController extends Controller
      */
     public function allocationVsSpent(Request $request)
     {
+        $data = $this->buildLedgerData($request);
+
+        // Order rows Date DESC (newest first) for screen display
+        $rows = $data['filteredRows']->sortBy([
+            ['date', 'desc'],
+            ['created_at', 'desc'],
+        ])->values();
+
+        return view('pages.accounts.ad_budget.allocation_vs_spent', [
+            'rows'                  => $rows,
+            'adAccounts'            => $data['adAccounts'],
+            'selectedAccountId'     => $data['selectedAccountId'],
+            'selectedAccount'       => $data['selectedAccount'],
+            'dateFrom'              => $data['dateFrom'],
+            'dateTo'                => $data['dateTo'],
+            'totalAllocatedOverall' => $data['totalAllocatedOverall'],
+            'totalSpentOverall'     => $data['totalSpentOverall'],
+            'currentBalanceOverall' => $data['currentBalanceOverall'],
+            'accountCurrentBalance' => $data['accountCurrentBalance'],
+            'openingBalance'        => $data['openingBalance'],
+            'periodAllocated'       => $data['periodAllocated'],
+            'periodSpent'           => $data['periodSpent'],
+            'periodClosingBalance'  => $data['periodClosingBalance'],
+        ]);
+    }
+
+    /**
+     * Export Ad Budget Passbook / Ledger Statement as PDF.
+     */
+    public function exportPdf(Request $request)
+    {
+        $data = $this->buildLedgerData($request);
+
+        // For Passbook PDF, chronological order (Date ASC) is standard
+        $sortOrder = $request->get('sort', 'asc');
+        if ($sortOrder === 'desc') {
+            $rows = $data['filteredRows']->sortBy([
+                ['date', 'desc'],
+                ['created_at', 'desc'],
+            ])->values();
+        } else {
+            $rows = $data['filteredRows']->sortBy([
+                ['date', 'asc'],
+                ['created_at', 'asc'],
+            ])->values();
+        }
+
+        $user = auth()->user();
+        $branchId = $user?->branch_id;
+        $settings = QuotationSetting::allSettings($branchId);
+        $company = $user?->company;
+
+        $companyName    = $settings['company_name'] ?: ($company?->company_name ?: config('app.name', 'My Agency'));
+        $companyAddress = $settings['company_address'] ?: ($company?->address ?: '');
+        $companyPhone   = $settings['company_phone'] ?: ($company?->mobile_number ?: '');
+        $companyEmail   = $settings['company_email'] ?: ($company?->email ?: '');
+        $companyGstin   = $settings['company_gstin'] ?: '';
+
+        $logoPath = $settings['logo'] ?? null;
+        if (! $logoPath || ! file_exists(public_path(ltrim((string) $logoPath, '/')))) {
+            if (file_exists(public_path('images/my_agenci_logo.png'))) {
+                $logoPath = 'images/my_agenci_logo.png';
+            } elseif (file_exists(public_path('images/logo.png'))) {
+                $logoPath = 'images/logo.png';
+            }
+        }
+        $logoBase64 = $this->imageBase64($logoPath);
+
+        $selectedAccount = $data['selectedAccount'];
+        $accountLabel = $selectedAccount
+            ? $selectedAccount->account_name . ' (' . ($selectedAccount->platform ?: 'Ad Account') . ')'
+            : 'All Ad Accounts (Consolidated)';
+
+        $cleanAccountName = Str::slug($selectedAccount ? $selectedAccount->account_name : 'All_Accounts');
+        $filename = 'Passbook_Statement_' . $cleanAccountName . '_' . now()->format('Ymd_His') . '.pdf';
+
+        $orientation = $request->get('orientation', 'landscape');
+
+        $pdf = Pdf::loadView('pages.accounts.ad_budget.ledger_pdf', [
+            'rows'                  => $rows,
+            'selectedAccount'       => $selectedAccount,
+            'accountLabel'          => $accountLabel,
+            'dateFrom'              => $data['dateFrom'],
+            'dateTo'                => $data['dateTo'],
+            'openingBalance'        => $data['openingBalance'],
+            'periodAllocated'       => $data['periodAllocated'],
+            'periodSpent'           => $data['periodSpent'],
+            'periodClosingBalance'  => $data['periodClosingBalance'],
+            'accountCurrentBalance' => $data['accountCurrentBalance'],
+            'companyName'           => $companyName,
+            'companyAddress'        => $companyAddress,
+            'companyPhone'          => $companyPhone,
+            'companyEmail'          => $companyEmail,
+            'companyGstin'          => $companyGstin,
+            'logoBase64'            => $logoBase64,
+            'generatedBy'           => $user?->name ?? 'Accounts Team',
+            'generatedAt'           => now(),
+        ])->setPaper('a4', $orientation)
+          ->setOptions([
+              'defaultFont'          => 'DejaVu Sans',
+              'isHtml5ParserEnabled' => true,
+              'isRemoteEnabled'      => true,
+          ]);
+
+        if ($request->boolean('download')) {
+            return $pdf->download($filename);
+        }
+
+        return $pdf->stream($filename);
+    }
+
+    /**
+     * Build unified ledger data for both web and PDF views.
+     */
+    protected function buildLedgerData(Request $request): array
+    {
         $adAccounts = AdAccountMaster::active()->orderBy('account_name')->get();
 
         $selectedAccountId = $request->ad_account_id;
@@ -121,7 +240,7 @@ class AdSpendController extends Controller
         $search            = $request->search;
 
         // 1. Fetch Approved Budget Allocations (Credit)
-        $allocations = \App\Models\AdBudgetRequest::with(['adAccount', 'requester'])
+        $allocations = \App\Models\AdBudgetRequest::with(['adAccount', 'approver', 'tlApprover', 'requester'])
             ->where('status', 'approved')
             ->when($selectedAccountId, fn($q) => $q->where('ad_account_id', $selectedAccountId))
             ->get();
@@ -139,6 +258,7 @@ class AdSpendController extends Controller
                 ? $alloc->payment_date->format('Y-m-d')
                 : $alloc->created_at->format('Y-m-d');
             $amount = (float) ($alloc->approved_amount > 0 ? $alloc->approved_amount : $alloc->amount);
+            $allocatedByName = $alloc->approver?->name ?: ($alloc->tlApprover?->name ?: ($alloc->requester?->name ?: 'System'));
 
             $transactions->push([
                 'id'               => 'alloc_' . $alloc->id,
@@ -150,7 +270,7 @@ class AdSpendController extends Controller
                 'description'      => 'Approved Budget Allocation (Request #' . $alloc->id . ($alloc->client_name ? ' - ' . $alloc->client_name : '') . ')',
                 'allocated_amount' => $amount,
                 'spent_amount'     => 0.0,
-                'user_name'        => $alloc->requester?->name ?? 'System',
+                'user_name'        => $allocatedByName,
                 'created_at'       => $alloc->created_at->format('Y-m-d H:i:s'),
             ]);
         }
@@ -179,28 +299,48 @@ class AdSpendController extends Controller
             ['created_at', 'asc'],
         ])->values();
 
-        // Calculate Running Balance per Ad Account
+        // Calculate Running Balance per Ad Account and Consolidated Pool
         $accountBalances = [];
+        $consolidatedBalance = 0.0;
         $runningTransactions = collect();
 
         foreach ($sortedTransactions as $txn) {
-            $accId = $txn['ad_account_id'];
+            $accId = $txn['ad_account_id'] ?? 0;
             if (!isset($accountBalances[$accId])) {
                 $accountBalances[$accId] = 0.0;
             }
 
-            $accountBalances[$accId] += ($txn['allocated_amount'] - $txn['spent_amount']);
-            $txn['running_balance'] = $accountBalances[$accId];
+            $net = (float) $txn['allocated_amount'] - (float) $txn['spent_amount'];
+            $accountBalances[$accId] += $net;
+            $consolidatedBalance     += $net;
+
+            $txn['account_balance']      = $accountBalances[$accId];
+            $txn['consolidated_balance'] = $consolidatedBalance;
+
+            // When a specific account is selected, running_balance is for that account.
+            // When consolidated (All Accounts), running_balance is the cumulative consolidated balance!
+            $txn['running_balance'] = $selectedAccountId ? $accountBalances[$accId] : $consolidatedBalance;
 
             $runningTransactions->push($txn);
         }
 
         // Overall Totals
-        $totalAllocatedOverall = $runningTransactions->sum('allocated_amount');
-        $totalSpentOverall     = $runningTransactions->sum('spent_amount');
+        $totalAllocatedOverall = (float) $runningTransactions->sum('allocated_amount');
+        $totalSpentOverall     = (float) $runningTransactions->sum('spent_amount');
         $currentBalanceOverall = $totalAllocatedOverall - $totalSpentOverall;
 
-        // Apply Date Range & Search Filters for view
+        // Calculate Opening Balance prior to dateFrom
+        $openingBalance = 0.0;
+        if ($dateFrom) {
+            $priorTxns = $runningTransactions->filter(fn($t) => $t['date'] < $dateFrom);
+            if ($selectedAccountId) {
+                $openingBalance = (float) ($priorTxns->last()['account_balance'] ?? 0.0);
+            } else {
+                $openingBalance = (float) ($priorTxns->last()['consolidated_balance'] ?? 0.0);
+            }
+        }
+
+        // Apply Date Range & Search Filters
         $filteredRows = $runningTransactions;
 
         if ($dateFrom) {
@@ -226,12 +366,6 @@ class AdSpendController extends Controller
             });
         }
 
-        // Order rows Date DESC (newest first) for display
-        $rows = $filteredRows->sortBy([
-            ['date', 'desc'],
-            ['created_at', 'desc'],
-        ])->values();
-
         // Filtered Ad Account specific details
         $selectedAccount = null;
         $accountCurrentBalance = $currentBalanceOverall;
@@ -241,17 +375,51 @@ class AdSpendController extends Controller
             $accountCurrentBalance = $accountBalances[$selectedAccountId] ?? 0.0;
         }
 
-        return view('pages.accounts.ad_budget.allocation_vs_spent', compact(
-            'rows',
-            'adAccounts',
-            'selectedAccountId',
-            'selectedAccount',
-            'dateFrom',
-            'dateTo',
-            'totalAllocatedOverall',
-            'totalSpentOverall',
-            'currentBalanceOverall',
-            'accountCurrentBalance'
-        ));
+        $periodAllocated = (float) $filteredRows->sum('allocated_amount');
+        $periodSpent     = (float) $filteredRows->sum('spent_amount');
+        $periodClosingBalance = $openingBalance + $periodAllocated - $periodSpent;
+
+        return [
+            'adAccounts'            => $adAccounts,
+            'selectedAccountId'     => $selectedAccountId,
+            'selectedAccount'       => $selectedAccount,
+            'dateFrom'              => $dateFrom,
+            'dateTo'                => $dateTo,
+            'search'                => $search,
+            'filteredRows'          => $filteredRows,
+            'openingBalance'        => $openingBalance,
+            'periodAllocated'       => $periodAllocated,
+            'periodSpent'           => $periodSpent,
+            'periodClosingBalance'  => $periodClosingBalance,
+            'totalAllocatedOverall' => $totalAllocatedOverall,
+            'totalSpentOverall'     => $totalSpentOverall,
+            'currentBalanceOverall' => $currentBalanceOverall,
+            'accountCurrentBalance' => $accountCurrentBalance,
+        ];
+    }
+
+    /**
+     * Helper to encode image to base64 for PDF rendering.
+     */
+    private function imageBase64(?string $imagePath): ?string
+    {
+        if (! $imagePath) {
+            return null;
+        }
+
+        $resolvedPath = public_path(ltrim((string) $imagePath, '/'));
+
+        if (! file_exists($resolvedPath)) {
+            return null;
+        }
+
+        $type = pathinfo($resolvedPath, PATHINFO_EXTENSION);
+        $data = file_get_contents($resolvedPath);
+
+        if ($data === false) {
+            return null;
+        }
+
+        return 'data:image/' . $type . ';base64,' . base64_encode($data);
     }
 }

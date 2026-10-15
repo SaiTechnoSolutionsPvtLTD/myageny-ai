@@ -249,7 +249,12 @@
                         </div>
                     </div>
                     <div class="sdc-kpi-value" style="color:#ca8a04;">{{ number_format($kpiStats['current_week_meetings']) }}</div>
-                    <div class="sdc-kpi-sub">Meetings, Weekly Updates, Reviews &amp; Escalations</div>
+                    <div class="sdc-kpi-sub" style="display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin-top:4px;">
+                        <span style="background:#fef9c3; color:#854d0e; padding:1px 5px; border-radius:4px; font-weight:700; font-size:10px;">{{ number_format($kpiStats['meeting_reminders_count'] ?? 0) }} Meetings</span>
+                        <span style="background:#eff6ff; color:#1d4ed8; padding:1px 5px; border-radius:4px; font-weight:700; font-size:10px;">{{ number_format($kpiStats['cst_updates_count'] ?? 0) }} Updates</span>
+                        <span style="background:#faf5ff; color:#7c3aed; padding:1px 5px; border-radius:4px; font-weight:700; font-size:10px;">{{ number_format($kpiStats['weekly_updates_count'] ?? 0) }} Weekly</span>
+                        <span style="background:#fff7ed; color:#c2410c; padding:1px 5px; border-radius:4px; font-weight:700; font-size:10px;">{{ number_format($kpiStats['reviews_count'] ?? 0) }} Reviews</span>
+                    </div>
                     <div style="font-size:10px; color:#ca8a04; font-weight:700; margin-top:6px; display:flex; align-items:center; gap:4px;">
                         <span>Click to view details</span>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -1157,6 +1162,24 @@ document.addEventListener('DOMContentLoaded', function () {
             const urlParams = new URLSearchParams(window.location.search);
             urlParams.set('metric', metric);
 
+            const fromDateInput = document.querySelector('input[name="from_date"]');
+            const toDateInput = document.querySelector('input[name="to_date"]');
+            const userIdInput = document.querySelector('select[name="user_id"]');
+            const branchIdInput = document.querySelector('select[name="branch_id"]');
+
+            if (fromDateInput && fromDateInput.value && !urlParams.has('from_date')) {
+                urlParams.set('from_date', fromDateInput.value);
+            }
+            if (toDateInput && toDateInput.value && !urlParams.has('to_date')) {
+                urlParams.set('to_date', toDateInput.value);
+            }
+            if (userIdInput && userIdInput.value && !urlParams.has('user_id')) {
+                urlParams.set('user_id', userIdInput.value);
+            }
+            if (branchIdInput && branchIdInput.value && !urlParams.has('branch_id')) {
+                urlParams.set('branch_id', branchIdInput.value);
+            }
+
             fetch(`{{ route("cst.day-closing.metric-details") }}?${urlParams.toString()}`, {
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
             })
@@ -1168,6 +1191,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 tbody.innerHTML = '';
 
                 if (res.success && Array.isArray(res.records) && res.records.length > 0) {
+                    if (modalSub) {
+                        modalSub.textContent = `Total ${res.records.length} record${res.records.length === 1 ? '' : 's'} found`;
+                    }
                     res.records.forEach((rec, idx) => {
                         const tr = document.createElement('tr');
                         const amtStr = rec.amount > 0 ? '₹' + Math.round(rec.amount).toLocaleString('en-IN') : '—';
@@ -1190,6 +1216,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         tbody.appendChild(tr);
                     });
                 } else {
+                    if (modalSub) {
+                        modalSub.textContent = '0 records found';
+                    }
                     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#64748b;">No records found for this metric.</td></tr>';
                 }
             })
