@@ -836,4 +836,16 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::put('/ad-accounts-master/{adAccount}', [AccountsApiController::class, 'updateAdAccount'])->name('ad-accounts-master.update');
     Route::patch('/ad-accounts-master/{adAccount}/toggle-status', [AccountsApiController::class, 'toggleAdAccountStatus'])->name('ad-accounts-master.toggle-status');
     Route::delete('/ad-accounts-master/{adAccount}', [AccountsApiController::class, 'destroyAdAccount'])->name('ad-accounts-master.destroy');
+
+    // Accounts Expenses
+    Route::get('/expenses', [AccountsApiController::class, 'expenses'])->name('expenses.index');
+    Route::get('/expenses/meta', [AccountsApiController::class, 'expenseMeta'])->name('expenses.meta');
+    Route::get('/expenses/subcategories/{categoryId}', [AccountsApiController::class, 'expenseSubcategories'])->name('expenses.subcategories');
+    Route::post('/expenses', [AccountsApiController::class, 'storeExpense'])->name('expenses.store');
+    Route::post('/expenses/sync-recurring', [AccountsApiController::class, 'syncRecurringExpenses'])->name('expenses.sync-recurring');
+    Route::get('/expenses/pivot', [AccountsApiController::class, 'expensePivot'])->name('expenses.pivot');
+    Route::get('/expenses/{id}', [AccountsApiController::class, 'showExpense'])->name('expenses.show');
+    Route::post('/expenses/{id}', [AccountsApiController::class, 'updateExpense'])->name('expenses.update');
+    Route::delete('/expenses/{id}', [AccountsApiController::class, 'destroyExpense'])->name('expenses.destroy');
+    Route::delete('/expenses/{id}/attachments/{index}', [AccountsApiController::class, 'deleteExpenseAttachment'])->name('expenses.attachments.destroy');
 });

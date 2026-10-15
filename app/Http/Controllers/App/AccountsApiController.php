@@ -12,12 +12,19 @@ use App\Models\HostingRecord;
 use App\Models\LeadProductPayment;
 use App\Models\User;
 use App\Mail\AdBudgetNotificationMail;
+use App\Models\AccountExpense;
+use App\Models\AccountExpenseCategory;
+use App\Models\AccountExpenseSubcategory;
+use App\Models\VendorMaster;
+use App\Console\Commands\GenerateRecurringAccountExpensesCommand;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -1472,5 +1479,944 @@ class AccountsApiController extends Controller
         } catch (Throwable $e) {
             Log::error('Ad Budget Mail Dispatch Error: ' . $e->getMessage());
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  8. ACCOUNTS EXPENSES
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * List accounts expenses with KPI stats, filters, and future-month forecasting.
+     */
+    public function expenses(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            // Auto-generate due recurring fixed expenses for current month
+            try {
+                GenerateRecurringAccountExpensesCommand::generateForMonth(now()->startOfMonth());
+            } catch (Throwable $e) {
+                // Silently continue
+            }
+
+            $baseQuery = AccountExpense::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')));
+
+            // Next Month Projected Fixed Expenses
+            $nextMonthCarbon = now()->addMonth()->startOfMonth();
+            $nextMonthStr    = $nextMonthCarbon->format('Y-m');
+
+            $nextMonthRecurringMasters = AccountExpense::activeRecurring($nextMonthCarbon)
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->with(['category', 'subcategory', 'vendor'])
+                ->get();
+
+            $nextMonthProjectedAmount = (float) $nextMonthRecurringMasters->sum('amount');
+            $nextMonthFixedCount      = $nextMonthRecurringMasters->count();
+
+            // Calculate KPI summary stats for actual records
+            $allExpenses = (clone $baseQuery)->get(['amount', 'expense_type', 'expense_date']);
+            $totalAmount       = (float) $allExpenses->sum('amount');
+            $fixedAmount       = (float) $allExpenses->where('expense_type', 'Fixed')->sum('amount');
+            $variableAmount    = (float) $allExpenses->where('expense_type', 'Variable')->sum('amount');
+            $thisMonthAmount   = (float) $allExpenses->filter(function ($item) {
+                return $item->expense_date &&
+                       $item->expense_date->format('Y-m') === now()->format('Y-m');
+            })->sum('amount');
+            $totalCount        = $allExpenses->count();
+
+            // Check if user is filtering for Next Month or a future month (Forecast Mode)
+            $isFutureMonthFilter = false;
+            $futureMonthLabel = null;
+            $projectedExpenses = collect();
+
+            $filteredMonth = $request->input('month');
+            if ($filteredMonth && $filteredMonth >= $nextMonthStr) {
+                $isFutureMonthFilter = true;
+                $targetFutureCarbon = Carbon::createFromFormat('Y-m', $filteredMonth)->startOfMonth();
+                $futureMonthLabel = $targetFutureCarbon->format('F Y');
+
+                $futureTemplates = AccountExpense::activeRecurring($targetFutureCarbon)
+                    ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                    ->when($request->filled('category_id'), fn ($q) => $q->where('account_expense_category_id', $request->category_id))
+                    ->when($request->filled('subcategory_id'), fn ($q) => $q->where('account_expense_subcategory_id', $request->subcategory_id))
+                    ->when($request->filled('vendor_id'), fn ($q) => $q->where('vendor_id', $request->vendor_id))
+                    ->with(['category', 'subcategory', 'vendor', 'creator'])
+                    ->get();
+
+                foreach ($futureTemplates as $tpl) {
+                    $day = min($tpl->recurring_day_of_month ?: ($tpl->expense_date ? $tpl->expense_date->day : 1), $targetFutureCarbon->daysInMonth);
+                    $scheduledDate = $targetFutureCarbon->copy()->day($day);
+
+                    $existing = AccountExpense::where(function ($q) use ($tpl) {
+                            $q->where('id', $tpl->id)->orWhere('parent_expense_id', $tpl->id);
+                        })
+                        ->whereYear('expense_date', $targetFutureCarbon->year)
+                        ->whereMonth('expense_date', $targetFutureCarbon->month)
+                        ->first();
+
+                    $projItem = (object)[
+                        'id'                             => $tpl->id,
+                        'expense_number'                 => $existing ? $existing->expense_number : ($tpl->expense_number . ' (Forecast)'),
+                        'expense_date'                   => $scheduledDate,
+                        'account_expense_category_id'    => $tpl->account_expense_category_id,
+                        'account_expense_subcategory_id' => $tpl->account_expense_subcategory_id,
+                        'vendor_id'                      => $tpl->vendor_id,
+                        'amount'                         => (float) $tpl->amount,
+                        'expense_type'                   => 'Fixed',
+                        'is_recurring'                   => true,
+                        'recurring_day_of_month'         => $tpl->recurring_day_of_month,
+                        'recurring_end_date'             => $tpl->recurring_end_date ? Carbon::parse($tpl->recurring_end_date)->format('Y-m-d') : null,
+                        'auto_generated'                 => (bool) $existing,
+                        'parent_expense_id'              => $tpl->id,
+                        'invoice_no'                     => $existing ? $existing->invoice_no : ($tpl->invoice_no ? $tpl->invoice_no . '-' . $targetFutureCarbon->format('Ym') : 'Scheduled'),
+                        'remarks'                        => $tpl->remarks ?: '',
+                        'created_by'                     => $tpl->created_by,
+                        'category'                       => $tpl->category,
+                        'subcategory'                    => $tpl->subcategory,
+                        'vendor'                         => $tpl->vendor,
+                        'creator'                        => $tpl->creator,
+                        'attachment_list'                => $existing ? $existing->attachment_list : [],
+                        'is_forecast'                    => true,
+                    ];
+
+                    $projectedExpenses->push($projItem);
+                }
+
+                // Adjust stats for future forecast month
+                $totalAmount       = (float) $projectedExpenses->sum('amount');
+                $fixedAmount       = $totalAmount;
+                $variableAmount    = 0.0;
+                $thisMonthAmount   = $totalAmount;
+                $totalCount        = $projectedExpenses->count();
+
+                $perPage = (int) $request->input('per_page', 15);
+                $page = (int) $request->input('page', 1);
+                $pagedItems = $projectedExpenses->slice(($page - 1) * $perPage, $perPage)->values();
+
+                $formattedItems = $pagedItems->map(fn($item) => $this->formatExpenseItem($item));
+
+                $pagination = [
+                    'current_page' => $page,
+                    'last_page'    => max(1, (int) ceil($totalCount / $perPage)),
+                    'per_page'     => $perPage,
+                    'total'        => $totalCount,
+                    'has_more'     => ($page * $perPage) < $totalCount,
+                ];
+            } else {
+                // Actual recorded expenses query with filters
+                $query = (clone $baseQuery)
+                    ->with(['category', 'subcategory', 'vendor', 'creator'])
+                    ->when($request->filled('search'), function ($q) use ($request) {
+                        $search = trim($request->search);
+                        $q->where(function ($sub) use ($search) {
+                            $sub->where('invoice_no', 'like', "%{$search}%")
+                                ->orWhere('expense_number', 'like', "%{$search}%")
+                                ->orWhere('remarks', 'like', "%{$search}%")
+                                ->orWhereHas('vendor', function ($vq) use ($search) {
+                                    $vq->where('vendor_name', 'like', "%{$search}%")
+                                       ->orWhere('company_name', 'like', "%{$search}%");
+                                })
+                                ->orWhereHas('category', function ($cq) use ($search) {
+                                    $cq->where('name', 'like', "%{$search}%");
+                                });
+                        });
+                    })
+                    ->when($request->filled('expense_type'), function ($q) use ($request) {
+                        $q->where('expense_type', $request->expense_type);
+                    })
+                    ->when($request->filled('category_id'), function ($q) use ($request) {
+                        $q->where('account_expense_category_id', $request->category_id);
+                    })
+                    ->when($request->filled('subcategory_id'), function ($q) use ($request) {
+                        $q->where('account_expense_subcategory_id', $request->subcategory_id);
+                    })
+                    ->when($request->filled('vendor_id'), function ($q) use ($request) {
+                        $q->where('vendor_id', $request->vendor_id);
+                    })
+                    ->when($request->filled('date_from'), function ($q) use ($request) {
+                        $q->whereDate('expense_date', '>=', $request->date_from);
+                    })
+                    ->when($request->filled('date_to'), function ($q) use ($request) {
+                        $q->whereDate('expense_date', '<=', $request->date_to);
+                    })
+                    ->when($request->filled('month'), function ($q) use ($request) {
+                        $parts = explode('-', $request->month);
+                        if (count($parts) === 2) {
+                            $q->whereYear('expense_date', $parts[0])
+                              ->whereMonth('expense_date', $parts[1]);
+                        }
+                    })
+                    ->orderByDesc('expense_date')
+                    ->latest('id');
+
+                $perPage = (int) $request->input('per_page', 15);
+                $paginated = $query->paginate($perPage);
+
+                $formattedItems = collect($paginated->items())->map(fn($item) => $this->formatExpenseItem($item));
+
+                $pagination = [
+                    'current_page' => $paginated->currentPage(),
+                    'last_page'    => $paginated->lastPage(),
+                    'per_page'     => $paginated->perPage(),
+                    'total'        => $paginated->total(),
+                    'has_more'     => $paginated->hasMorePages(),
+                ];
+            }
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'items'        => $formattedItems,
+                    'pagination'   => $pagination,
+                    'kpi_stats'    => [
+                        'total_expenses'             => $totalAmount,
+                        'this_month_expenses'        => $thisMonthAmount,
+                        'fixed_expenses'             => $fixedAmount,
+                        'variable_expenses'          => $variableAmount,
+                        'next_month_projected_amount'=> $nextMonthProjectedAmount,
+                        'next_month_fixed_count'     => $nextMonthFixedCount,
+                        'next_month_label'           => $nextMonthCarbon->format('M Y'),
+                        'next_month_str'             => $nextMonthStr,
+                        'total_entries'              => $totalCount,
+                    ],
+                    'is_future_month_filter' => $isFutureMonthFilter,
+                    'future_month_label'     => $futureMonthLabel,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts expenses list error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load accounts expenses: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get metadata options for Categories, Subcategories, and Vendors.
+     */
+    public function expenseMeta(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $categories = AccountExpenseCategory::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']);
+
+            $subcategories = AccountExpenseSubcategory::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->orderBy('name')
+                ->get(['id', 'name', 'code', 'account_expense_category_id']);
+
+            $vendors = VendorMaster::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->orderBy('vendor_name')
+                ->get(['id', 'vendor_name', 'company_name', 'mobile_number', 'email', 'gst_number']);
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'categories'    => $categories,
+                    'subcategories' => $subcategories,
+                    'vendors'       => $vendors,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts expenseMeta error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load expense form metadata: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get active subcategories for a specific category.
+     */
+    public function expenseSubcategories(Request $request, $categoryId): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $subcategories = AccountExpenseSubcategory::active()
+                ->where('account_expense_category_id', $categoryId)
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']);
+
+            return response()->json([
+                'status' => true,
+                'data'   => $subcategories,
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load subcategories: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Store a new Accounts Expense record with optional file attachments.
+     */
+    public function storeExpense(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $validated = $request->validate([
+                'expense_date'                   => 'required|date',
+                'account_expense_category_id'    => 'required|exists:account_expense_categories,id',
+                'account_expense_subcategory_id' => 'nullable|exists:account_expense_subcategories,id',
+                'vendor_id'                      => 'nullable|exists:vendor_masters,id',
+                'amount'                         => 'required|numeric|min:0.01',
+                'expense_type'                   => 'required|in:Fixed,Variable',
+                'is_recurring'                   => 'nullable|boolean',
+                'recurring_day_of_month'         => 'nullable|integer|min:1|max:31',
+                'recurring_end_date'             => 'nullable|date',
+                'invoice_no'                     => 'nullable|string|max:100',
+                'remarks'                        => 'nullable|string|max:5000',
+                'attachments'                    => 'nullable|array',
+                'attachments.*'                  => 'file|max:10240',
+            ]);
+
+            $uploadedAttachments = [];
+            if ($request->hasFile('attachments')) {
+                $targetDir = public_path('uploads/accounts-expenses');
+                if (!file_exists($targetDir)) {
+                    mkdir($targetDir, 0755, true);
+                }
+
+                foreach ($request->file('attachments') as $file) {
+                    if ($file && $file->isValid()) {
+                        $originalName = $file->getClientOriginalName();
+                        $ext = $file->getClientOriginalExtension();
+                        $size = $file->getSize();
+                        $mime = $file->getMimeType();
+                        $fileName = time() . '_' . Str::random(10) . '.' . $ext;
+                        $file->move($targetDir, $fileName);
+
+                        $uploadedAttachments[] = [
+                            'path'      => 'uploads/accounts-expenses/' . $fileName,
+                            'name'      => $originalName,
+                            'size'      => $size,
+                            'mime_type' => $mime,
+                        ];
+                    }
+                }
+            }
+
+            $isFixed = $validated['expense_type'] === 'Fixed';
+            $isRecurring = $isFixed && $request->boolean('is_recurring');
+            $dueDay = $isRecurring
+                ? ($request->filled('recurring_day_of_month') ? (int) $request->recurring_day_of_month : (int) date('d', strtotime($validated['expense_date'])))
+                : null;
+
+            $expense = AccountExpense::create([
+                'company_id'                     => $companyId,
+                'expense_date'                   => $validated['expense_date'],
+                'account_expense_category_id'    => $validated['account_expense_category_id'],
+                'account_expense_subcategory_id' => $validated['account_expense_subcategory_id'] ?? null,
+                'vendor_id'                      => $validated['vendor_id'] ?? null,
+                'amount'                         => $validated['amount'],
+                'expense_type'                   => $validated['expense_type'],
+                'is_recurring'                   => $isRecurring,
+                'recurring_day_of_month'         => $dueDay,
+                'recurring_end_date'             => $isRecurring ? ($validated['recurring_end_date'] ?? null) : null,
+                'last_generated_month'           => date('Y-m', strtotime($validated['expense_date'])),
+                'invoice_no'                     => $validated['invoice_no'] ?? null,
+                'remarks'                        => $validated['remarks'] ?? null,
+                'attachments'                    => $uploadedAttachments,
+                'created_by'                     => $user?->id,
+            ]);
+
+            $expense->load(['category', 'subcategory', 'vendor', 'creator']);
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Expense {$expense->expense_number} recorded successfully!",
+                'data'    => $this->formatExpenseItem($expense),
+            ], 201);
+        } catch (Throwable $e) {
+            Log::error('Mobile storeExpense error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to save expense: ' . $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Display detailed information for an expense.
+     */
+    public function showExpense(Request $request, $id): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $expense = AccountExpense::with(['category', 'subcategory', 'vendor', 'creator', 'updater', 'parent', 'generatedChildren'])
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->findOrFail($id);
+
+            return response()->json([
+                'status' => true,
+                'data'   => $this->formatExpenseDetail($expense),
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Expense not found: ' . $e->getMessage(),
+            ], 404);
+        }
+    }
+
+    /**
+     * Update an existing Accounts Expense.
+     */
+    public function updateExpense(Request $request, $id): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $expense = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->findOrFail($id);
+
+            $validated = $request->validate([
+                'expense_date'                   => 'required|date',
+                'account_expense_category_id'    => 'required|exists:account_expense_categories,id',
+                'account_expense_subcategory_id' => 'nullable|exists:account_expense_subcategories,id',
+                'vendor_id'                      => 'nullable|exists:vendor_masters,id',
+                'amount'                         => 'required|numeric|min:0.01',
+                'expense_type'                   => 'required|in:Fixed,Variable',
+                'is_recurring'                   => 'nullable|boolean',
+                'recurring_day_of_month'         => 'nullable|integer|min:1|max:31',
+                'recurring_end_date'             => 'nullable|date',
+                'invoice_no'                     => 'nullable|string|max:100',
+                'remarks'                        => 'nullable|string|max:5000',
+                'attachments'                    => 'nullable|array',
+                'attachments.*'                  => 'file|max:10240',
+                'removed_attachments'            => 'nullable|array',
+            ]);
+
+            $existingAttachments = $expense->attachments ?? [];
+            $removedIndices = $request->input('removed_attachments', []);
+
+            // Remove deleted attachments
+            if (!empty($removedIndices) && is_array($removedIndices)) {
+                $filtered = [];
+                foreach ($existingAttachments as $idx => $att) {
+                    if (in_array((string)$idx, $removedIndices, true) || in_array($idx, $removedIndices, true)) {
+                        $path = is_array($att) ? ($att['path'] ?? '') : $att;
+                        $fullPath = public_path($path);
+                        if (file_exists($fullPath)) {
+                            @unlink($fullPath);
+                        }
+                    } else {
+                        $filtered[] = $att;
+                    }
+                }
+                $existingAttachments = $filtered;
+            }
+
+            // Upload and append new attachments
+            if ($request->hasFile('attachments')) {
+                $targetDir = public_path('uploads/accounts-expenses');
+                if (!file_exists($targetDir)) {
+                    mkdir($targetDir, 0755, true);
+                }
+
+                foreach ($request->file('attachments') as $file) {
+                    if ($file && $file->isValid()) {
+                        $originalName = $file->getClientOriginalName();
+                        $ext = $file->getClientOriginalExtension();
+                        $size = $file->getSize();
+                        $mime = $file->getMimeType();
+                        $fileName = time() . '_' . Str::random(10) . '.' . $ext;
+                        $file->move($targetDir, $fileName);
+
+                        $existingAttachments[] = [
+                            'path'      => 'uploads/accounts-expenses/' . $fileName,
+                            'name'      => $originalName,
+                            'size'      => $size,
+                            'mime_type' => $mime,
+                        ];
+                    }
+                }
+            }
+
+            $isFixed = $validated['expense_type'] === 'Fixed';
+            $isRecurring = $isFixed && $request->boolean('is_recurring');
+            $dueDay = $isRecurring
+                ? ($request->filled('recurring_day_of_month') ? (int) $request->recurring_day_of_month : (int) date('d', strtotime($validated['expense_date'])))
+                : null;
+
+            $updateData = [
+                'expense_date'                   => $validated['expense_date'],
+                'account_expense_category_id'    => $validated['account_expense_category_id'],
+                'account_expense_subcategory_id' => $validated['account_expense_subcategory_id'] ?? null,
+                'vendor_id'                      => $validated['vendor_id'] ?? null,
+                'amount'                         => $validated['amount'],
+                'expense_type'                   => $validated['expense_type'],
+                'is_recurring'                   => $isRecurring,
+                'recurring_day_of_month'         => $dueDay,
+                'recurring_end_date'             => $isRecurring ? ($validated['recurring_end_date'] ?? null) : null,
+                'invoice_no'                     => $validated['invoice_no'] ?? null,
+                'remarks'                        => $validated['remarks'] ?? null,
+                'attachments'                    => array_values($existingAttachments),
+                'updated_by'                     => $user?->id,
+            ];
+
+            if ($isRecurring && empty($expense->last_generated_month)) {
+                $updateData['last_generated_month'] = date('Y-m', strtotime($validated['expense_date']));
+            }
+
+            $expense->update($updateData);
+            $expense->load(['category', 'subcategory', 'vendor', 'creator', 'updater']);
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Expense {$expense->expense_number} updated successfully!",
+                'data'    => $this->formatExpenseItem($expense),
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile updateExpense error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to update expense: ' . $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Delete an expense record (Soft delete).
+     */
+    public function destroyExpense(Request $request, $id): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $expense = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->findOrFail($id);
+
+            $number = $expense->expense_number;
+            $expense->delete();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Expense '{$number}' deleted successfully!",
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete expense: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove a specific attachment by index.
+     */
+    public function deleteExpenseAttachment(Request $request, $id, $index): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $expense = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->findOrFail($id);
+
+            $attachments = $expense->attachments ?? [];
+            $index = intval($index);
+
+            if (isset($attachments[$index])) {
+                $att = $attachments[$index];
+                $path = is_array($att) ? ($att['path'] ?? '') : $att;
+                $fullPath = public_path($path);
+                if (file_exists($fullPath)) {
+                    @unlink($fullPath);
+                }
+
+                array_splice($attachments, $index, 1);
+                $expense->attachments = array_values($attachments);
+                $expense->save();
+
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'Attachment removed successfully!',
+                ]);
+            }
+
+            return response()->json([
+                'status'  => false,
+                'message' => 'Attachment not found.',
+            ], 404);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to remove attachment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Trigger generation of recurring fixed expenses for a given month.
+     */
+    public function syncRecurringExpenses(Request $request): JsonResponse
+    {
+        try {
+            $targetMonth = $request->input('month')
+                ? Carbon::createFromFormat('Y-m', $request->input('month'))->startOfMonth()
+                : now()->startOfMonth();
+            $force = $request->boolean('force');
+
+            $count = GenerateRecurringAccountExpensesCommand::generateForMonth($targetMonth, $force);
+
+            return response()->json([
+                'status'  => true,
+                'count'   => $count,
+                'message' => $count > 0
+                    ? "{$count} recurring fixed expense(s) generated for {$targetMonth->format('F Y')}!"
+                    : "All recurring fixed expenses are already up to date for {$targetMonth->format('F Y')}.",
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to sync recurring expenses: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Expense Pivot Report: Category and Subcategory aggregated totals.
+     */
+    public function expensePivot(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $dateFrom    = $request->input('date_from');
+            $dateTo      = $request->input('date_to');
+            $month       = $request->input('month');
+            $expenseType = $request->input('expense_type');
+            $categoryId  = $request->input('category_id');
+
+            $baseQuery = AccountExpense::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->when($month, function ($q) use ($month) {
+                    $parts = explode('-', $month);
+                    if (count($parts) === 2) {
+                        $q->whereYear('expense_date', $parts[0])
+                          ->whereMonth('expense_date', $parts[1]);
+                    }
+                })
+                ->when($dateFrom, fn ($q) => $q->whereDate('expense_date', '>=', $dateFrom))
+                ->when($dateTo, fn ($q) => $q->whereDate('expense_date', '<=', $dateTo))
+                ->when($expenseType, fn ($q) => $q->where('expense_type', $expenseType))
+                ->when($categoryId, fn ($q) => $q->where('account_expense_category_id', $categoryId));
+
+            $expenses = (clone $baseQuery)
+                ->with(['category', 'subcategory', 'vendor'])
+                ->get();
+
+            // If checking future month, include projected recurring fixed expenses
+            if ($month && $month >= now()->addMonth()->format('Y-m')) {
+                $targetFutureCarbon = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+                $futureTemplates = AccountExpense::activeRecurring($targetFutureCarbon)
+                    ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                    ->when($categoryId, fn ($q) => $q->where('account_expense_category_id', $categoryId))
+                    ->when($expenseType && $expenseType !== 'Fixed', fn ($q) => $q->whereRaw('1 = 0'))
+                    ->with(['category', 'subcategory', 'vendor'])
+                    ->get();
+
+                foreach ($futureTemplates as $tpl) {
+                    $alreadyExists = $expenses->contains(function ($e) use ($tpl, $targetFutureCarbon) {
+                        return ($e->id == $tpl->id || $e->parent_expense_id == $tpl->id) &&
+                               $e->expense_date &&
+                               $e->expense_date->format('Y-m') === $targetFutureCarbon->format('Y-m');
+                    });
+
+                    if (!$alreadyExists) {
+                        $day = min($tpl->recurring_day_of_month ?: ($tpl->expense_date ? $tpl->expense_date->day : 1), $targetFutureCarbon->daysInMonth);
+                        $virtual = clone $tpl;
+                        $virtual->expense_date = $targetFutureCarbon->copy()->day($day);
+                        $virtual->auto_generated = true;
+                        $expenses->push($virtual);
+                    }
+                }
+            }
+
+            $allCategories = AccountExpenseCategory::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->with('activeSubcategories')
+                ->orderBy('name')
+                ->get();
+
+            $groupedByCategory = $expenses->groupBy('account_expense_category_id');
+
+            $pivotRows = [];
+            $grandTotalFixed = 0.0;
+            $grandTotalVariable = 0.0;
+            $grandTotalAmount = 0.0;
+            $grandTotalCount = 0;
+
+            foreach ($allCategories as $cat) {
+                $catExpenses = $groupedByCategory->get($cat->id, collect());
+                $subcatExpensesGrouped = $catExpenses->groupBy(fn ($item) => $item->account_expense_subcategory_id ?: 0);
+
+                $subcatRows = [];
+                $catFixedSum = 0.0;
+                $catVarSum = 0.0;
+                $catTotalSum = 0.0;
+                $catCountSum = $catExpenses->count();
+
+                // 1. Active master subcategories
+                foreach ($cat->activeSubcategories as $subcat) {
+                    $items = $subcatExpensesGrouped->get($subcat->id, collect());
+                    $fixed = (float) $items->where('expense_type', 'Fixed')->sum('amount');
+                    $variable = (float) $items->where('expense_type', 'Variable')->sum('amount');
+                    $total = $fixed + $variable;
+                    $count = $items->count();
+
+                    if ($count > 0 || $request->has('show_all')) {
+                        $subcatRows[] = [
+                            'id'       => $subcat->id,
+                            'name'     => $subcat->name,
+                            'code'     => $subcat->code,
+                            'count'    => $count,
+                            'fixed'    => $fixed,
+                            'variable' => $variable,
+                            'total'    => $total,
+                        ];
+                    }
+                    $catFixedSum += $fixed;
+                    $catVarSum += $variable;
+                    $catTotalSum += $total;
+                }
+
+                // 2. Direct under category (no subcategory)
+                $directItems = $subcatExpensesGrouped->get(0, collect());
+                if ($directItems->isNotEmpty()) {
+                    $fixed = (float) $directItems->where('expense_type', 'Fixed')->sum('amount');
+                    $variable = (float) $directItems->where('expense_type', 'Variable')->sum('amount');
+                    $total = $fixed + $variable;
+                    $count = $directItems->count();
+
+                    $subcatRows[] = [
+                        'id'       => null,
+                        'name'     => 'Direct / General (No Subcategory)',
+                        'code'     => null,
+                        'count'    => $count,
+                        'fixed'    => $fixed,
+                        'variable' => $variable,
+                        'total'    => $total,
+                    ];
+                    $catFixedSum += $fixed;
+                    $catVarSum += $variable;
+                    $catTotalSum += $total;
+                }
+
+                // 3. Other subcategories not in active list
+                $masterSubcatIds = $cat->activeSubcategories->pluck('id')->toArray();
+                foreach ($subcatExpensesGrouped as $subId => $items) {
+                    if ($subId != 0 && !in_array($subId, $masterSubcatIds)) {
+                        $firstItem = $items->first();
+                        $subName = $firstItem?->subcategory?->name ?: "Subcategory #{$subId}";
+                        $fixed = (float) $items->where('expense_type', 'Fixed')->sum('amount');
+                        $variable = (float) $items->where('expense_type', 'Variable')->sum('amount');
+                        $total = $fixed + $variable;
+                        $count = $items->count();
+
+                        $subcatRows[] = [
+                            'id'       => $subId,
+                            'name'     => $subName,
+                            'code'     => null,
+                            'count'    => $count,
+                            'fixed'    => $fixed,
+                            'variable' => $variable,
+                            'total'    => $total,
+                        ];
+                        $catFixedSum += $fixed;
+                        $catVarSum += $variable;
+                        $catTotalSum += $total;
+                    }
+                }
+
+                if ($catCountSum > 0 || $request->has('show_all')) {
+                    $pivotRows[] = [
+                        'category_id'   => $cat->id,
+                        'category_name' => $cat->name,
+                        'category_code' => $cat->code,
+                        'count'         => $catCountSum,
+                        'fixed'         => $catFixedSum,
+                        'variable'      => $catVarSum,
+                        'total'         => $catTotalSum,
+                        'subcategories' => $subcatRows,
+                        'expenses'      => $catExpenses->sortByDesc(function ($e) {
+                            if (!$e->expense_date) return 0;
+                            return $e->expense_date instanceof \Carbon\CarbonInterface ? $e->expense_date->timestamp : (strtotime((string) $e->expense_date) ?: 0);
+                        })->values()->map(fn($e) => $this->formatExpenseItem($e)),
+                    ];
+
+                    $grandTotalFixed += $catFixedSum;
+                    $grandTotalVariable += $catVarSum;
+                    $grandTotalAmount += $catTotalSum;
+                    $grandTotalCount += $catCountSum;
+                }
+            }
+
+            // Uncategorized
+            $unlinked = $expenses->filter(fn ($e) => empty($e->account_expense_category_id) || !$allCategories->contains('id', $e->account_expense_category_id));
+            if ($unlinked->isNotEmpty()) {
+                $fixed = (float) $unlinked->where('expense_type', 'Fixed')->sum('amount');
+                $variable = (float) $unlinked->where('expense_type', 'Variable')->sum('amount');
+                $total = $fixed + $variable;
+                $count = $unlinked->count();
+
+                $pivotRows[] = [
+                    'category_id'   => null,
+                    'category_name' => 'Other / Uncategorized',
+                    'category_code' => null,
+                    'count'         => $count,
+                    'fixed'         => $fixed,
+                    'variable'      => $variable,
+                    'total'         => $total,
+                    'subcategories' => [
+                        [
+                            'id'       => null,
+                            'name'     => 'Unspecified',
+                            'code'     => null,
+                            'count'    => $count,
+                            'fixed'    => $fixed,
+                            'variable' => $variable,
+                            'total'    => $total,
+                        ]
+                    ],
+                    'expenses'      => $unlinked->map(fn($e) => $this->formatExpenseItem($e)),
+                ];
+
+                $grandTotalFixed += $fixed;
+                $grandTotalVariable += $variable;
+                $grandTotalAmount += $total;
+                $grandTotalCount += $count;
+            }
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'grand_total_amount'   => $grandTotalAmount,
+                    'grand_total_fixed'    => $grandTotalFixed,
+                    'grand_total_variable' => $grandTotalVariable,
+                    'grand_total_count'    => $grandTotalCount,
+                    'rows'                 => $pivotRows,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts expensePivot error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load expense pivot data: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Formatting Helpers for Accounts Expenses
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private function formatExpenseItem($exp): array
+    {
+        $category = $exp->category ?? null;
+        $subcategory = $exp->subcategory ?? null;
+        $vendor = $exp->vendor ?? null;
+        $creator = $exp->creator ?? null;
+
+        $expDate = $exp->expense_date ?? null;
+        $dateFormatted = $expDate ? Carbon::parse($expDate)->format('d M Y') : '—';
+        $dateRaw = $expDate ? Carbon::parse($expDate)->format('Y-m-d') : null;
+
+        $attachList = [];
+        if (is_array($exp->attachment_list ?? null)) {
+            $attachList = $exp->attachment_list;
+        } elseif (method_exists($exp, 'getAttachmentListAttribute')) {
+            $attachList = $exp->attachment_list;
+        }
+
+        return [
+            'id'                             => $exp->id,
+            'expense_number'                 => $exp->expense_number ?? '—',
+            'expense_date'                   => $dateRaw,
+            'expense_date_formatted'         => $dateFormatted,
+            'account_expense_category_id'    => $exp->account_expense_category_id ?? null,
+            'category_name'                  => $category?->name ?: '—',
+            'category_code'                  => $category?->code,
+            'account_expense_subcategory_id' => $exp->account_expense_subcategory_id ?? null,
+            'subcategory_name'               => $subcategory?->name ?: '—',
+            'subcategory_code'               => $subcategory?->code,
+            'vendor_id'                      => $exp->vendor_id ?? null,
+            'vendor_name'                    => $vendor?->vendor_name ?: '—',
+            'vendor_company'                 => $vendor?->company_name,
+            'amount'                         => (float) ($exp->amount ?? 0),
+            'formatted_amount'               => '₹' . number_format((float) ($exp->amount ?? 0), 2),
+            'expense_type'                   => $exp->expense_type ?? 'Variable',
+            'is_recurring'                   => (bool) ($exp->is_recurring ?? false),
+            'recurring_day_of_month'         => $exp->recurring_day_of_month ?? null,
+            'recurring_end_date'             => !empty($exp->recurring_end_date) ? Carbon::parse($exp->recurring_end_date)->format('Y-m-d') : null,
+            'auto_generated'                 => (bool) ($exp->auto_generated ?? false),
+            'parent_expense_id'              => $exp->parent_expense_id ?? null,
+            'invoice_no'                     => $exp->invoice_no ?: '—',
+            'remarks'                        => $exp->remarks ?: '',
+            'created_by'                     => $exp->created_by ?? null,
+            'creator_name'                   => $creator?->name ?: 'Admin',
+            'attachments_count'              => count($attachList),
+            'attachment_list'                => $attachList,
+            'is_forecast'                    => (bool) ($exp->is_forecast ?? false),
+        ];
+    }
+
+    private function formatExpenseDetail(AccountExpense $exp): array
+    {
+        $item = $this->formatExpenseItem($exp);
+        $updater = $exp->updater;
+        $parent = $exp->parent;
+        $generatedChildren = $exp->generatedChildren;
+
+        $item['updated_by'] = $exp->updated_by;
+        $item['updater_name'] = $updater?->name;
+        $item['created_at'] = $exp->created_at ? $exp->created_at->format('d M Y h:i A') : null;
+        $item['updated_at'] = $exp->updated_at ? $exp->updated_at->format('d M Y h:i A') : null;
+
+        if ($parent) {
+            $item['parent_expense'] = [
+                'id'             => $parent->id,
+                'expense_number' => $parent->expense_number,
+                'expense_date'   => $parent->expense_date?->format('d M Y'),
+                'amount'         => (float) $parent->amount,
+            ];
+        }
+
+        if ($generatedChildren && $generatedChildren->isNotEmpty()) {
+            $item['generated_children'] = $generatedChildren->map(fn($c) => [
+                'id'             => $c->id,
+                'expense_number' => $c->expense_number,
+                'expense_date'   => $c->expense_date?->format('d M Y'),
+                'amount'         => (float) $c->amount,
+            ]);
+        } else {
+            $item['generated_children'] = [];
+        }
+
+        return $item;
     }
 }
