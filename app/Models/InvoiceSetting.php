@@ -103,8 +103,8 @@ class InvoiceSetting extends Model
     public function formatInvoiceNumber(?int $number = null): string
     {
         $num = $number ?? ($this->next_number ?: 1);
-        $padded = str_pad((string) $num, (int) ($this->number_padding ?: 6), '0', STR_PAD_LEFT);
-        $prefix = (string) ($this->invoice_prefix ?? 'INV-');
+        $padded = str_pad((string) $num, (int) ($this->number_padding ?: 4), '0', STR_PAD_LEFT);
+        $prefix = (string) ($this->invoice_prefix ?? 'INV/');
 
         $now = Carbon::now();
         $dateTag = '';
@@ -113,19 +113,20 @@ class InvoiceSetting extends Model
             case 'financial_year':
                 $year = $now->year;
                 if ($now->month >= 4) {
-                    $fy = substr((string) $year, -2) . '-' . substr((string) ($year + 1), -2);
+                    $nextYrShort = substr((string) ($year + 1), -2);
+                    $dateTag = $year . '-' . $nextYrShort;
                 } else {
-                    $fy = substr((string) ($year - 1), -2) . '-' . substr((string) $year, -2);
+                    $curYrShort = substr((string) $year, -2);
+                    $dateTag = ($year - 1) . '-' . $curYrShort;
                 }
-                $dateTag = $fy;
                 break;
 
             case 'calendar_year':
-                $dateTag = $now->format('y');
+                $dateTag = (string) $now->year;
                 break;
 
             case 'year_month':
-                $dateTag = $now->format('y-m');
+                $dateTag = $now->format('Y-m');
                 break;
 
             case 'none':
@@ -134,15 +135,20 @@ class InvoiceSetting extends Model
                 break;
         }
 
-        $invStr = rtrim($prefix, '/-') . '-' . $padded;
-        if (!empty($dateTag)) {
-            $invStr .= '/' . $dateTag;
+        $parts = [];
+        if (!empty($prefix)) {
+            $parts[] = rtrim($prefix, '/-');
         }
+        if (!empty($dateTag)) {
+            $parts[] = $dateTag;
+        }
+        $parts[] = $padded;
         if (!empty($this->invoice_suffix)) {
-            $invStr .= '/' . ltrim($this->invoice_suffix, '/-');
+            $parts[] = ltrim($this->invoice_suffix, '/-');
         }
 
-        return $invStr;
+        $sep = str_ends_with($prefix, '-') ? '-' : '/';
+        return implode($sep, $parts);
     }
 
     /**

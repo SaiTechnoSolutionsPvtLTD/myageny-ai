@@ -1,5 +1,8 @@
 @php
-    $monthLabel = $payroll->salary_month->format('F Y');
+    $cycle = $payroll->salary_cycle ?? $item->employee?->salary_cycle ?? '25_to_25';
+    [$cStart, $cEnd] = \App\Http\Controllers\PayrollController::getCycleDateRange($payroll->salary_month, $cycle);
+    $cycleLabel = $cycle === '10_to_10' ? '10 to 10 cycle' : '25 to 25 days cycle';
+    $monthLabel = $payroll->salary_month->format('F Y') . ' (' . $cStart->format('d M') . ' - ' . $cEnd->format('d M') . ')';
     $issuedOn = optional($payroll->salary_date)->format('d M, Y') ?: now()->format('d M, Y');
 @endphp
 <!DOCTYPE html>
@@ -326,6 +329,12 @@
                 <td class="info-val">{{ $item->esi_no ?: 'N/A' }}</td>
                 <td class="info-label">Bank / Branch</td>
                 <td class="info-val">{{ optional($item->employee)->bank_name ? (optional($item->employee)->bank_name . ' (' . (optional($item->employee)->bank_branch ?: 'Main') . ')') : 'N/A' }}</td>
+            </tr>
+            <tr>
+                <td class="info-label">Salary Cycle</td>
+                <td class="info-val"><strong>{{ $cycleLabel }}</strong></td>
+                <td class="info-label">Cycle Period</td>
+                <td class="info-val">{{ $cStart->format('d M Y') }} - {{ $cEnd->format('d M Y') }}</td>
             </tr>
         </table>
     </div>

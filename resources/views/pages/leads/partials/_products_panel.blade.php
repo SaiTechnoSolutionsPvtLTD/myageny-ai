@@ -603,18 +603,26 @@
 
 @php
     $currentUser = auth()->user();
-    $isHoUser = false;
+    $canRecordPartnerBudget = false;
     if ($currentUser) {
-        if ($currentUser->hasAdminLikeRole()) {
-            $isHoUser = true;
-        } elseif ($currentUser->branch_id == 1) {
-            $isHoUser = true;
-        } else {
-            $userBranchName = strtolower($currentUser->branch?->name ?? '');
-            if ($currentUser->branch?->is_default || str_contains($userBranchName, 'ho') || str_contains($userBranchName, 'head office')) {
-                $isHoUser = true;
+        $userBranchIds = array_filter(array_unique(array_merge(
+            $currentUser->getMyBranchIds(),
+            [$currentUser->branch_id]
+        )));
+
+        $hasDefaultBranch = \App\Models\Branch::withoutGlobalScope('branch')
+            ->whereIn('id', $userBranchIds)
+            ->where('is_default', true)
+            ->exists();
+
+        if (! $hasDefaultBranch && $currentUser->branch) {
+            $bName = strtolower($currentUser->branch->name ?? '');
+            if ($currentUser->branch->is_default || str_contains($bName, 'ho') || str_contains($bName, 'head office') || $bName === 'default branch') {
+                $hasDefaultBranch = true;
             }
         }
+
+        $canRecordPartnerBudget = $hasDefaultBranch || $currentUser->isSuperAdmin();
     }
     $userCompanyId = $currentUser?->company_id ?? $lead->company_id;
     $allBranchesQuery = \App\Models\Branch::withoutGlobalScope('branch')->where('is_active', true);
@@ -636,7 +644,7 @@
                             <option value="new_sale">New Sale</option>
                             <option value="balance_payment">Balance Payment</option>
                             <option value="renewals">Renewals</option>
-                            @if($isHoUser)
+                            @if($canRecordPartnerBudget)
                                 <option value="ad_budget_partner">Ad Budget for partner</option>
                             @endif
                         </select>
@@ -656,6 +664,7 @@
             </div>
 
             <!-- Conditional Branch Dropdown for HO (shown only when Ad Budget for partner is selected) -->
+            @if($canRecordPartnerBudget)
             <div id="pp-branch-container" style="display: none; margin-top: 14px; margin-bottom: 12px;">
                 <div class="ppf-grp">
                     <label class="ppf-lbl">Select Branch <span class="ppf-req">*</span></label>
@@ -672,6 +681,7 @@
                     </div>
                 </div>
             </div>
+            @endif
 
             <!-- Deduct TDS Checkbox & Section -->
             <div style="margin-top: 14px; margin-bottom: 12px; display: flex; align-items: center; width: fit-content;">

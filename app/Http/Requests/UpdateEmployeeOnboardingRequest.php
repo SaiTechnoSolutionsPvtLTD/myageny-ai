@@ -107,6 +107,7 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
             'total_deduction' => ['nullable', 'numeric', 'min:0'],
             'net_salary' => ['nullable', 'numeric', 'min:0'],
             'salary_payment_mode' => ['nullable', Rule::in(['bank_transfer', 'cash', 'cheque', 'upi'])],
+            'salary_cycle' => ['nullable', Rule::in(['25_to_25', '10_to_10'])],
             'deduction_notes' => ['nullable', 'string', 'max:2000'],
 
             'declaration_date' => ['nullable', 'date'],

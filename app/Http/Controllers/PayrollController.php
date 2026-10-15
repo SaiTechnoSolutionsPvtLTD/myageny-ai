@@ -51,7 +51,11 @@ class PayrollController extends Controller
                 $month = Carbon::createFromFormat('Y-m', $request->month)->startOfMonth();
                 $query->whereDate('salary_month', $month->toDateString());
             })
+            ->when($request->filled('salary_cycle'), function ($query) use ($request) {
+                $query->where('salary_cycle', $request->salary_cycle);
+            })
             ->latest('salary_month')
+            ->latest('id')
             ->paginate(12)
             ->withQueryString();
 
@@ -83,6 +87,7 @@ class PayrollController extends Controller
             : now()->startOfMonth();
 
         $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
+        $selectedCycle    = $request->filled('salary_cycle') ? $request->string('salary_cycle')->value() : '25_to_25';
 
         $branches = Branch::query()
             ->where('is_active', true)
@@ -94,6 +99,7 @@ class PayrollController extends Controller
         return view('pages.hrms.payroll.create', [
             'selectedMonth'    => $selectedMonth,
             'selectedBranchId' => $selectedBranchId,
+            'selectedCycle'    => $selectedCycle,
             'branches'         => $branches,
         ]);
     }
@@ -113,6 +119,7 @@ class PayrollController extends Controller
             : now()->startOfMonth();
 
         $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
+        $selectedCycle    = $request->filled('salary_cycle') ? $request->string('salary_cycle')->value() : '25_to_25';
 
         $employees = EmployeeOnboarding::query()
             ->active()
@@ -123,6 +130,16 @@ class PayrollController extends Controller
                     });
             })
             ->with(['role', 'portalUser', 'department'])
+            ->when($selectedCycle, function ($query) use ($selectedCycle) {
+                if ($selectedCycle === '25_to_25') {
+                    $query->where(function ($q) {
+                        $q->where('salary_cycle', '25_to_25')
+                          ->orWhereNull('salary_cycle');
+                    });
+                } else {
+                    $query->where('salary_cycle', $selectedCycle);
+                }
+            })
             ->when(auth()->user()?->company_id, function ($query) {
                 $query->whereHas('portalUser', function ($subQuery) {
                     $subQuery->where('company_id', auth()->user()->company_id);
@@ -143,11 +160,12 @@ class PayrollController extends Controller
             ->orderBy('name')
             ->get();
 
-        // Compute working days once — reuse across all methods
-        $workingDates   = $this->workingDateStringsForMonth($selectedMonth);
+        // Compute cycle range and working days for chosen cycle
+        [$cycleStart, $cycleEnd] = self::getCycleDateRange($selectedMonth, $selectedCycle);
+        $workingDates   = $this->workingDateStringsForPeriod($cycleStart, $cycleEnd);
         $workingDays    = count($workingDates);
         $payrollSettings = PayrollSetting::forCompany(auth()->user()?->company_id);
-        $attendanceSummary = $this->attendanceSummaryForMonth($selectedMonth, $employees, $workingDays, $workingDates, $payrollSettings);
+        $attendanceSummary = $this->attendanceSummaryForPeriod($cycleStart, $cycleEnd, $employees, $workingDays, $workingDates, $payrollSettings);
 
         $rows = $employees->map(function (EmployeeOnboarding $employee) use ($attendanceSummary, $workingDays, $payrollSettings) {
             $components = $this->salaryComponentsForEmployee($employee);
@@ -193,9 +211,14 @@ class PayrollController extends Controller
             ]);
         })->values();
 
+        $monthLabel = $selectedMonth->format('M Y') . ' (' . $cycleStart->format('d M') . ' - ' . $cycleEnd->format('d M') . ')';
+
         return response()->json([
             'working_days' => $workingDays,
-            'month_label'  => $selectedMonth->format('M Y'),
+            'month_label'  => $monthLabel,
+            'salary_cycle' => $selectedCycle,
+            'cycle_start'  => $cycleStart->toDateString(),
+            'cycle_end'    => $cycleEnd->toDateString(),
             'rows'         => $rows,
         ]);
     }
@@ -208,6 +231,7 @@ class PayrollController extends Controller
 
         $validated = $request->validate([
             'month' => ['required', 'date_format:Y-m'],
+            'salary_cycle' => ['nullable', 'string', 'in:25_to_25,10_to_10'],
             'salary_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
@@ -237,6 +261,7 @@ class PayrollController extends Controller
         ]);
 
         $salaryMonth = Carbon::createFromFormat('Y-m', $validated['month'])->startOfMonth();
+        $salaryCycle = $validated['salary_cycle'] ?? '25_to_25';
         $employeeIds = collect($validated['items'])->pluck('employee_onboarding_id')->all();
         $employees = EmployeeOnboarding::query()
             ->with('role')
@@ -244,17 +269,18 @@ class PayrollController extends Controller
             ->get()
             ->keyBy('id');
 
-        $payroll = DB::transaction(function () use ($validated, $salaryMonth, $employees) {
+        $payroll = DB::transaction(function () use ($validated, $salaryMonth, $salaryCycle, $employees) {
             $payroll = Payroll::updateOrCreate(
                 [
-                    'company_id' => auth()->user()?->company_id,
+                    'company_id'   => auth()->user()?->company_id,
                     'salary_month' => $salaryMonth->toDateString(),
+                    'salary_cycle' => $salaryCycle,
                 ],
                 [
                     'salary_date' => $validated['salary_date'] ?? null,
-                    'notes' => $validated['notes'] ?? null,
-                    'created_by' => auth()->id(),
-                    'updated_by' => auth()->id(),
+                    'notes'       => $validated['notes'] ?? null,
+                    'created_by'  => auth()->id(),
+                    'updated_by'  => auth()->id(),
                 ]
             );
 
@@ -420,15 +446,29 @@ class PayrollController extends Controller
         return auth()->user()?->isHrmsAttendanceOnlyUser() ?? false;
     }
 
+    public static function getCycleDateRange(Carbon $month, ?string $cycle): array
+    {
+        if ($cycle === '10_to_10') {
+            $start = $month->copy()->subMonthNoOverflow()->setDay(10)->startOfDay();
+            $end   = $month->copy()->setDay(10)->endOfDay();
+        } elseif ($cycle === '25_to_25') {
+            $start = $month->copy()->subMonthNoOverflow()->setDay(25)->startOfDay();
+            $end   = $month->copy()->setDay(25)->endOfDay();
+        } else {
+            $start = $month->copy()->startOfMonth();
+            $end   = $month->copy()->endOfMonth();
+        }
+
+        return [$start, $end];
+    }
+
     private function workingDaysInMonth(Carbon $month): int
     {
         return count($this->workingDateStringsForMonth($month));
     }
 
-    private function workingDateStringsForMonth(Carbon $month): array
+    private function workingDateStringsForPeriod(Carbon $start, Carbon $end): array
     {
-        $start = $month->copy()->startOfMonth();
-        $end = $month->copy()->endOfMonth();
         $appTz = config('app.timezone', 'Asia/Kolkata');
 
         $holidays = HolidayCalendar::query()
@@ -460,6 +500,11 @@ class PayrollController extends Controller
         }
 
         return $dates;
+    }
+
+    private function workingDateStringsForMonth(Carbon $month): array
+    {
+        return $this->workingDateStringsForPeriod($month->copy()->startOfMonth(), $month->copy()->endOfMonth());
     }
 
     private function isTimesheetLopDepartment(?Department $department): bool
@@ -497,8 +542,11 @@ class PayrollController extends Controller
 
     private function attendanceSummaryForMonth(Carbon $month, Collection|array $employees, int $workingDays, array $workingDates = [], ?PayrollSetting $settings = null): array
     {
-        $start = $month->copy()->startOfMonth();
-        $end = $month->copy()->endOfMonth();
+        return $this->attendanceSummaryForPeriod($month->copy()->startOfMonth(), $month->copy()->endOfMonth(), $employees, $workingDays, $workingDates, $settings);
+    }
+
+    private function attendanceSummaryForPeriod(Carbon $start, Carbon $end, Collection|array $employees, int $workingDays, array $workingDates = [], ?PayrollSetting $settings = null): array
+    {
         $settings = $settings ?? PayrollSetting::forCompany(auth()->user()?->company_id);
 
         if (is_array($employees)) {

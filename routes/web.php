@@ -273,6 +273,7 @@ Route::middleware(['auth'])->group(function () {
 
             // Ad Budget Allocation Vs Spent Report route
             Route::get('/allocation-vs-spent', [App\Http\Controllers\AdSpendController::class, 'allocationVsSpent'])->name('allocation-vs-spent');
+            Route::get('/allocation-vs-spent/pdf', [App\Http\Controllers\AdSpendController::class, 'exportPdf'])->name('allocation-vs-spent.pdf');
         });
 
         // Domains & Hosting routes
@@ -398,8 +399,17 @@ Route::middleware(['auth'])->group(function () {
                 Route::get('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'show'])->name('show');
                 Route::get('/{invoice}/edit', [App\Http\Controllers\InvoiceController::class, 'edit'])->name('edit');
                 Route::put('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'update'])->name('update');
+                Route::patch('/{invoice}/update-sales-person', [App\Http\Controllers\InvoiceController::class, 'updateSalesPerson'])->name('update-sales-person');
                 Route::delete('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'destroy'])->name('destroy');
                 Route::get('/{invoice}/print', [App\Http\Controllers\InvoiceController::class, 'print'])->name('print');
+                Route::post('/{invoice}/payments', [App\Http\Controllers\InvoicePaymentController::class, 'store'])->name('payments.store');
+                Route::delete('/{invoice}/payments/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroy'])->name('payments.destroy');
+            });
+
+            // Sales Payments Received against Invoices
+            Route::prefix('payments')->name('payments.')->group(function () {
+                Route::get('/', [App\Http\Controllers\InvoicePaymentController::class, 'index'])->name('index');
+                Route::delete('/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroyStandalone'])->name('destroy');
             });
         });
 

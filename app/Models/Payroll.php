@@ -14,6 +14,7 @@ class Payroll extends Model
     protected $fillable = [
         'company_id',
         'salary_month',
+        'salary_cycle',
         'salary_date',
         'total_working_days',
         'employee_count',

@@ -119,6 +119,8 @@
         'reference_contact_no' => 'reference',
         'reference_mail_id' => 'reference',
         'salary_effective_from' => 'salary',
+        'salary_payment_mode' => 'salary',
+        'salary_cycle' => 'salary',
         'gross_salary' => 'salary',
         'basic_salary' => 'salary',
         'hra' => 'salary',
@@ -661,6 +663,15 @@
                                     @endforeach
                                 </select>
                                 @error('salary_payment_mode')<div class="eob-error">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="eob-group">
+                                <label class="eob-label">Salary Cycle <span style="color:#ef4444;">*</span></label>
+                                <select name="salary_cycle" class="eob-select">
+                                    <option value="25_to_25" @selected(old('salary_cycle', $employee?->salary_cycle ?? '25_to_25') === '25_to_25')>25 to 25 days cycle</option>
+                                    <option value="10_to_10" @selected(old('salary_cycle', $employee?->salary_cycle) === '10_to_10')>10 to 10 cycle</option>
+                                </select>
+                                <div class="eob-help">Determines attendance & salary calculation cycle (e.g. 25th to 25th or 10th to 10th).</div>
+                                @error('salary_cycle')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">CTC Salary</label>

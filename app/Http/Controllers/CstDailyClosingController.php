@@ -729,35 +729,65 @@ class CstDailyClosingController extends Controller
         // ---------------------------------------------------------------------------------
         // 5. Current Week Meetings, Weekly Updates, Reviews & Escalations
         // ---------------------------------------------------------------------------------
+        if (is_array($dateRange) && count($dateRange) === 2 && !empty($dateRange[0]) && !empty($dateRange[1])) {
+            $meetingStart = Carbon::parse($dateRange[0])->startOfDay();
+            $meetingEnd   = Carbon::parse($dateRange[1])->endOfDay();
+        } else {
+            $meetingStart = (clone $weekStart)->startOfDay();
+            $meetingEnd   = (clone $weekEnd)->endOfDay();
+        }
+
         $meetingsQuery = LeadReminder::query()
             ->where(function($q) {
                 $q->where('type', 'meeting')
                   ->orWhere('title', 'like', '%meeting%');
             })
-            ->whereBetween('remind_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
+            ->whereBetween('remind_at', [$meetingStart, $meetingEnd]);
+
+        if ($branchId) {
+            $meetingsQuery->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
+        }
 
         if ($userId) {
-            $meetingsQuery->where('user_id', $userId);
+            $meetingsQuery->where(function($q) use ($userId) {
+                $q->where('user_id', $userId)
+                  ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $userId)->orWhere('customer_support_tl_id', $userId));
+            });
         } elseif (!empty($supportUserIds)) {
-            $meetingsQuery->whereIn('user_id', $supportUserIds);
+            $meetingsQuery->where(function($q) use ($supportUserIds) {
+                $q->whereIn('user_id', $supportUserIds)
+                  ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+            });
         }
         $remindersMeetingCount = (int) $meetingsQuery->count();
 
-        // CST Executive added Weekly Updates, Reviews, Escalations
+        // CST Executive added CST Updates, Weekly Updates, Reviews, Escalations
         $cstUpdatesQuery = \App\Models\LeadCstUpdate::query()
-            ->whereBetween('created_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
+            ->whereBetween('created_at', [$meetingStart, $meetingEnd]);
 
-        if ($userId) {
-            $cstUpdatesQuery->where('user_id', $userId);
-        } elseif (!empty($supportUserIds)) {
-            $cstUpdatesQuery->whereIn('user_id', $supportUserIds);
+        if ($branchId) {
+            $cstUpdatesQuery->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
         }
 
-        $weeklyUpdatesCount = (clone $cstUpdatesQuery)->where('update_type', 'weekly_update')->count();
-        $reviewsCount       = (clone $cstUpdatesQuery)->where('update_type', 'review')->count();
-        $escalationsCount   = (clone $cstUpdatesQuery)->where('update_type', 'escalation')->count();
+        if ($userId) {
+            $cstUpdatesQuery->where(function($q) use ($userId) {
+                $q->where('user_id', $userId)
+                  ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $userId)->orWhere('customer_support_tl_id', $userId));
+            });
+        } elseif (!empty($supportUserIds)) {
+            $cstUpdatesQuery->where(function($q) use ($supportUserIds) {
+                $q->whereIn('user_id', $supportUserIds)
+                  ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+            });
+        }
 
-        $currentWeekMeetings = $remindersMeetingCount + $weeklyUpdatesCount + $reviewsCount + $escalationsCount;
+        $cstUpdatesTotalCount = (int) (clone $cstUpdatesQuery)->count();
+        $weeklyUpdatesCount   = (int) (clone $cstUpdatesQuery)->where('update_type', 'weekly_update')->count();
+        $reviewsCount         = (int) (clone $cstUpdatesQuery)->where('update_type', 'review')->count();
+        $escalationsCount     = (int) (clone $cstUpdatesQuery)->where('update_type', 'escalation')->count();
+        $cstUpdatesCount      = (int) (clone $cstUpdatesQuery)->where('update_type', 'cst_update')->count();
+
+        $currentWeekMeetings = $remindersMeetingCount + $cstUpdatesTotalCount;
 
         // ---------------------------------------------------------------------------------
         // 6. Total Allocated Account : Matches CST Allocation (leads with converted products allocated to CST)
@@ -883,6 +913,8 @@ class CstDailyClosingController extends Controller
             'deal_val'                   => $dealVal,
             'renewal_val'                => $renewalVal,
             'dev_val'                    => $devVal,
+            'cst_updates_total_count'    => $cstUpdatesTotalCount,
+            'cst_updates_count'          => $cstUpdatesCount,
             'weekly_updates_count'       => $weeklyUpdatesCount,
             'reviews_count'              => $reviewsCount,
             'escalations_count'          => $escalationsCount,
@@ -1111,15 +1143,35 @@ class CstDailyClosingController extends Controller
 
             case 'current_week_meetings':
                 $title = "Current Week Meetings, Reviews & Updates";
+                if (is_array($dateRangeFilter) && count($dateRangeFilter) === 2 && !empty($dateRangeFilter[0]) && !empty($dateRangeFilter[1])) {
+                    $meetingStart = Carbon::parse($dateRangeFilter[0])->startOfDay();
+                    $meetingEnd   = Carbon::parse($dateRangeFilter[1])->endOfDay();
+                } else {
+                    $meetingStart = (clone $weekStart)->startOfDay();
+                    $meetingEnd   = (clone $weekEnd)->endOfDay();
+                }
+
                 $meetingsQ = LeadReminder::with(['lead.branch', 'user'])
                     ->where(fn($q) => $q->where('type', 'meeting')->orWhere('title', 'like', '%meeting%'))
-                    ->whereBetween('remind_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
-                if ($targetUserId) {
-                    $meetingsQ->where('user_id', $targetUserId);
-                } elseif (!empty($supportUserIds)) {
-                    $meetingsQ->whereIn('user_id', $supportUserIds);
+                    ->whereBetween('remind_at', [$meetingStart, $meetingEnd]);
+
+                if ($branchId) {
+                    $meetingsQ->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
                 }
-                foreach ($meetingsQ->get() as $m) {
+
+                if ($targetUserId) {
+                    $meetingsQ->where(function($q) use ($targetUserId) {
+                        $q->where('user_id', $targetUserId)
+                          ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
+                    });
+                } elseif (!empty($supportUserIds)) {
+                    $meetingsQ->where(function($q) use ($supportUserIds) {
+                        $q->whereIn('user_id', $supportUserIds)
+                          ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+                    });
+                }
+
+                foreach ($meetingsQ->latest('remind_at')->get() as $m) {
                     $records[] = [
                         'account_name' => $m->lead?->company_name ?: ($m->lead?->name ?: 'Lead #' . $m->lead_id),
                         'branch_name'  => $m->lead?->branch?->name ?: '—',
@@ -1132,13 +1184,25 @@ class CstDailyClosingController extends Controller
                 }
 
                 $updatesQ = \App\Models\LeadCstUpdate::with(['lead.branch', 'user'])
-                    ->whereBetween('created_at', [$weekStart->startOfDay(), $weekEnd->endOfDay()]);
-                if ($targetUserId) {
-                    $updatesQ->where('user_id', $targetUserId);
-                } elseif (!empty($supportUserIds)) {
-                    $updatesQ->whereIn('user_id', $supportUserIds);
+                    ->whereBetween('created_at', [$meetingStart, $meetingEnd]);
+
+                if ($branchId) {
+                    $updatesQ->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
                 }
-                foreach ($updatesQ->get() as $u) {
+
+                if ($targetUserId) {
+                    $updatesQ->where(function($q) use ($targetUserId) {
+                        $q->where('user_id', $targetUserId)
+                          ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
+                    });
+                } elseif (!empty($supportUserIds)) {
+                    $updatesQ->where(function($q) use ($supportUserIds) {
+                        $q->whereIn('user_id', $supportUserIds)
+                          ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
+                    });
+                }
+
+                foreach ($updatesQ->latest('created_at')->get() as $u) {
                     $records[] = [
                         'account_name' => $u->lead?->company_name ?: ($u->lead?->name ?: 'Lead #' . $u->lead_id),
                         'branch_name'  => $u->lead?->branch?->name ?: '—',

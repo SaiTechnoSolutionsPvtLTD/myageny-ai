@@ -106,6 +106,7 @@ class InvoiceController extends Controller
             'total_count'   => $allInvoices->count(),
             'total_amount'  => (float) $allInvoices->sum('total_amount'),
             'paid_amount'   => (float) $allInvoices->sum('paid_amount'),
+            'total_tds'     => (float) $allInvoices->sum('total_tds'),
             'balance_due'   => (float) $allInvoices->sum('balance_due'),
             'paid_count'    => $allInvoices->where('status', 'paid')->count(),
             'partial_count' => $allInvoices->where('status', 'partially_paid')->count(),
@@ -147,27 +148,7 @@ class InvoiceController extends Controller
             ->get();
 
         // Fetch Sales & CST Users
-        $salesUsers = User::query()
-            ->where(function ($query) {
-                $deptIds = Department::where(function ($dq) {
-                    $dq->where('name', 'LIKE', '%Sales%')
-                       ->orWhere('name', 'LIKE', '%Customer Success%')
-                       ->orWhere('name', 'LIKE', '%CST%');
-                })->pluck('id');
-
-                if ($deptIds->isNotEmpty()) {
-                    $query->whereHas('roles', fn ($rq) => $rq->whereIn('department_id', $deptIds));
-                }
-            })
-            ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'email']);
-
-        // Fallback if no users assigned specifically
-        if ($salesUsers->isEmpty()) {
-            $salesUsers = User::where('is_active', true)->orderBy('name')->take(20)->get(['id', 'name', 'email']);
-        }
+        $salesUsers = $this->getSalesUsers($companyId);
 
         $states = self::$indianStates;
         $defaultTerms = $setting->terms_conditions ?: InvoiceSetting::defaultTerms();
@@ -193,6 +174,13 @@ class InvoiceController extends Controller
         $bStreet = trim(($customer->billing_address_street_1 ?? '') . ' ' . ($customer->billing_address_street_2 ?? ''));
         $sStreet = trim(($customer->shipping_address_street_1 ?? '') . ' ' . ($customer->shipping_address_street_2 ?? ''));
 
+        // Dynamically find sales person from associated Lead or Customer
+        $customer->loadMissing('lead');
+        $salesPersonId = $customer->lead?->assigned_to
+            ?: ($customer->lead?->customer_support_executive_id
+            ?: ($customer->lead?->created_by ?: $customer->created_by));
+        $salesPerson = $salesPersonId ? User::find($salesPersonId) : null;
+
         return response()->json([
             'id'                 => $customer->id,
             'customer_name'      => $customer->customer_name,
@@ -202,6 +190,11 @@ class InvoiceController extends Controller
             'gst_number'         => $customer->gst_number,
             'pan_number'         => $customer->pan_number,
             'payment_terms'      => $customer->payment_terms ?: 'Due on Receipt',
+
+            // Sales Person
+            'sales_person_id'    => $salesPerson?->id,
+            'sales_person_name'  => $salesPerson?->name,
+            'sales_person_email' => $salesPerson?->email,
 
             // Billing
             'billing_attention'  => $customer->billing_attention ?: $customer->customer_name,
@@ -243,7 +236,7 @@ class InvoiceController extends Controller
     {
         $validated = $request->validate([
             'customer_id'        => 'nullable|integer',
-            'customer_name'      => 'required|string|max:255',
+            'customer_name'      => 'nullable|string|max:255',
             'company_name'       => 'nullable|string|max:255',
             'customer_email'     => 'nullable|email|max:255',
             'customer_phone'     => 'nullable|string|max:50',
@@ -264,6 +257,7 @@ class InvoiceController extends Controller
             'billing_state'      => 'nullable|string|max:100',
             'billing_pincode'    => 'nullable|string|max:20',
             'billing_country'    => 'nullable|string|max:100',
+            'billing_gstin'      => 'nullable|string|max:50',
 
             // Shipping
             'shipping_attention' => 'nullable|string|max:255',
@@ -272,6 +266,7 @@ class InvoiceController extends Controller
             'shipping_state'     => 'nullable|string|max:100',
             'shipping_pincode'   => 'nullable|string|max:20',
             'shipping_country'   => 'nullable|string|max:100',
+            'shipping_gstin'     => 'nullable|string|max:50',
 
             // Items Array
             'items'              => 'required|array|min:1',
@@ -306,8 +301,30 @@ class InvoiceController extends Controller
             'status'             => 'nullable|string|in:draft,sent,paid,partially_paid,overdue,cancelled',
         ]);
 
+        if (empty($validated['customer_name']) && !empty($request->customer_id)) {
+            $cust = CustomerMaster::find($request->customer_id);
+            if ($cust) {
+                $validated['customer_name']  = $cust->customer_name;
+                $validated['company_name']   = $validated['company_name'] ?? $cust->company_name;
+                $validated['customer_email']  = $validated['customer_email'] ?? $cust->email;
+                $validated['customer_phone']  = $validated['customer_phone'] ?? $cust->mobile_number;
+                $validated['customer_gstin']  = $validated['customer_gstin'] ?? ($validated['billing_gstin'] ?? $cust->gst_number);
+                $validated['customer_pan']    = $validated['customer_pan'] ?? $cust->pan_number;
+            }
+        }
+        if (empty($validated['customer_gstin']) && !empty($validated['billing_gstin'])) {
+            $validated['customer_gstin'] = $validated['billing_gstin'];
+        }
+        if (empty($validated['customer_name'])) {
+            $validated['customer_name'] = 'Valued Customer';
+        }
+
         $companyId = auth()->user()?->company_id;
         $userId    = auth()->id();
+
+        if (empty($validated['invoice_number'])) {
+            $validated['invoice_number'] = Invoice::generateNextInvoiceNumber($companyId);
+        }
 
         // Duplicate guard within 10 seconds for same invoice_number and company
         $existingRecent = Invoice::where('company_id', $companyId)
@@ -385,10 +402,15 @@ class InvoiceController extends Controller
      */
     public function show(Invoice $invoice)
     {
-        $invoice->load(['items.itemMaster', 'customer', 'salesPerson', 'creator']);
+        $invoice->load(['items.itemMaster', 'customer', 'salesPerson', 'creator', 'payments.recordedBy']);
         $setting = InvoiceSetting::forCompany($invoice->company_id);
 
-        return view('pages.accounts.sales.invoices.show', compact('invoice', 'setting'));
+        $salesUsers = $this->getSalesUsers($invoice->company_id ?? auth()->user()?->company_id);
+        if ($invoice->sales_person_id && !$salesUsers->contains('id', $invoice->sales_person_id) && $invoice->salesPerson) {
+            $salesUsers->push($invoice->salesPerson);
+        }
+
+        return view('pages.accounts.sales.invoices.show', compact('invoice', 'setting', 'salesUsers'));
     }
 
     /**
@@ -412,25 +434,9 @@ class InvoiceController extends Controller
             ->orderBy('item_name')
             ->get();
 
-        $salesUsers = User::query()
-            ->where(function ($query) {
-                $deptIds = Department::where(function ($dq) {
-                    $dq->where('name', 'LIKE', '%Sales%')
-                       ->orWhere('name', 'LIKE', '%Customer Success%')
-                       ->orWhere('name', 'LIKE', '%CST%');
-                })->pluck('id');
-
-                if ($deptIds->isNotEmpty()) {
-                    $query->whereHas('roles', fn ($rq) => $rq->whereIn('department_id', $deptIds));
-                }
-            })
-            ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'email']);
-
-        if ($salesUsers->isEmpty()) {
-            $salesUsers = User::where('is_active', true)->orderBy('name')->take(20)->get(['id', 'name', 'email']);
+        $salesUsers = $this->getSalesUsers($companyId);
+        if ($invoice->sales_person_id && !$salesUsers->contains('id', $invoice->sales_person_id) && $invoice->salesPerson) {
+            $salesUsers->push($invoice->salesPerson);
         }
 
         $states = self::$indianStates;
@@ -452,7 +458,7 @@ class InvoiceController extends Controller
     {
         $validated = $request->validate([
             'customer_id'        => 'nullable|integer',
-            'customer_name'      => 'required|string|max:255',
+            'customer_name'      => 'nullable|string|max:255',
             'company_name'       => 'nullable|string|max:255',
             'customer_email'     => 'nullable|email|max:255',
             'customer_phone'     => 'nullable|string|max:50',
@@ -473,6 +479,7 @@ class InvoiceController extends Controller
             'billing_state'      => 'nullable|string|max:100',
             'billing_pincode'    => 'nullable|string|max:20',
             'billing_country'    => 'nullable|string|max:100',
+            'billing_gstin'      => 'nullable|string|max:50',
 
             // Shipping
             'shipping_attention' => 'nullable|string|max:255',
@@ -481,6 +488,7 @@ class InvoiceController extends Controller
             'shipping_state'     => 'nullable|string|max:100',
             'shipping_pincode'   => 'nullable|string|max:20',
             'shipping_country'   => 'nullable|string|max:100',
+            'shipping_gstin'     => 'nullable|string|max:50',
 
             // Items Array
             'items'              => 'required|array|min:1',
@@ -514,6 +522,24 @@ class InvoiceController extends Controller
             'terms_conditions'   => 'nullable|string',
             'status'             => 'nullable|string|in:draft,sent,paid,partially_paid,overdue,cancelled',
         ]);
+
+        if (empty($validated['customer_name']) && !empty($request->customer_id)) {
+            $cust = CustomerMaster::find($request->customer_id);
+            if ($cust) {
+                $validated['customer_name']  = $cust->customer_name;
+                $validated['company_name']   = $validated['company_name'] ?? $cust->company_name;
+                $validated['customer_email']  = $validated['customer_email'] ?? $cust->email;
+                $validated['customer_phone']  = $validated['customer_phone'] ?? $cust->mobile_number;
+                $validated['customer_gstin']  = $validated['customer_gstin'] ?? ($validated['billing_gstin'] ?? $cust->gst_number);
+                $validated['customer_pan']    = $validated['customer_pan'] ?? $cust->pan_number;
+            }
+        }
+        if (empty($validated['customer_gstin']) && !empty($validated['billing_gstin'])) {
+            $validated['customer_gstin'] = $validated['billing_gstin'];
+        }
+        if (empty($validated['customer_name'])) {
+            $validated['customer_name'] = $invoice->customer_name ?: 'Valued Customer';
+        }
 
         DB::beginTransaction();
         try {
@@ -583,5 +609,62 @@ class InvoiceController extends Controller
         $setting = InvoiceSetting::forCompany($invoice->company_id);
 
         return view('pages.accounts.sales.invoices.print', compact('invoice', 'setting'));
+    }
+
+    /**
+     * Update only the sales person for the invoice (quick inline/modal update).
+     */
+    public function updateSalesPerson(Request $request, Invoice $invoice)
+    {
+        $validated = $request->validate([
+            'sales_person_id' => 'nullable|exists:users,id',
+        ]);
+
+        $invoice->update([
+            'sales_person_id' => $validated['sales_person_id'] ?? null,
+            'updated_by'      => auth()->id(),
+        ]);
+
+        $invoice->load('salesPerson');
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success'           => true,
+                'message'           => 'Sales Person updated successfully.',
+                'sales_person_id'   => $invoice->sales_person_id,
+                'sales_person_name' => $invoice->salesPerson?->name ?? '—',
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Sales Person updated successfully.');
+    }
+
+    /**
+     * Fetch Sales & CST Users for assignment dropdown.
+     */
+    protected function getSalesUsers($companyId = null)
+    {
+        $salesUsers = User::query()
+            ->where(function ($query) {
+                $deptIds = Department::where(function ($dq) {
+                    $dq->where('name', 'LIKE', '%Sales%')
+                       ->orWhere('name', 'LIKE', '%Customer Success%')
+                       ->orWhere('name', 'LIKE', '%CST%');
+                })->pluck('id');
+
+                if ($deptIds->isNotEmpty()) {
+                    $query->whereHas('roles', fn ($rq) => $rq->whereIn('department_id', $deptIds));
+                }
+            })
+            ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
+
+        if ($salesUsers->isEmpty()) {
+            $salesUsers = User::where('is_active', true)->orderBy('name')->take(20)->get(['id', 'name', 'email']);
+        }
+
+        return $salesUsers;
     }
 }

@@ -370,6 +370,12 @@
                 border: 1px solid #000000 !important;
                 page-break-after: avoid;
             }
+            .party-head.party-right, .party-body.party-right {
+                border-right: none !important;
+            }
+            .th-item:last-child, .td-item:last-child {
+                border-right: none !important;
+            }
             * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
@@ -500,7 +506,7 @@
                     <tr>
                         <td class="meta-label">Sales person</td>
                         <td class="meta-colon">:</td>
-                        <td class="meta-val">{{ $invoice->salesPerson?->name ?? 'Mr. Revanth' }}</td>
+                        <td class="meta-val">{{ $invoice->salesPerson?->name ?? ($invoice->creator?->name ?? '—') }}</td>
                     </tr>
                 </table>
             </div>
@@ -539,9 +545,12 @@
                         @if(!empty($bCityState))
                             <div>{{ implode(' ', $bCityState) }}</div>
                         @endif
-                        <div>{{ $invoice->billing_country ?: 'India' }}</div>
-                        @if($invoice->customer_gstin)
-                            <div style="margin-top:4px;"><strong>GSTIN</strong> {{ $invoice->customer_gstin }}</div>
+                        @php
+                            $billingGstin = $invoice->billing_gstin ?: $invoice->customer_gstin;
+                            $shippingGstin = $invoice->shipping_gstin ?: ($invoice->billing_gstin ?: $invoice->customer_gstin);
+                        @endphp
+                        @if($billingGstin)
+                            <div style="margin-top:4px;"><strong>GSTIN</strong> {{ $billingGstin }}</div>
                         @endif
                     </td>
                     <td colspan="4" class="party-body party-right col-border-left">
@@ -558,8 +567,8 @@
                             <div>{{ implode(' ', $sCityState) }}</div>
                         @endif
                         <div>{{ $invoice->shipping_country ?: ($invoice->billing_country ?: 'India') }}</div>
-                        @if($invoice->customer_gstin)
-                            <div style="margin-top:4px;"><strong>GSTIN</strong> {{ $invoice->customer_gstin }}</div>
+                        @if($shippingGstin)
+                            <div style="margin-top:4px;"><strong>GSTIN</strong> {{ $shippingGstin }}</div>
                         @endif
                     </td>
                 </tr>
