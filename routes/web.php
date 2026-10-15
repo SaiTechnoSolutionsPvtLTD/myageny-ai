@@ -366,6 +366,41 @@ Route::middleware(['auth'])->group(function () {
                 Route::patch('/{item}/toggle-status', [App\Http\Controllers\ItemMasterController::class, 'toggleStatus'])->name('toggle-status');
                 Route::delete('/{item}', [App\Http\Controllers\ItemMasterController::class, 'destroy'])->name('destroy');
             });
+
+            // Customers Master CRUD
+            Route::prefix('customers')->name('customers.')->group(function () {
+                Route::get('/', [App\Http\Controllers\CustomerMasterController::class, 'index'])->name('index');
+                Route::get('/search-converted-leads', [App\Http\Controllers\CustomerMasterController::class, 'searchConvertedLeads'])->name('search-converted-leads');
+                Route::get('/lead-details/{lead}', [App\Http\Controllers\CustomerMasterController::class, 'getLeadDetails'])->name('lead-details');
+                Route::post('/', [App\Http\Controllers\CustomerMasterController::class, 'store'])->name('store');
+                Route::get('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'show'])->name('show');
+                Route::put('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'update'])->name('update');
+                Route::patch('/{customer}/toggle-status', [App\Http\Controllers\CustomerMasterController::class, 'toggleStatus'])->name('toggle-status');
+                Route::delete('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'destroy'])->name('destroy');
+            });
+
+            // Invoice Settings
+            Route::prefix('invoice-settings')->name('invoice-settings.')->group(function () {
+                Route::get('/', [App\Http\Controllers\InvoiceSettingController::class, 'index'])->name('index');
+                Route::post('/', [App\Http\Controllers\InvoiceSettingController::class, 'update'])->name('update');
+                Route::delete('/remove-file/{type}', [App\Http\Controllers\InvoiceSettingController::class, 'removeFile'])->name('remove-file');
+            });
+        });
+
+        // Accounts Sales Group (Invoices)
+        Route::prefix('sales')->name('sales.')->group(function () {
+            Route::prefix('invoices')->name('invoices.')->group(function () {
+                Route::get('/', [App\Http\Controllers\InvoiceController::class, 'index'])->name('index');
+                Route::get('/create', [App\Http\Controllers\InvoiceController::class, 'create'])->name('create');
+                Route::post('/', [App\Http\Controllers\InvoiceController::class, 'store'])->name('store');
+                Route::get('/customer-details/{customer}', [App\Http\Controllers\InvoiceController::class, 'getCustomerDetails'])->name('customer-details');
+                Route::get('/item-details/{item}', [App\Http\Controllers\InvoiceController::class, 'getItemDetails'])->name('item-details');
+                Route::get('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'show'])->name('show');
+                Route::get('/{invoice}/edit', [App\Http\Controllers\InvoiceController::class, 'edit'])->name('edit');
+                Route::put('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'update'])->name('update');
+                Route::delete('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'destroy'])->name('destroy');
+                Route::get('/{invoice}/print', [App\Http\Controllers\InvoiceController::class, 'print'])->name('print');
+            });
         });
 
         // Accounts Expenses CRUD

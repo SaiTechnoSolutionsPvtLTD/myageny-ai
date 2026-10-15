@@ -7,6 +7,8 @@ use App\Models\AccountExpenseSubcategory;
 use App\Models\AccountSupportCategory;
 use App\Models\AccountSupportSubcategory;
 use App\Models\AdAccountMaster;
+use App\Models\CustomerMaster;
+use App\Models\InvoiceSetting;
 use App\Models\ItemMaster;
 use App\Models\VendorMaster;
 use Illuminate\Http\Request;
@@ -28,6 +30,7 @@ class AccountExpenseMasterController extends Controller
         $allSupportCategories = AccountSupportCategory::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
         $allSupportSubcategories = AccountSupportSubcategory::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
         $allItems = ItemMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
+        $allCustomers = CustomerMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
 
         $categoryStats = [
             'total'    => $allCategories->count(),
@@ -71,6 +74,14 @@ class AccountExpenseMasterController extends Controller
             'inactive' => $allItems->where('status', 'inactive')->count(),
         ];
 
+        $customerStats = [
+            'total'    => $allCustomers->count(),
+            'active'   => $allCustomers->where('status', 'active')->count(),
+            'inactive' => $allCustomers->where('status', 'inactive')->count(),
+        ];
+
+        $invoiceSetting = InvoiceSetting::where('company_id', $companyId)->first();
+
         return view('pages.accounts.master.index', compact(
             'categoryStats',
             'subcategoryStats',
@@ -78,7 +89,9 @@ class AccountExpenseMasterController extends Controller
             'supportSubcategoryStats',
             'adAccountStats',
             'vendorStats',
-            'itemStats'
+            'itemStats',
+            'customerStats',
+            'invoiceSetting'
         ));
     }
 

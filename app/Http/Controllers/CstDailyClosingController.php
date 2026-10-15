@@ -672,7 +672,7 @@ class CstDailyClosingController extends Controller
             $cstProspectItems = $cstProspectItems->filter(fn($it) => in_array($it['cst_executive_id'] ?? null, $supportUserIds) || in_array($it['cst_tl_id'] ?? null, $supportUserIds));
         }
 
-        $computedMonthlyProspect = (float) $cstProspectItems->sum('deal_value');
+        $computedMonthlyProspect = (float) $cstProspectItems->sum('expected_value');
 
         if ($computedMonthlyProspect <= 0 && $userId) {
             $explicitTarget = (float) (SalesTarget::where('user_id', $userId)->where('target_month', $targetMonthStr)->value('target_amount')
@@ -683,11 +683,12 @@ class CstDailyClosingController extends Controller
             $monthlyTarget = $computedMonthlyProspect;
         }
 
-        $renewalVal = (float) $cstProspectItems->where('source_type', 'renewal')->sum('deal_value');
-        $devVal     = (float) $cstProspectItems->where('source_type', 'development')->sum('deal_value');
+        $renewalVal  = (float) $cstProspectItems->where('source_type', 'renewal')->sum('expected_value');
+        $devVal      = (float) $cstProspectItems->where('source_type', 'development')->sum('expected_value');
+        $dealVal     = (float) $cstProspectItems->sum('deal_value');
         $prospectVal = $monthlyTarget;
 
-        // 2. Today's Revenue : Today Received Value
+        // 2. Today's Revenue : Today Received Value (Only CST Department users, matching Till Now Achieved)
         $todayPaymentQuery = LeadProductPayment::query();
         if (is_array($dateRange) && count($dateRange) === 2 && !empty($dateRange[0]) && !empty($dateRange[1])) {
             $todayPaymentQuery->whereBetween('payment_date', [$dateRange[0], $dateRange[1]]);
@@ -700,15 +701,9 @@ class CstDailyClosingController extends Controller
         }
 
         if ($userId) {
-            $todayPaymentQuery->where(function($q) use ($userId) {
-                $q->where('recorded_by', $userId)
-                  ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $userId)->orWhere('customer_support_tl_id', $userId));
-            });
+            $todayPaymentQuery->where('recorded_by', $userId);
         } elseif (!empty($supportUserIds)) {
-            $todayPaymentQuery->where(function($q) use ($supportUserIds) {
-                $q->whereIn('recorded_by', $supportUserIds)
-                  ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
-            });
+            $todayPaymentQuery->whereIn('recorded_by', $supportUserIds);
         }
         $todayRevenue = (float) $todayPaymentQuery->sum('amount');
 
@@ -885,6 +880,7 @@ class CstDailyClosingController extends Controller
             'welcome_call_new_count'            => $ovpNewCount,
             'welcome_call_overdue_count'        => $ovpOverdueCount,
             'prospect_val'               => $prospectVal,
+            'deal_val'                   => $dealVal,
             'renewal_val'                => $renewalVal,
             'dev_val'                    => $devVal,
             'weekly_updates_count'       => $weeklyUpdatesCount,
@@ -1005,15 +1001,9 @@ class CstDailyClosingController extends Controller
                     $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $branchId));
                 }
                 if ($targetUserId) {
-                    $q->where(function($sub) use ($targetUserId) {
-                        $sub->where('recorded_by', $targetUserId)
-                            ->orWhereHas('lead', fn($lq) => $lq->where('customer_support_executive_id', $targetUserId)->orWhere('customer_support_tl_id', $targetUserId));
-                    });
+                    $q->where('recorded_by', $targetUserId);
                 } elseif (!empty($supportUserIds)) {
-                    $q->where(function($sub) use ($supportUserIds) {
-                        $sub->whereIn('recorded_by', $supportUserIds)
-                            ->orWhereHas('lead', fn($lq) => $lq->whereIn('customer_support_executive_id', $supportUserIds)->orWhereIn('customer_support_tl_id', $supportUserIds));
-                    });
+                    $q->whereIn('recorded_by', $supportUserIds);
                 }
                 $items = $q->latest('payment_date')->latest('id')->get();
                 foreach ($items as $p) {
@@ -1077,7 +1067,8 @@ class CstDailyClosingController extends Controller
                         'account_name' => $item['company_name'] ?: ($item['customer_name'] ?: 'Lead #' . ($item['lead_id'] ?? '')),
                         'branch_name'  => $item['branch_name'] ?: '—',
                         'product_name' => $item['product_name'] ?: 'CST Prospect',
-                        'amount'       => (float) $item['deal_value'],
+                        'amount'       => (float) ($item['expected_value'] ?? $item['deal_value']),
+                        'deal_value'   => (float) ($item['deal_value'] ?? 0),
                         'date'         => $item['closure_date'] ?: '—',
                         'mode'         => $item['status'] ?? ($item['source_type'] === 'renewal' ? 'Renewal' : 'Development'),
                         'recorded_by'  => $item['cst_person_name'] !== '-' ? $item['cst_person_name'] : ($item['sales_person_name'] ?? 'CST Team'),
