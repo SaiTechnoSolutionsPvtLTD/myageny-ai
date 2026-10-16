@@ -471,47 +471,7 @@
                                 <input type="hidden" name="total_amount" id="inputTotalAmount" value="0.00">
                             </div>
 
-                            <div class="summary-row" style="align-items:center; background:#fff; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0;">
-                                <span style="font-weight:700; color:#15803d;">Payment Made (₹)</span>
-                                <input type="number" step="0.01" min="0" name="paid_amount" id="inputPaidAmount" class="form-input" style="width:130px; text-align:right; font-weight:800; color:#15803d;" value="{{ old('paid_amount', '0.00') }}" oninput="calculateInvoiceTotals()">
-                            </div>
-
-                            {{-- Payment Details Panel (shown when Payment Made > 0) --}}
-                            <div id="paymentDetailsBox" style="display:none; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px; margin:4px 0 8px;">
-                                <div style="font-size:12px; font-weight:800; color:#166534; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-                                    <i class="bi bi-clock-history"></i>
-                                    <span>Payment Details (Recorded to Payment History)</span>
-                                </div>
-                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                                    <div>
-                                        <label class="form-label" style="font-size:11px; margin-bottom:2px; color:#14532d;">Payment Date</label>
-                                        <input type="date" name="payment_date" id="inputPaymentDate" class="form-input" style="padding:4px 8px; font-size:12px;" value="{{ old('payment_date', date('Y-m-d')) }}">
-                                    </div>
-                                    <div>
-                                        <label class="form-label" style="font-size:11px; margin-bottom:2px; color:#14532d;">Payment Mode</label>
-                                        <select name="payment_mode" class="form-input" style="padding:4px 8px; font-size:12px;">
-                                            <option value="bank_transfer" {{ old('payment_mode') === 'bank_transfer' ? 'selected' : '' }}>Bank Transfer (NEFT/RTGS/IMPS)</option>
-                                            <option value="upi" {{ old('payment_mode') === 'upi' ? 'selected' : '' }}>UPI Payment</option>
-                                            <option value="cheque" {{ old('payment_mode') === 'cheque' ? 'selected' : '' }}>Cheque / DD</option>
-                                            <option value="cash" {{ old('payment_mode') === 'cash' ? 'selected' : '' }}>Cash</option>
-                                            <option value="card" {{ old('payment_mode') === 'card' ? 'selected' : '' }}>Credit / Debit Card</option>
-                                            <option value="other" {{ old('payment_mode') === 'other' ? 'selected' : '' }}>Other</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="form-label" style="font-size:11px; margin-bottom:2px; color:#14532d;">Reference # (Optional)</label>
-                                        <input type="text" name="payment_reference" class="form-input" style="padding:4px 8px; font-size:12px;" placeholder="e.g. UTR / Txn ID" value="{{ old('payment_reference') }}">
-                                    </div>
-                                    <div>
-                                        <label class="form-label" style="font-size:11px; margin-bottom:2px; color:#14532d;">Bank Name (Optional)</label>
-                                        <input type="text" name="payment_bank_name" class="form-input" style="padding:4px 8px; font-size:12px;" placeholder="e.g. HDFC, ICICI, SBI" value="{{ old('payment_bank_name') }}">
-                                    </div>
-                                    <div style="grid-column: span 2;">
-                                        <label class="form-label" style="font-size:11px; margin-bottom:2px; color:#14532d;">Payment Notes / Remarks (Optional)</label>
-                                        <input type="text" name="payment_notes" class="form-input" style="padding:4px 8px; font-size:12px;" placeholder="e.g. Initial payment on invoice creation" value="{{ old('payment_notes') }}">
-                                    </div>
-                                </div>
-                            </div>
+                            <input type="hidden" name="paid_amount" id="inputPaidAmount" value="0.00">
 
                             <div class="summary-row balance-row">
                                 <span>Balance Due</span>
@@ -1803,12 +1763,6 @@ function calculateInvoiceTotals() {
     }
     const inputBalanceDue = document.getElementById('inputBalanceDue');
     if (inputBalanceDue) inputBalanceDue.value = balanceDue.toFixed(2);
-
-    // Toggle Payment Details panel based on paidAmount
-    const payBox = document.getElementById('paymentDetailsBox');
-    if (payBox) {
-        payBox.style.display = paidAmount > 0 ? 'block' : 'none';
-    }
 }
 
 function escapeHtml(text) {
@@ -1832,21 +1786,7 @@ document.addEventListener('DOMContentLoaded', function() {
         onCustomerSelected(custSel.value);
     }
 
-    // Keep payment date in sync with invoice date unless manually altered
-    const invDateInput = document.getElementById('invoiceDate');
-    const payDateInput = document.getElementById('inputPaymentDate');
-    if (invDateInput && payDateInput) {
-        invDateInput.addEventListener('change', function() {
-            if (!payDateInput.dataset.manual) {
-                payDateInput.value = this.value;
-            }
-        });
-        payDateInput.addEventListener('change', function() {
-            this.dataset.manual = 'true';
-        });
-    }
-
-    // Initial check for payment box (e.g. if old('paid_amount') was restored)
+    // Initial check for invoice totals
     calculateInvoiceTotals();
 
     const form = document.getElementById('invoiceForm');

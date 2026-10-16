@@ -130,8 +130,9 @@
 .inv-action-item.edit:hover { background:#fff7ed; color:#ea580c; }
 .inv-action-item.print:hover { background:#f0fdf4; color:#16a34a; }
 .inv-action-item.delete { color:#dc2626; }
-.inv-action-item.delete:hover { background:#fef2f2; color:#b91c1c; }
 .inv-action-divider { height:1px; background:#f1f5f9; margin:4px 0; }
+@keyframes acmSpin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+.acm-spin { display:inline-block; animation:acmSpin .8s linear infinite; }
 </style>
 @endpush
 
@@ -653,6 +654,31 @@ document.addEventListener('DOMContentLoaded', function() {
             localStorage.setItem('inv_filter_accordion_open', filterAcc.open ? '1' : '0');
         });
     }
+
+    const idxPayForm = document.getElementById('indexRecordPaymentForm');
+    if (idxPayForm) {
+        idxPayForm.addEventListener('submit', function(e) {
+            if (isIndexPaymentSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+
+            if (!this.checkValidity()) {
+                return;
+            }
+
+            isIndexPaymentSubmitting = true;
+            const submitBtn = document.getElementById('idxSubmitBtn');
+            if (submitBtn) {
+                submitBtn.style.pointerEvents = 'none';
+                submitBtn.style.opacity = '0.75';
+                submitBtn.innerHTML = '<i class="bi bi-arrow-repeat acm-spin"></i> <span>Recording Payment...</span>';
+                setTimeout(function() {
+                    submitBtn.disabled = true;
+                }, 10);
+            }
+        });
+    }
 });
 
 function closeInvoiceActionMenus() {
@@ -690,10 +716,22 @@ document.addEventListener('keydown', function(e) {
 });
 
 let currentIndexInvoiceData = null;
+let isIndexPaymentSubmitting = false;
+
+function resetIndexPaymentSubmitBtn() {
+    isIndexPaymentSubmitting = false;
+    const submitBtn = document.getElementById('idxSubmitBtn');
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.style.pointerEvents = 'auto';
+        submitBtn.style.opacity = '1';
+    }
+}
 
 function openIndexPaymentModal(data) {
     currentIndexInvoiceData = data;
     closeInvoiceActionMenus();
+    resetIndexPaymentSubmitBtn();
 
     const modal = document.getElementById('indexRecordPaymentModal');
     const form = document.getElementById('indexRecordPaymentForm');
@@ -729,6 +767,7 @@ function closeIndexPaymentModal() {
     const modal = document.getElementById('indexRecordPaymentModal');
     if (modal) modal.style.display = 'none';
     currentIndexInvoiceData = null;
+    resetIndexPaymentSubmitBtn();
 }
 
 function toggleIndexTdsSection() {
@@ -807,9 +846,13 @@ function calculateIndexLiveSettled() {
             prevRemaining.textContent = 'Remaining Balance: ₹' + remaining.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
     }
-    if (submitBtn) {
+    if (submitBtn && !isIndexPaymentSubmitting) {
         submitBtn.innerHTML = '<i class="bi bi-check-lg"></i> <span>Record Payment (₹' + totalSettled.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')</span>';
     }
 }
+
+window.addEventListener('pageshow', function() {
+    resetIndexPaymentSubmitBtn();
+});
 </script>
 @endpush

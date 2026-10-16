@@ -812,6 +812,8 @@
     width: 100%;
     margin: 0 auto;
 }
+@keyframes acmSpin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+.acm-spin { display:inline-block; animation:acmSpin .8s linear infinite; }
 </style>
 @endpush
 
@@ -2320,8 +2322,20 @@ function submitChangeSalesPerson(e) {
 
 const invoiceSubtotal = {{ $sub }};
 let currentInvoiceBalanceDue = {{ $balDue }};
+let isRecordPaymentSubmitting = false;
+
+function resetRecordPaymentSubmitBtn() {
+    isRecordPaymentSubmitting = false;
+    const submitBtn = document.getElementById('rpmSubmitBtn');
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.style.pointerEvents = 'auto';
+        submitBtn.style.opacity = '1';
+    }
+}
 
 function openRecordPaymentModal() {
+    resetRecordPaymentSubmitBtn();
     const modal = document.getElementById('recordPaymentModal');
     if (modal) {
         modal.style.display = 'flex';
@@ -2334,6 +2348,7 @@ function closeRecordPaymentModal() {
     if (modal) {
         modal.style.display = 'none';
     }
+    resetRecordPaymentSubmitBtn();
 }
 
 function toggleTdsSection() {
@@ -2409,7 +2424,7 @@ function calculateLiveSettled() {
             prevRemaining.textContent = 'Remaining Balance: ₹' + remaining.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
     }
-    if (submitBtn) {
+    if (submitBtn && !isRecordPaymentSubmitting) {
         submitBtn.innerHTML = '<i class="bi bi-check-lg"></i> <span>Record Payment (₹' + totalSettled.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')</span>';
     }
 }
@@ -2565,6 +2580,37 @@ document.addEventListener('keydown', function(e) {
         e.preventDefault();
         window.open('{{ route("accounts.sales.invoices.print", $invoice->id) }}', '_blank');
     }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const rpmForm = document.getElementById('recordPaymentForm');
+    if (rpmForm) {
+        rpmForm.addEventListener('submit', function(e) {
+            if (isRecordPaymentSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+
+            if (!this.checkValidity()) {
+                return;
+            }
+
+            isRecordPaymentSubmitting = true;
+            const submitBtn = document.getElementById('rpmSubmitBtn');
+            if (submitBtn) {
+                submitBtn.style.pointerEvents = 'none';
+                submitBtn.style.opacity = '0.75';
+                submitBtn.innerHTML = '<i class="bi bi-arrow-repeat acm-spin"></i> <span>Recording Payment...</span>';
+                setTimeout(function() {
+                    submitBtn.disabled = true;
+                }, 10);
+            }
+        });
+    }
+});
+
+window.addEventListener('pageshow', function() {
+    resetRecordPaymentSubmitBtn();
 });
 </script>
 @endpush

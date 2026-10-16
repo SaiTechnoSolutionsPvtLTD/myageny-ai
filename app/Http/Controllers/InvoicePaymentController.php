@@ -39,6 +39,17 @@ class InvoicePaymentController extends Controller
                 ->with('error', 'Total payment amount (Amount Received + TDS) must be greater than zero.');
         }
 
+        // Duplicate submission guard (e.g., rapid double-clicks within 6 seconds)
+        $recentDuplicate = InvoicePayment::where('company_id', $invoice->company_id)
+            ->where('invoice_id', $invoice->id)
+            ->where('amount_received', $amountReceived)
+            ->where('created_at', '>=', now()->subSeconds(6))
+            ->first();
+
+        if ($recentDuplicate) {
+            return redirect()->back()->with('success', 'Payment of ₹' . number_format($amountReceived, 2) . ($isTds ? ' (+ ₹' . number_format($tdsAmount, 2) . ' TDS)' : '') . ' recorded successfully against Invoice #' . $invoice->invoice_number . '!');
+        }
+
         // Handle attachment upload
         $attachmentPath = null;
         $attachmentName = null;
