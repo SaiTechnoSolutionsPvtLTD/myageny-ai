@@ -439,9 +439,7 @@
             </div>
 
             @if($closings->hasPages())
-                <div style="padding:16px 22px; border-top:1px solid #e2e8f0;">
-                    {{ $closings->links() }}
-                </div>
+                @include('partials.table-pagination', ['paginator' => $closings])
             @endif
         </div>
     </div>

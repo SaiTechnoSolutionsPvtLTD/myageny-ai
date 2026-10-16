@@ -4,13 +4,18 @@
 
 @push('styles')
 <style>
-.inv-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.inv-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); flex-wrap:wrap; gap:12px; }
-.inv-breadcrumbs { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px; }
-.inv-breadcrumbs a { color:#64748b; text-decoration:none; }
+.inv-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.inv-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.inv-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.inv-breadcrumbs { font-size:12px; color:#9e9e9e; margin-top:2px; display:flex; align-items:center; gap:6px; }
+.inv-breadcrumbs a { color:#9e9e9e; text-decoration:none; }
 .inv-breadcrumbs a:hover { color:#fe5f04; }
-.inv-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; }
-.inv-sub { font-size:13px; color:#64748b; }
+.inv-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.inv-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .inv-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .inv-body { padding:16px 20px 24px; }
+}
 
 .acm-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 18px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
 .acm-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 4px 14px rgba(254,95,4,.25); }
@@ -68,20 +73,19 @@
     {{-- Topbar --}}
     <div class="inv-topbar">
         <div>
-            <div class="inv-breadcrumbs">
-                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
-                <span>/</span>
-                <a href="{{ route('accounts.sales.invoices.index') }}">Invoices</a>
-                <span>/</span>
-                <span style="color:#0f172a;">Edit Invoice #{{ $invoice->invoice_number }}</span>
-            </div>
             <div class="inv-title">
                 <i class="bi bi-pencil-square" style="color:#fe5f04;"></i>
                 <span>Edit Invoice #{{ $invoice->invoice_number }}</span>
             </div>
-            <div class="inv-sub">Update customer details, items catalog, payment status, and taxes.</div>
+            <div class="inv-breadcrumbs">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span>/</span>
+                <a href="{{ route('accounts.sales.invoices.index') }}">Sales</a>
+                <span>/</span>
+                <span style="color:#121212; font-weight:700;">Edit #{{ $invoice->invoice_number }}</span>
+            </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div class="inv-actions">
             <a href="{{ route('accounts.sales.invoices.show', $invoice->id) }}" class="acm-btn acm-btn-secondary">
                 <i class="bi bi-arrow-left"></i> View Invoice
             </a>
@@ -90,6 +94,8 @@
             </button>
         </div>
     </div>
+
+    <div class="inv-body">
 
     {{-- Alerts --}}
     @if(session('error'))
@@ -515,7 +521,8 @@
         </div>
     </form>
 
-</div>
+    </div>{{-- /inv-body --}}
+</div>{{-- /inv-page --}}
 
 @push('scripts')
 <script>
@@ -633,10 +640,31 @@ function isTamilNaduPlaceOfSupply() {
 
 let itemRowIndex = 0;
 
+function initRowSelect2(rowIndex) {
+    if (!window.jQuery) return;
+    const $select = $(`#rowSelect_${rowIndex}`);
+    if (!$select.length) return;
+
+    if (typeof window.initSelect2 === 'function') {
+        window.initSelect2($select);
+    } else if ($.fn.select2) {
+        $select.select2({
+            width: '100%',
+            allowClear: true,
+            placeholder: $select.find('option[value=""]').first().text() || '-- Choose Item from Master --'
+        });
+    }
+
+    $select.off('change.rowItemSelect').on('change.rowItemSelect', function() {
+        onRowItemSelect(this, rowIndex);
+    });
+}
+
 function addInvoiceItemRow(data = {}) {
     const tbody = document.getElementById('itemsTableBody');
     const tr = document.createElement('tr');
-    tr.id = 'itemRow_' + itemRowIndex;
+    const currentRowIndex = itemRowIndex;
+    tr.id = 'itemRow_' + currentRowIndex;
 
     let itemsOptions = '<option value="">-- Choose Item from Master --</option>';
     catalogItems.forEach(it => {
@@ -653,10 +681,10 @@ function addInvoiceItemRow(data = {}) {
 
     tr.innerHTML = `
         <td>
-            <select name="items[${itemRowIndex}][item_id]" class="form-input" style="font-size:12px; padding:6px 8px; margin-bottom:4px;" onchange="onRowItemSelect(this, ${itemRowIndex})">
+            <select name="items[${currentRowIndex}][item_id]" id="rowSelect_${currentRowIndex}" class="form-input select2" style="font-size:12px; padding:6px 8px; margin-bottom:4px;">
                 ${itemsOptions}
             </select>
-            <input type="text" name="items[${itemRowIndex}][item_name]" id="rowItemName_${itemRowIndex}" class="form-input" style="font-size:12px; font-weight:700;" value="${escapeHtml(itemName)}" required>
+            <input type="text" name="items[${currentRowIndex}][item_name]" id="rowItemName_${currentRowIndex}" class="form-input" style="font-size:12px; font-weight:700; margin-top:6px;" value="${escapeHtml(itemName)}" required>
         </td>
         <td>
             <textarea name="items[${itemRowIndex}][description]" id="rowDesc_${itemRowIndex}" class="form-input" rows="2" style="font-size:11px; line-height:1.4;">${escapeHtml(desc)}</textarea>
@@ -689,7 +717,11 @@ function addInvoiceItemRow(data = {}) {
     `;
 
     tbody.appendChild(tr);
-    calculateRow(itemRowIndex);
+
+    // Initialize Select2 on the new row's select
+    initRowSelect2(currentRowIndex);
+
+    calculateRow(currentRowIndex);
     itemRowIndex++;
 }
 
@@ -711,6 +743,12 @@ function onRowItemSelect(selectElem, rowId) {
 function removeInvoiceItemRow(rowId) {
     const tr = document.getElementById('itemRow_' + rowId);
     if (tr) {
+        if (window.jQuery) {
+            const $s = $(tr).find('select.select2');
+            if ($s.length && $s.data('select2')) {
+                $s.select2('destroy');
+            }
+        }
         tr.remove();
         calculateInvoiceTotals();
     }

@@ -4,10 +4,18 @@
 
 @push('styles')
 <style>
-.adm-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.adm-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); }
-.adm-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; }
-.adm-sub { font-size:13px; color:#64748b; }
+.adm-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.adm-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.adm-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.adm-breadcrumb { font-size:12px; color:#9e9e9e; margin-top:2px; display:flex; align-items:center; gap:6px; }
+.adm-breadcrumb a { color:#9e9e9e; text-decoration:none; }
+.adm-breadcrumb a:hover { color:#fe5f04; }
+.adm-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.adm-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .adm-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .adm-body { padding:16px 20px 24px; }
+}
 .adm-card { background:#fff; border-radius:16px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.02); }
 .adm-filter-bar { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid #e2e8f0; background:#fff; flex-wrap:wrap; }
 .adm-search-wrap { position:relative; flex:1; min-width:240px; }
@@ -49,19 +57,29 @@
     {{-- Topbar --}}
     <div class="adm-topbar">
         <div>
-            <div style="margin-bottom:6px;">
-                <a href="{{ route('accounts.master.index') }}" class="adm-btn adm-btn-secondary" style="padding:4px 10px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
-                    <i class="bi bi-arrow-left"></i> Back to Master Hub
-                </a>
+            <div class="adm-title">
+                <i class="bi bi-display" style="color:#fe5f04;"></i>
+                <span>Ad Accounts Master</span>
             </div>
-            <div class="adm-title">Ad Accounts Master</div>
-            <div class="adm-sub">Manage Digital Marketing Ad Accounts for Meta, Google, LinkedIn & more</div>
+            <div class="adm-breadcrumb">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span>/</span>
+                <a href="{{ route('accounts.master.index') }}">Master Hub</a>
+                <span>/</span>
+                <span style="color:#121212; font-weight:700;">Ad Accounts</span>
+            </div>
         </div>
-        <button type="button" class="adm-btn adm-btn-primary" onclick="openCreateModal()">
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add New Ad Account
-        </button>
+        <div class="adm-actions">
+            <a href="{{ route('accounts.master.index') }}" class="adm-btn adm-btn-secondary">
+                <i class="bi bi-arrow-left"></i> Master Hub
+            </a>
+            <button type="button" class="adm-btn adm-btn-primary" onclick="openCreateModal()">
+                <i class="bi bi-plus-lg"></i> Add New Ad Account
+            </button>
+        </div>
     </div>
+
+    <div class="adm-body">
 
     {{-- Alert --}}
     @if(session('success'))
@@ -174,7 +192,8 @@
         @endif
     </div>
 
-</div>
+    </div>{{-- /adm-body --}}
+</div>{{-- /adm-page --}}
 
 {{-- Create Modal --}}
 <div class="modal-overlay" id="createModal">

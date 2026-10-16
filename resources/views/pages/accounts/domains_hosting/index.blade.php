@@ -4,10 +4,21 @@
 
 @push('styles')
 <style>
-.dh-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.dh-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); }
-.dh-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; }
-.dh-sub { font-size:13px; color:#64748b; }
+.dh-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.dh-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.dh-topbar-left { display:flex; flex-direction:column; justify-content:center; }
+.dh-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.dh-breadcrumbs { font-size:12px; color:#9e9e9e; display:flex; align-items:center; gap:6px; margin-top:2px; }
+.dh-breadcrumbs a { color:#9e9e9e; text-decoration:none; transition:color .15s; }
+.dh-breadcrumbs a:hover { color:#fe5f04; }
+.dh-breadcrumbs .sep { color:#ccc; }
+.dh-breadcrumbs .current { color:#424242; font-weight:600; }
+.dh-topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.dh-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .dh-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .dh-body { padding:16px 20px 24px; }
+}
 
 .dh-stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; }
 .dh-stat-card { background:#fff; border-radius:14px; padding:16px 20px; border:1px solid #e2e8f0; display:flex; align-items:center; gap:16px; box-shadow:0 2px 6px rgba(0,0,0,.02); }
@@ -70,13 +81,20 @@
 @section('content')
 <div class="dh-page">
 
-    {{-- Topbar --}}
+    {{-- Standard Uniform Topbar --}}
     <div class="dh-topbar">
-        <div>
-            <div class="dh-title">Domains & Hosting</div>
-            <div class="dh-sub">Manage domain renewals, GoDaddy integration, and hosting server renewals</div>
+        <div class="dh-topbar-left">
+            <div class="dh-title">
+                <i class="bi bi-hdd-network" style="color:#fe5f04;"></i>
+                <span>Domains & Hosting</span>
+            </div>
+            <div class="dh-breadcrumbs">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span class="sep">/</span>
+                <span class="current">Domains & Hosting</span>
+            </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div class="dh-topbar-actions">
             @if($activeTab === 'domains')
                 <form method="POST" action="{{ route('accounts.domains-hosting.domains.sync-godaddy') }}" style="margin:0;">
                     @csrf
@@ -94,6 +112,8 @@
             @endif
         </div>
     </div>
+
+    <div class="dh-body">
 
     {{-- Alerts --}}
     @if(session('success'))
@@ -557,7 +577,7 @@
         @endif
 
     </div>
-
+    </div>
 </div>
 
 {{-- Add Domain Modal --}}

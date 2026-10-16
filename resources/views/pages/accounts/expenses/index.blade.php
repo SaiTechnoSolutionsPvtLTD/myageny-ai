@@ -4,10 +4,21 @@
 
 @push('styles')
 <style>
-.acc-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.acc-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); flex-wrap:wrap; gap:12px; }
-.acc-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; }
-.acc-sub { font-size:13px; color:#64748b; }
+.acc-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.acc-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.acc-topbar-left { display:flex; flex-direction:column; justify-content:center; }
+.acc-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.acc-breadcrumbs { font-size:12px; color:#9e9e9e; display:flex; align-items:center; gap:6px; margin-top:2px; }
+.acc-breadcrumbs a { color:#9e9e9e; text-decoration:none; transition:color .15s; }
+.acc-breadcrumbs a:hover { color:#fe5f04; }
+.acc-breadcrumbs .sep { color:#ccc; }
+.acc-breadcrumbs .current { color:#424242; font-weight:600; }
+.acc-topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.acc-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .acc-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .acc-body { padding:16px 20px 24px; }
+}
 
 .acc-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
 .acc-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 4px 14px rgba(254,95,4,.25); }
@@ -114,21 +125,20 @@
 @section('content')
 <div class="acc-page">
 
-    {{-- Topbar --}}
+    {{-- Standard Uniform Topbar --}}
     <div class="acc-topbar">
-        <div>
-            <div style="margin-bottom:6px;">
-                <a href="{{ route('accounts.dashboard') }}" class="acc-btn acc-btn-secondary" style="padding:4px 10px; font-size:12px;">
-                    <i class="bi bi-arrow-left"></i> Accounts Dashboard
-                </a>
-            </div>
+        <div class="acc-topbar-left">
             <div class="acc-title">
                 <i class="bi bi-receipt-cutoff" style="color:#fe5f04;"></i>
-                <span>Accounts Expenses</span>
+                <span>Expenses</span>
             </div>
-            <div class="acc-sub">Manage and audit company expenses, invoices, fixed and variable costs, and vendor settlements</div>
+            <div class="acc-breadcrumbs">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span class="sep">/</span>
+                <span class="current">Expenses</span>
+            </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div class="acc-topbar-actions">
             <form action="{{ route('accounts.expenses.sync-recurring') }}" method="POST" style="margin:0;" onsubmit="return confirm('Generate due recurring fixed expenses for this month now?')">
                 @csrf
                 <button type="submit" class="acc-btn acc-btn-outline" style="border-color:#16a34a; color:#15803d; background:#f0fdf4;" title="Generate recurring fixed expenses for current month">
@@ -143,6 +153,8 @@
             </a>
         </div>
     </div>
+
+    <div class="acc-body">
 
     {{-- Alerts --}}
     @if(session('success'))
@@ -596,7 +608,7 @@
             </div>
         @endif
     </div>
-
+    </div>
 </div>
 
 {{-- Quick View Modal --}}

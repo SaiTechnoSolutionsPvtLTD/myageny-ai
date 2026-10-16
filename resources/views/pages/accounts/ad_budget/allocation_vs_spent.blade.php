@@ -7,34 +7,49 @@
 .adb-page {
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    padding: 24px 28px;
+    min-height: 100%;
     background: #f4f5f7;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    min-height: 100%;
 }
 
 /* Topbar */
 .adb-topbar {
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 0 28px;
+    min-height: 60px;
     background: #ffffff;
-    padding: 18px 24px;
-    border-radius: 14px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    border-bottom: 1px solid #e1dee3;
+    position: sticky;
+    top: 0;
+    z-index: 30;
 }
 .adb-title {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 800;
-    color: #0f172a;
-    letter-spacing: -0.02em;
-    margin-bottom: 3px;
+    color: #121212;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.2;
 }
-.adb-sub {
-    font-size: 13px;
-    color: #64748b;
+.adb-breadcrumb {
+    font-size: 12px;
+    color: #9e9e9e;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.adb-breadcrumb a { color: #9e9e9e; text-decoration: none; }
+.adb-breadcrumb a:hover { color: #fe5f04; }
+.adb-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.adb-body { padding: 22px 28px 34px; display: flex; flex-direction: column; gap: 20px; flex: 1; }
+@media (max-width: 900px) {
+    .adb-topbar { padding: 14px 20px; flex-direction: column; align-items: flex-start; gap: 12px; min-height: auto; }
+    .adb-body { padding: 16px 20px 24px; }
 }
 
 /* Stat Cards */
@@ -321,20 +336,29 @@
     {{-- Topbar --}}
     <div class="adb-topbar">
         <div>
-            <div class="adb-title">Ad Budget Ledger Statement</div>
-            <div class="adb-sub">Passbook view of approved budget allocations (Credit +) and ad spend entries (Debit -) with running balance</div>
+            <div class="adb-title">
+                <i class="bi bi-journal-bookmark-fill" style="color:#fe5f04;"></i>
+                <span>Ad Budget Ledger Statement</span>
+            </div>
+            <div class="adb-breadcrumb">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span>/</span>
+                <span>Ad Budget</span>
+                <span>/</span>
+                <span style="color:#121212; font-weight:700;">Ledger Statement</span>
+            </div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
+        <div class="adb-actions">
             <button type="button" class="adb-btn adb-btn-primary" onclick="openPassbookPdf(false)">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                Print Passbook
+                <i class="bi bi-printer"></i> Print Passbook
             </button>
             <button type="button" class="adb-btn adb-btn-secondary" onclick="openPassbookPdf(true)" title="Download PDF Statement">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Download PDF
+                <i class="bi bi-download"></i> Download PDF
             </button>
         </div>
     </div>
+
+    <div class="adb-body">
 
     {{-- Stats Cards --}}
     <div class="adb-stats-grid">
@@ -572,7 +596,8 @@
         @endif
     </div>
 
-</div>
+    </div>{{-- /adb-body --}}
+</div>{{-- /adb-page --}}
 @endsection
 
 @push('scripts')

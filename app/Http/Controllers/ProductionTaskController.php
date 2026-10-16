@@ -97,7 +97,18 @@ class ProductionTaskController extends Controller
                 $query->where('lead_id', (int) $filterLeadId);
             })
             ->when($filterProjectId !== '', function ($query) use ($filterProjectId) {
-                $query->where('production_initiation_id', (int) $filterProjectId);
+                if ($filterProjectId === 'other' || $filterProjectId === 'other_tasks') {
+                    $query->where(function ($q) {
+                        $q->whereNull('production_initiation_id')
+                          ->orWhere('product_name', 'Other Tasks')
+                          ->orWhereHas('project', function ($pq) {
+                              $pq->where('product_name', 'Other Tasks')
+                                 ->orWhere('company_name', 'Other Tasks');
+                          });
+                    });
+                } else {
+                    $query->where('production_initiation_id', (int) $filterProjectId);
+                }
             })
             ->when($filterUserId !== '', function ($query) use ($filterUserId) {
                 $query->where('assigned_to', (int) $filterUserId);
@@ -187,6 +198,8 @@ class ProductionTaskController extends Controller
             ->when($userDeptId && !$isAdminLike, function ($q) use ($userDeptId) {
                 $q->where('department_id', $userDeptId);
             })
+            ->whereRaw("LOWER(COALESCE(product_name, '')) NOT IN ('other tasks', 'other task')")
+            ->whereRaw("LOWER(COALESCE(company_name, '')) NOT IN ('other tasks', 'other task')")
             ->latest('id')
             ->get()
             ->map(function ($proj) {
@@ -410,7 +423,14 @@ class ProductionTaskController extends Controller
 
         $validated = $request->validate([
             'department_id' => ['nullable', 'integer'],
-            'production_initiation_id' => ['required', 'integer', 'exists:production_initiations,id'],
+            'production_initiation_id' => ['required', function ($attribute, $value, $fail) {
+                if ($value === 'other' || $value === 'other_tasks' || $value === 0 || $value === '0') {
+                    return;
+                }
+                if (! is_numeric($value) || ! DB::table('production_initiations')->where('id', $value)->exists()) {
+                    $fail('Selected project does not exist.');
+                }
+            }],
             'task_description' => ['required', 'string', 'min:40'],
             'assigned_to_user_ids' => ['required', 'array', 'min:1'],
             'assigned_to_user_ids.*' => ['required', 'integer', 'exists:users,id'],
@@ -418,7 +438,6 @@ class ProductionTaskController extends Controller
             'attachments.*' => ['nullable', 'file', 'max:25600'],
         ], [
             'production_initiation_id.required' => 'Project Name is mandatory.',
-            'production_initiation_id.exists' => 'Selected project does not exist.',
             'task_description.required' => 'Task description is mandatory.',
             'task_description.min' => 'Task description must be at least 40 characters.',
             'assigned_to_user_ids.required' => 'Please select at least one team member to allocate.',
@@ -435,17 +454,32 @@ class ProductionTaskController extends Controller
                     if ($request->wantsJson()) {
                         return response()->json([
                             'success' => false,
-                            'message' => 'You are only allowed to assign support tasks to team members reporting under you.',
+                            'message' => 'You are only allowed to assign support tasks to yourself or team members reporting under you.',
                         ], 403);
                     }
-                    return redirect()->back()->with('error', 'You can only allocate tasks to team members reporting under you.');
+                    return redirect()->back()->with('error', 'You can only allocate tasks to yourself or team members reporting under you.');
                 }
             }
         }
 
-        $project = ProductionInitiation::with(['lead', 'leadProduct'])->findOrFail($validated['production_initiation_id']);
-        $productName = $project->product_name ?: ($project->leadProduct?->product_name ?: 'Support Task');
-        $leadId = $project->lead_id;
+        $isOther = in_array((string) $validated['production_initiation_id'], ['other', 'other_tasks', '0'], true);
+
+        $project = null;
+        if (! $isOther) {
+            $project = ProductionInitiation::with(['lead', 'leadProduct'])->find($validated['production_initiation_id']);
+        }
+
+        if ($isOther || ! $project) {
+            $project = $this->getOrCreateOtherTasksProject($user);
+            $productName = 'Other Tasks';
+            $leadId = null;
+            $deliveryDate = null;
+        } else {
+            $productName = $project->product_name ?: ($project->leadProduct?->product_name ?: 'Support Task');
+            $leadId = $project->lead_id;
+            $deliveryDate = $project->project_delivery_date?->toDateString();
+        }
+
         $taskDate = Carbon::today('Asia/Kolkata')->toDateString();
         $taskDesc = trim((string) $validated['task_description']);
         $assignedUserIds = array_unique(array_map('intval', $validated['assigned_to_user_ids']));
@@ -481,8 +515,6 @@ class ProductionTaskController extends Controller
             }
         }
 
-        $deliveryDate = $project->project_delivery_date?->toDateString();
-
         DB::transaction(function () use ($user, $project, $productName, $leadId, $taskDate, $taskDesc, $storedAttachments, $assignedUserIds, $deliveryDate) {
             foreach ($assignedUserIds as $assigneeId) {
                 // 1. Create ProductionTask
@@ -492,7 +524,7 @@ class ProductionTaskController extends Controller
                     'assigned_to' => $assigneeId,
                     'task_date' => $taskDate,
                     'lead_id' => $leadId,
-                    'production_initiation_id' => $project->id,
+                    'production_initiation_id' => $project?->id,
                     'product_name' => $productName,
                     'task_description' => $taskDesc,
                     'attachments' => ! empty($storedAttachments) ? $storedAttachments : null,
@@ -501,38 +533,40 @@ class ProductionTaskController extends Controller
                 ]);
 
                 // 2. Auto-create or sync ProjectTimesheet for the assigned team member
-                $existingTimesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
-                    ->where('user_id', $assigneeId)
-                    ->whereDate('timesheet_date', $taskDate)
-                    ->first();
+                if ($project) {
+                    $existingTimesheet = ProjectTimesheet::where('production_initiation_id', $project->id)
+                        ->where('user_id', $assigneeId)
+                        ->whereDate('timesheet_date', $taskDate)
+                        ->first();
 
-                if (! $existingTimesheet) {
-                    ProjectTimesheet::create([
-                        'company_id' => $project->company_id ?? $user->company_id,
-                        'production_initiation_id' => $project->id,
-                        'user_id' => $assigneeId,
-                        'timesheet_date' => $taskDate,
-                        'project_delivery_date' => $deliveryDate,
-                        'status' => 'pending',
-                        'project_type' => 'recurring',
-                        'poster_count' => 0,
-                        'video_count' => 0,
-                        'committed_posters' => 0,
-                        'committed_videos' => 0,
-                        'waiting_posters' => 0,
-                        'waiting_videos' => 0,
-                        'day_closing_update' => "Assigned Support Task:\n" . $taskDesc,
-                    ]);
-                } else {
-                    $currClosing = trim((string) $existingTimesheet->day_closing_update);
-                    if (empty($currClosing)) {
-                        $existingTimesheet->update([
+                    if (! $existingTimesheet) {
+                        ProjectTimesheet::create([
+                            'company_id' => $project->company_id ?? $user->company_id,
+                            'production_initiation_id' => $project->id,
+                            'user_id' => $assigneeId,
+                            'timesheet_date' => $taskDate,
+                            'project_delivery_date' => $deliveryDate,
+                            'status' => 'pending',
+                            'project_type' => 'recurring',
+                            'poster_count' => 0,
+                            'video_count' => 0,
+                            'committed_posters' => 0,
+                            'committed_videos' => 0,
+                            'waiting_posters' => 0,
+                            'waiting_videos' => 0,
                             'day_closing_update' => "Assigned Support Task:\n" . $taskDesc,
                         ]);
                     } else {
-                        $existingTimesheet->update([
-                            'day_closing_update' => $currClosing . "\n\n[Assigned Support Task]:\n" . $taskDesc,
-                        ]);
+                        $currClosing = trim((string) $existingTimesheet->day_closing_update);
+                        if (empty($currClosing)) {
+                            $existingTimesheet->update([
+                                'day_closing_update' => "Assigned Support Task:\n" . $taskDesc,
+                            ]);
+                        } else {
+                            $existingTimesheet->update([
+                                'day_closing_update' => $currClosing . "\n\n[Assigned Support Task]:\n" . $taskDesc,
+                            ]);
+                        }
                     }
                 }
             }
@@ -830,74 +864,112 @@ class ProductionTaskController extends Controller
         $mappedIds = $visibility->descendantUserIds($user);
         $directManagedIds = $user->managedUsers()->pluck('users.id');
 
-        $subordinateIds = $mappedIds
+        $prodScope = function ($query) {
+            $query->where(function ($q) {
+                $q->whereHas('roles.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                ->orWhereHas('employeeOnboarding.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                ->orWhereHas('internJoiningForm.department', function ($dq) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                      ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                })
+                ->orWhereHas('roles', function ($rq) {
+                    $rq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%flutter%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%laravel%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%react%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%frontend%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%backend%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%fullstack%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%graphic%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%ui%'])
+                       ->orWhereRaw('LOWER(name) LIKE ?', ['%ux%']);
+                });
+            });
+        };
+
+        if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
+            $members = User::where('is_active', true)
+                ->where('user_status', 'active')
+                ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                ->tap($prodScope)
+                ->with(['roles.department', 'employeeOnboarding.department', 'internJoiningForm.department'])
+                ->orderBy('name')
+                ->get(['id', 'name', 'email']);
+
+            if (! $members->contains('id', $user->id)) {
+                $members->push($user);
+                $members = $members->sortBy('name')->values();
+            }
+
+            return $members;
+        }
+
+        $allowedIds = $mappedIds
             ->merge($directManagedIds)
-            ->reject(fn ($id) => (int) $id === (int) $user->id)
+            ->push($user->id)
             ->unique()
             ->filter()
             ->values();
 
-        if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
-            if ($subordinateIds->isEmpty()) {
-                $prodScope = function ($query) {
-                    $query->where(function ($q) {
-                        $q->whereHas('roles.department', function ($dq) {
-                            $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
-                        })
-                        ->orWhereHas('employeeOnboarding.department', function ($dq) {
-                            $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
-                        })
-                        ->orWhereHas('internJoiningForm.department', function ($dq) {
-                            $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
-                              ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
-                        })
-                        ->orWhereHas('roles', function ($rq) {
-                            $rq->whereRaw('LOWER(name) LIKE ?', ['%develop%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%design%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%digital%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%flutter%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%laravel%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%react%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%frontend%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%backend%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%fullstack%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%graphic%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%ui%'])
-                               ->orWhereRaw('LOWER(name) LIKE ?', ['%ux%']);
-                        });
-                    });
-                };
-
-                return User::where('is_active', true)
-                    ->where('user_status', 'active')
-                    ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
-                    ->tap($prodScope)
-                    ->with(['roles.department', 'employeeOnboarding.department', 'internJoiningForm.department'])
-                    ->orderBy('name')
-                    ->get(['id', 'name', 'email']);
-            }
-        }
-
-        return User::whereIn('id', $subordinateIds)
+        $members = User::whereIn('id', $allowedIds)
             ->where('is_active', true)
             ->where('user_status', 'active')
             ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
             ->with(['roles.department', 'employeeOnboarding.department', 'internJoiningForm.department'])
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
+
+        if (! $members->contains('id', $user->id)) {
+            $members->push($user);
+            $members = $members->sortBy('name')->values();
+        }
+
+        return $members;
+    }
+
+    public function getOrCreateOtherTasksProject(User $user): ProductionInitiation
+    {
+        $existing = ProductionInitiation::withoutGlobalScopes()
+            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->where(function ($q) {
+                $q->where('product_name', 'Other Tasks')
+                  ->orWhere('company_name', 'Other Tasks');
+            })
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        return ProductionInitiation::create([
+            'company_id' => $user->company_id,
+            'company_name' => 'Other Tasks',
+            'client_name' => 'Internal',
+            'product_name' => 'Other Tasks',
+            'status' => 'approved',
+            'production_approval_status' => 'approved',
+            'project_execution_status' => 'ontrack',
+            'requirements' => 'General / Internal / Other Tasks',
+        ]);
     }
 
     /**

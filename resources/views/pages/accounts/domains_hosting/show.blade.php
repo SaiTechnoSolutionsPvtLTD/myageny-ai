@@ -4,10 +4,21 @@
 
 @push('styles')
 <style>
-.dh-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.dh-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); flex-wrap:wrap; gap:12px; }
-.dh-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; }
-.dh-sub { font-size:13px; color:#64748b; }
+.dh-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.dh-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.dh-topbar-left { display:flex; flex-direction:column; justify-content:center; }
+.dh-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.dh-breadcrumbs { font-size:12px; color:#9e9e9e; display:flex; align-items:center; gap:6px; margin-top:2px; }
+.dh-breadcrumbs a { color:#9e9e9e; text-decoration:none; transition:color .15s; }
+.dh-breadcrumbs a:hover { color:#fe5f04; }
+.dh-breadcrumbs .sep { color:#ccc; }
+.dh-breadcrumbs .current { color:#424242; font-weight:600; }
+.dh-topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.dh-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .dh-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .dh-body { padding:16px 20px 24px; }
+}
 
 .dh-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
 .dh-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 4px 14px rgba(254,95,4,.25); }
@@ -69,14 +80,9 @@
 @section('content')
 <div class="dh-page">
 
-    {{-- Topbar --}}
+    {{-- Standard Uniform Topbar --}}
     <div class="dh-topbar">
-        <div>
-            <div style="margin-bottom:6px;">
-                <a href="{{ route('accounts.domains-hosting.index', ['tab' => 'domains']) }}" class="dh-btn dh-btn-secondary" style="padding:4px 10px; font-size:12px;">
-                    <i class="bi bi-arrow-left"></i> Back to Domains & Hosting
-                </a>
-            </div>
+        <div class="dh-topbar-left">
             <div class="dh-title">
                 <i class="bi bi-globe" style="color:#fe5f04;"></i>
                 <span>{{ $domain->domain_name }}</span>
@@ -98,11 +104,18 @@
                     <span style="font-size:11px; padding:2px 8px; background:#eff6ff; color:#2563eb; border-radius:6px; font-weight:700;">GoDaddy API</span>
                 @endif
             </div>
-            <div class="dh-sub">
-                Registrar: <strong>{{ $domain->registrar }}</strong> • Registered Under: <strong>{{ $domain->company?->name ?? 'Default Company' }}</strong>
+            <div class="dh-breadcrumbs">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span class="sep">/</span>
+                <a href="{{ route('accounts.domains-hosting.index', ['tab' => 'domains']) }}">Domains & Hosting</a>
+                <span class="sep">/</span>
+                <span class="current">{{ $domain->domain_name }}</span>
             </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <div class="dh-topbar-actions">
+            <a href="{{ route('accounts.domains-hosting.index', ['tab' => 'domains']) }}" class="dh-btn dh-btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
             <button type="button" class="dh-btn dh-btn-outline" onclick="openMigrateModal()">
                 <i class="bi bi-arrow-left-right" style="color:#0284c7;"></i> Migrate Domain
             </button>
@@ -114,6 +127,8 @@
             </button>
         </div>
     </div>
+
+    <div class="dh-body">
 
     {{-- Alerts --}}
     @if(session('success'))
@@ -419,7 +434,7 @@
             </div>
         @endif
     </div>
-
+    </div>
 </div>
 
 {{-- MODAL 1: Migrate Domain Modal --}}
