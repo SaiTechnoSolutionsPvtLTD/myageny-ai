@@ -452,7 +452,14 @@ class ProductionTaskApiController extends Controller
 
         $validated = $request->validate([
             'department_id' => ['nullable', 'integer'],
-            'production_initiation_id' => ['required', 'integer', 'exists:production_initiations,id'],
+            'production_initiation_id' => ['required', function ($attribute, $value, $fail) {
+                if ($value === 'other' || $value === 'other_tasks' || $value === 0 || $value === '0') {
+                    return;
+                }
+                if (! is_numeric($value) || ! DB::table('production_initiations')->where('id', $value)->exists()) {
+                    $fail('Selected project does not exist.');
+                }
+            }],
             'task_description' => ['required', 'string', 'min:40'],
             'assigned_to_user_ids' => ['required', 'array', 'min:1'],
             'assigned_to_user_ids.*' => ['required', 'integer', 'exists:users,id'],
@@ -460,7 +467,6 @@ class ProductionTaskApiController extends Controller
             'attachments.*' => ['nullable', 'file', 'max:25600'],
         ], [
             'production_initiation_id.required' => 'Project Name is mandatory.',
-            'production_initiation_id.exists' => 'Selected project does not exist.',
             'task_description.required' => 'Task description is mandatory.',
             'task_description.min' => 'Task description must be at least 40 characters.',
             'assigned_to_user_ids.required' => 'Please select at least one team member to allocate.',
@@ -471,20 +477,35 @@ class ProductionTaskApiController extends Controller
         $allowedMembers = $this->getSupportTaskTeamMembers($user);
         $allowedUserIds = $allowedMembers->pluck('id')->all();
 
-        if (! $user->hasAdminLikeRole()) {
+        if (! $user->hasAdminLikeRole() && ! $user->isDevelopmentProjectCoordinator()) {
             foreach ($validated['assigned_to_user_ids'] as $uid) {
                 if (! in_array((int) $uid, $allowedUserIds, true)) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'You are only allowed to assign support tasks to team members reporting under you.',
+                        'message' => 'You are only allowed to assign support tasks to yourself or team members reporting under you.',
                     ], 403);
                 }
             }
         }
 
-        $project = ProductionInitiation::with(['lead', 'leadProduct'])->findOrFail($validated['production_initiation_id']);
-        $productName = $project->product_name ?: ($project->leadProduct?->product_name ?: 'Support Task');
-        $leadId = $project->lead_id;
+        $isOther = in_array((string) $validated['production_initiation_id'], ['other', 'other_tasks', '0'], true);
+
+        $project = null;
+        if (! $isOther) {
+            $project = ProductionInitiation::with(['lead', 'leadProduct'])->find($validated['production_initiation_id']);
+        }
+
+        if ($isOther || ! $project) {
+            $project = $this->getOrCreateOtherTasksProject($user);
+            $productName = 'Other Tasks';
+            $leadId = null;
+            $deliveryDate = null;
+        } else {
+            $productName = $project->product_name ?: ($project->leadProduct?->product_name ?: 'Support Task');
+            $leadId = $project->lead_id;
+            $deliveryDate = $project->project_delivery_date?->toDateString();
+        }
+
         $taskDate = Carbon::today('Asia/Kolkata')->toDateString();
         $taskDesc = trim((string) $validated['task_description']);
         $assignedUserIds = array_unique(array_map('intval', $validated['assigned_to_user_ids']));
@@ -816,31 +837,69 @@ class ProductionTaskApiController extends Controller
         $mappedIds = $visibility->descendantUserIds($user);
         $directManagedIds = $user->managedUsers()->pluck('users.id');
 
-        $subordinateIds = $mappedIds
+        if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
+            $members = User::where('is_active', true)
+                ->where('user_status', 'active')
+                ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                ->with(['roles.department', 'employeeOnboarding.department', 'internJoiningForm.department'])
+                ->orderBy('name')
+                ->get(['id', 'name', 'email']);
+
+            if (! $members->contains('id', $user->id)) {
+                $members->push($user);
+                $members = $members->sortBy('name')->values();
+            }
+
+            return $members;
+        }
+
+        $allowedIds = $mappedIds
             ->merge($directManagedIds)
-            ->reject(fn ($id) => (int) $id === (int) $user->id)
+            ->push($user->id)
             ->unique()
             ->filter()
             ->values();
 
-        if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
-            if ($subordinateIds->isEmpty()) {
-                return User::where('is_active', true)
-                    ->where('user_status', 'active')
-                    ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
-                    ->with(['roles.department', 'employeeOnboarding.department', 'internJoiningForm.department'])
-                    ->orderBy('name')
-                    ->get(['id', 'name', 'email']);
-            }
-        }
-
-        return User::whereIn('id', $subordinateIds)
+        $members = User::whereIn('id', $allowedIds)
             ->where('is_active', true)
             ->where('user_status', 'active')
             ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
             ->with(['roles.department', 'employeeOnboarding.department', 'internJoiningForm.department'])
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
+
+        if (! $members->contains('id', $user->id)) {
+            $members->push($user);
+            $members = $members->sortBy('name')->values();
+        }
+
+        return $members;
+    }
+
+    public function getOrCreateOtherTasksProject(User $user): ProductionInitiation
+    {
+        $existing = ProductionInitiation::withoutGlobalScopes()
+            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->where(function ($q) {
+                $q->where('product_name', 'Other Tasks')
+                  ->orWhere('company_name', 'Other Tasks');
+            })
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        return ProductionInitiation::create([
+            'company_id' => $user->company_id,
+            'company_name' => 'Other Tasks',
+            'client_name' => 'Internal',
+            'product_name' => 'Other Tasks',
+            'status' => 'approved',
+            'production_approval_status' => 'approved',
+            'project_execution_status' => 'ontrack',
+            'requirements' => 'General / Internal / Other Tasks',
+        ]);
     }
 
     /**

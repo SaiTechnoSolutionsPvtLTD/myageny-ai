@@ -402,14 +402,27 @@ Route::middleware(['auth'])->group(function () {
                 Route::patch('/{invoice}/update-sales-person', [App\Http\Controllers\InvoiceController::class, 'updateSalesPerson'])->name('update-sales-person');
                 Route::delete('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'destroy'])->name('destroy');
                 Route::get('/{invoice}/print', [App\Http\Controllers\InvoiceController::class, 'print'])->name('print');
+                Route::post('/{invoice}/send-email', [App\Http\Controllers\InvoiceController::class, 'sendEmail'])->name('send-email');
                 Route::post('/{invoice}/payments', [App\Http\Controllers\InvoicePaymentController::class, 'store'])->name('payments.store');
                 Route::delete('/{invoice}/payments/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroy'])->name('payments.destroy');
+                Route::post('/{invoice}/credit-notes', [App\Http\Controllers\CreditNoteController::class, 'storeForInvoice'])->name('credit-notes.store');
             });
 
             // Sales Payments Received against Invoices
             Route::prefix('payments')->name('payments.')->group(function () {
                 Route::get('/', [App\Http\Controllers\InvoicePaymentController::class, 'index'])->name('index');
                 Route::delete('/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroyStandalone'])->name('destroy');
+            });
+
+            // Sales Credit Notes (CN)
+            Route::prefix('credit-notes')->name('credit-notes.')->group(function () {
+                Route::get('/', [App\Http\Controllers\CreditNoteController::class, 'index'])->name('index');
+                Route::get('/create', [App\Http\Controllers\CreditNoteController::class, 'create'])->name('create');
+                Route::post('/', [App\Http\Controllers\CreditNoteController::class, 'storeStandalone'])->name('store');
+                Route::get('/{creditNote}', [App\Http\Controllers\CreditNoteController::class, 'show'])->name('show');
+                Route::get('/{creditNote}/print', [App\Http\Controllers\CreditNoteController::class, 'print'])->name('print');
+                Route::post('/{creditNote}/void', [App\Http\Controllers\CreditNoteController::class, 'toggleVoid'])->name('void');
+                Route::delete('/{creditNote}', [App\Http\Controllers\CreditNoteController::class, 'destroy'])->name('destroy');
             });
         });
 
@@ -425,6 +438,13 @@ Route::middleware(['auth'])->group(function () {
             Route::put('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'update'])->name('update');
             Route::delete('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'destroy'])->name('destroy');
             Route::delete('/{expense}/attachments/{index}', [App\Http\Controllers\AccountExpenseController::class, 'deleteAttachment'])->name('attachments.destroy');
+        });
+
+        // Accounts Reports Group
+        Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('/customer-balance-sheet', [App\Http\Controllers\CustomerBalanceSheetController::class, 'index'])->name('customer-balance-sheet');
+            Route::get('/customer-balance-sheet/export-pdf', [App\Http\Controllers\CustomerBalanceSheetController::class, 'exportPdf'])->name('customer-balance-sheet.export-pdf');
+            Route::get('/customer-balance-sheet/print', [App\Http\Controllers\CustomerBalanceSheetController::class, 'print'])->name('customer-balance-sheet.print');
         });
     });
 

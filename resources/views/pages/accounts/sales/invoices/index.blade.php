@@ -4,13 +4,18 @@
 
 @push('styles')
 <style>
-.inv-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.inv-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); flex-wrap:wrap; gap:12px; }
-.inv-breadcrumbs { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px; }
-.inv-breadcrumbs a { color:#64748b; text-decoration:none; }
+.inv-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.inv-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.inv-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.inv-breadcrumbs { font-size:12px; color:#9e9e9e; margin-top:2px; display:flex; align-items:center; gap:6px; }
+.inv-breadcrumbs a { color:#9e9e9e; text-decoration:none; }
 .inv-breadcrumbs a:hover { color:#fe5f04; }
-.inv-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; }
-.inv-sub { font-size:13px; color:#64748b; }
+.inv-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.inv-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .inv-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .inv-body { padding:16px 20px 24px; }
+}
 
 .acm-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
 .acm-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 4px 14px rgba(254,95,4,.25); }
@@ -81,6 +86,7 @@
 .status-paid { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
 .status-partially-paid { background:#fef3c7; color:#b45309; border:1px solid #fde68a; }
 .status-sent { background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; }
+.status-created { background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe; }
 .status-draft { background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; }
 .status-overdue { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
 .status-cancelled { background:#f1f5f9; color:#94a3b8; border:1px solid #cbd5e1; text-decoration:line-through; }
@@ -135,20 +141,19 @@
     {{-- Topbar --}}
     <div class="inv-topbar">
         <div>
+            <div class="inv-title">
+                <i class="bi bi-receipt" style="color:#fe5f04;"></i>
+                <span>Sales Invoices</span>
+            </div>
             <div class="inv-breadcrumbs">
                 <a href="{{ route('accounts.dashboard') }}">Accounts</a>
                 <span>/</span>
                 <span>Sales</span>
                 <span>/</span>
-                <span style="color:#0f172a;">Invoices</span>
+                <span style="color:#121212; font-weight:700;">Invoices</span>
             </div>
-            <div class="inv-title">
-                <i class="bi bi-receipt" style="color:#fe5f04;"></i>
-                <span>Sales Invoices</span>
-            </div>
-            <div class="inv-sub">Generate customer invoices, track collections, GST breakup, payment receipts, and balance dues.</div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div class="inv-actions">
             <a href="{{ route('accounts.master.invoice-settings.index') }}" class="acm-btn acm-btn-outline" title="Configure Invoice Format & Company Details">
                 <i class="bi bi-gear"></i> Invoice Settings
             </a>
@@ -157,6 +162,8 @@
             </a>
         </div>
     </div>
+
+    <div class="inv-body">
 
     {{-- Alerts --}}
     @if(session('success'))
@@ -266,8 +273,9 @@
                     <label class="filter-label">Status</label>
                     <select name="status" class="filter-control filter-select" onchange="this.form.submit()">
                         <option value="">All Statuses</option>
-                        <option value="draft" {{ request('status') === 'draft' ? 'selected' : '' }}>Draft</option>
+                        <option value="created" {{ request('status') === 'created' ? 'selected' : '' }}>Created</option>
                         <option value="sent" {{ request('status') === 'sent' ? 'selected' : '' }}>Sent</option>
+                        <option value="draft" {{ request('status') === 'draft' ? 'selected' : '' }}>Draft</option>
                         <option value="partially_paid" {{ request('status') === 'partially_paid' ? 'selected' : '' }}>Partially Paid</option>
                         <option value="paid" {{ request('status') === 'paid' ? 'selected' : '' }}>Paid</option>
                         <option value="overdue" {{ request('status') === 'overdue' ? 'selected' : '' }}>Overdue</option>
@@ -444,9 +452,10 @@
                 </div>
             @endif
         @endif
-    </div>
+    </div>{{-- /acm-card --}}
 
-</div>
+    </div>{{-- /inv-body --}}
+</div>{{-- /inv-page --}}
 
 {{-- Modal: Record Payment & TDS Deduction (Index) --}}
 <div id="indexRecordPaymentModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(3px); z-index:99999; align-items:center; justify-content:center; padding:16px;">

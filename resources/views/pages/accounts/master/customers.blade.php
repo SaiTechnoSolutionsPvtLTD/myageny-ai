@@ -4,10 +4,21 @@
 
 @push('styles')
 <style>
-.acm-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.acm-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); flex-wrap:wrap; gap:12px; }
-.acm-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; }
-.acm-sub { font-size:13px; color:#64748b; }
+.acm-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.acm-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.acm-topbar-left { display:flex; flex-direction:column; justify-content:center; }
+.acm-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.acm-breadcrumbs { font-size:12px; color:#9e9e9e; display:flex; align-items:center; gap:6px; margin-top:2px; }
+.acm-breadcrumbs a { color:#9e9e9e; text-decoration:none; transition:color .15s; }
+.acm-breadcrumbs a:hover { color:#fe5f04; }
+.acm-breadcrumbs .sep { color:#ccc; }
+.acm-breadcrumbs .current { color:#424242; font-weight:600; }
+.acm-topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.acm-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .acm-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .acm-body { padding:16px 20px 24px; }
+}
 
 .acm-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
 .acm-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 4px 14px rgba(254,95,4,.25); }
@@ -124,26 +135,32 @@
 @section('content')
 <div class="acm-page">
 
-    {{-- Topbar --}}
+    {{-- Standard Uniform Topbar --}}
     <div class="acm-topbar">
-        <div>
-            <div style="margin-bottom:6px;">
-                <a href="{{ route('accounts.master.index') }}" class="acm-btn acm-btn-secondary" style="padding:4px 10px; font-size:12px;">
-                    <i class="bi bi-arrow-left"></i> Back to Master Hub
-                </a>
-            </div>
+        <div class="acm-topbar-left">
             <div class="acm-title">
-                <i class="bi bi-people" style="color:#d97706;"></i>
+                <i class="bi bi-people" style="color:#fe5f04;"></i>
                 <span>Customer Master</span>
             </div>
-            <div class="acm-sub">Manage client directory, auto-fetch converted CRM leads, billing & shipping addresses, GST/PAN credentials, and payment terms</div>
+            <div class="acm-breadcrumbs">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span class="sep">/</span>
+                <a href="{{ route('accounts.master.index') }}">Master Hub</a>
+                <span class="sep">/</span>
+                <span class="current">Customers</span>
+            </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div class="acm-topbar-actions">
+            <a href="{{ route('accounts.master.index') }}" class="acm-btn acm-btn-secondary">
+                <i class="bi bi-arrow-left"></i> Master Hub
+            </a>
             <button type="button" class="acm-btn acm-btn-primary" onclick="openAddCustomerModal()">
                 <i class="bi bi-plus-lg"></i> Add New Customer
             </button>
         </div>
     </div>
+
+    <div class="acm-body">
 
     {{-- Alerts --}}
     @if(session('success'))
@@ -378,7 +395,7 @@
             @endif
         @endif
     </div>
-
+    </div>
 </div>
 
 {{-- Modal 1: Add Customer --}}
@@ -1061,6 +1078,9 @@
                     </span>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
+                    <a id="vBalanceSheetBtn" href="#" target="_blank" class="acm-btn acm-btn-primary" style="font-size:12px; padding:6px 14px;">
+                        <i class="bi bi-file-earmark-spreadsheet-fill"></i> Balance Sheet
+                    </a>
                     <button type="button" class="acm-btn acm-btn-secondary" onclick="closeModal('viewCustomerModal')">Close</button>
                     <button type="button" class="acm-btn acm-btn-outline" id="vEditCustomerBtn" onclick="">
                         <i class="bi bi-pencil-square"></i> Edit Customer
@@ -1231,6 +1251,12 @@ function openViewCustomerModal(customerId) {
             const createUrl = data.create_invoice_url || ("{{ route('accounts.sales.invoices.create') }}?customer_id=" + c.id);
             document.getElementById('vCreateInvoiceBtn').href = createUrl;
             document.getElementById('vCreateFirstInvoiceBtn').href = createUrl;
+
+            // Set Balance Sheet Link
+            const bsBtn = document.getElementById('vBalanceSheetBtn');
+            if (bsBtn) {
+                bsBtn.href = "{{ route('accounts.reports.customer-balance-sheet') }}?customer_id=" + c.id;
+            }
 
             // Set Financial KPIs
             document.getElementById('vTotalInvoicesCount').textContent = f.invoices_count;

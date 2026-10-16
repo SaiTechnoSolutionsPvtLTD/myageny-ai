@@ -215,6 +215,9 @@
                     <a href="{{ route('accounts.sales.payments.index') }}" class="submenu-item {{ request()->routeIs('accounts.sales.payments.*') ? 'active' : '' }}">
                         Payments
                     </a>
+                    <a href="{{ route('accounts.sales.credit-notes.index') }}" class="submenu-item {{ request()->routeIs('accounts.sales.credit-notes.*') ? 'active' : '' }}">
+                        Credit Notes
+                    </a>
                     <a href="{{ route('accounts.sales.invoices.create') }}" class="submenu-item {{ request()->routeIs('accounts.sales.invoices.create') ? 'active' : '' }}">
                         New Invoice
                     </a>
@@ -246,6 +249,31 @@
                     </a>
                     <a href="{{ route('accounts.expenses.pivot') }}" class="submenu-item {{ request()->routeIs('accounts.expenses.pivot') ? 'active' : '' }}">
                         Expense Pivot
+                    </a>
+                </div>
+
+                <!-- Reports Dropdown -->
+                <a href="javascript:void(0)"
+                   class="nav-item has-dropdown {{ request()->routeIs('accounts.reports.*') ? 'active open' : '' }}"
+                   onclick="toggleDropdown(this)">
+                    @if(request()->routeIs('accounts.reports.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                        </svg>
+                        <span>Reports</span>
+                        <img src="{{ asset('images/42_3081.svg') }}" alt="Expand" class="chevron">
+                    </div>
+                </a>
+
+                <!-- Reports Submenu -->
+                <div class="submenu {{ request()->routeIs('accounts.reports.*') ? 'show' : '' }}">
+                    <a href="{{ route('accounts.reports.customer-balance-sheet') }}" class="submenu-item {{ request()->routeIs('accounts.reports.customer-balance-sheet*') ? 'active' : '' }}">
+                        Customer Balance Sheet
                     </a>
                 </div>
 

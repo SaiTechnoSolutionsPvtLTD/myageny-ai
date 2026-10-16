@@ -88,6 +88,8 @@
             border: 1px solid #000000;
             box-shadow: 0 8px 24px rgba(0,0,0,.1);
             position: relative;
+            -webkit-box-decoration-break: clone;
+            box-decoration-break: clone;
         }
 
         /* Top Header */
@@ -353,7 +355,14 @@
 
         @page {
             size: A4 portrait;
-            margin: 8mm 6mm;
+            margin: 8mm 6mm 10mm 6mm;
+            @bottom-right {
+                content: counter(page);
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                font-size: 10px;
+                color: #64748b;
+                font-weight: 500;
+            }
         }
         @media print {
             body {
@@ -369,12 +378,21 @@
                 width: 100% !important;
                 border: 1px solid #000000 !important;
                 page-break-after: avoid;
+                -webkit-box-decoration-break: clone !important;
+                box-decoration-break: clone !important;
             }
             .party-head.party-right, .party-body.party-right {
                 border-right: none !important;
             }
             .th-item:last-child, .td-item:last-child {
                 border-right: none !important;
+            }
+            .inv-main-tbl tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            .page-num {
+                display: none !important;
             }
             * {
                 -webkit-print-color-adjust: exact !important;
@@ -623,25 +641,25 @@
                         <div style="margin-top:12px;">
                             <div style="font-size:11px; line-height:1.6; color:#000;">
                                 @if($setting?->bank_name)
-                                    <div>Bank Name - <strong>{{ $setting->bank_name }}</strong></div>
+                                    <div>Bank Name - {{ $setting->bank_name }}</div>
                                 @endif
                                 @if($setting?->account_name)
-                                    <div>Account Name - <strong>{{ $setting->account_name }}</strong></div>
+                                    <div>Account Name - {{ $setting->account_name }}</div>
                                 @endif
                                 @if($setting?->account_number)
-                                    <div>Account Number - <strong>{{ $setting->account_number }}</strong></div>
+                                    <div>Account Number - {{ $setting->account_number }}</div>
                                 @endif
                                 @if($setting?->ifsc_code)
-                                    <div>IFSC Code - <strong>{{ $setting->ifsc_code }}</strong></div>
+                                    <div>IFSC Code - {{ $setting->ifsc_code }}</div>
                                 @endif
                                 @if($setting?->branch)
-                                    <div>Branch - <strong>{{ $setting->branch }}</strong></div>
+                                    <div>Branch - {{ $setting->branch }}</div>
                                 @endif
                                 @if($setting?->upi_id)
-                                    <div>UPI ID - <strong>{{ $setting->upi_id }}</strong></div>
+                                    <div>UPI ID - {{ $setting->upi_id }}</div>
                                 @endif
                                 @if($setting?->swift_code)
-                                    <div>Swift Code - <strong>{{ $setting->swift_code }}</strong></div>
+                                    <div>Swift Code - {{ $setting->swift_code }}</div>
                                 @endif
                             </div>
                         </div>
@@ -697,12 +715,28 @@
                                     <td class="t-label">Total</td>
                                     <td class="t-val">₹{{ number_format((float) $invoice->total_amount, 2) }}</td>
                                 </tr>
+                                @if((float) $invoice->total_credited > 0)
+                                    <tr>
+                                        <td class="t-label">Credits Applied (CN)</td>
+                                        <td class="t-val" style="color:#b91c1c; font-weight:700;">
+                                            (-) {{ number_format((float) $invoice->total_credited, 2) }}
+                                        </td>
+                                    </tr>
+                                @endif
                                 <tr>
                                     <td class="t-label">Payment Made</td>
                                     <td class="t-val" style="color:{{ $invoice->paid_amount > 0 ? '#b91c1c' : '#000' }}; font-weight:700;">
                                         (-) {{ number_format((float) $invoice->paid_amount, 2) }}
                                     </td>
                                 </tr>
+                                @if((float) $invoice->total_tds > 0)
+                                    <tr>
+                                        <td class="t-label">Amount Withheld</td>
+                                        <td class="t-val" style="color:#b91c1c; font-weight:700;">
+                                            (-) {{ number_format((float) $invoice->total_tds, 2) }}
+                                        </td>
+                                    </tr>
+                                @endif
                                 <tr class="balance-row">
                                     <td class="t-label">Balance Due</td>
                                     <td class="t-val">₹{{ number_format((float) $invoice->balance_due, 2) }}</td>
@@ -729,6 +763,13 @@
     <div class="page-num">1</div>
 
     <script>
+    // Automatically open browser print preview on page load
+    window.addEventListener('load', function() {
+        setTimeout(function() {
+            window.print();
+        }, 400);
+    });
+
     document.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
             e.preventDefault();

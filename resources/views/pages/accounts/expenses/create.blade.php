@@ -4,10 +4,21 @@
 
 @push('styles')
 <style>
-.acc-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.acc-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); flex-wrap:wrap; gap:12px; }
-.acc-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; }
-.acc-sub { font-size:13px; color:#64748b; }
+.acc-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.acc-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.acc-topbar-left { display:flex; flex-direction:column; justify-content:center; }
+.acc-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.acc-breadcrumbs { font-size:12px; color:#9e9e9e; display:flex; align-items:center; gap:6px; margin-top:2px; }
+.acc-breadcrumbs a { color:#9e9e9e; text-decoration:none; transition:color .15s; }
+.acc-breadcrumbs a:hover { color:#fe5f04; }
+.acc-breadcrumbs .sep { color:#ccc; }
+.acc-breadcrumbs .current { color:#424242; font-weight:600; }
+.acc-topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.acc-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .acc-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .acc-body { padding:16px 20px 24px; }
+}
 
 .acc-btn { display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
 .acc-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 4px 14px rgba(254,95,4,.25); }
@@ -61,26 +72,32 @@
 @section('content')
 <div class="acc-page">
 
-    {{-- Topbar --}}
+    {{-- Standard Uniform Topbar --}}
     <div class="acc-topbar">
-        <div>
-            <div style="margin-bottom:6px;">
-                <a href="{{ route('accounts.expenses.index') }}" class="acc-btn acc-btn-secondary" style="padding:4px 10px; font-size:12px;">
-                    <i class="bi bi-arrow-left"></i> Back to Expense List
-                </a>
-            </div>
+        <div class="acc-topbar-left">
             <div class="acc-title">
                 <i class="bi bi-receipt" style="color:#fe5f04;"></i>
-                <span>Add Accounts Expense</span>
+                <span>Add Expense</span>
             </div>
-            <div class="acc-sub">Record a new office, operational, vendor, or administrative expense</div>
+            <div class="acc-breadcrumbs">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span class="sep">/</span>
+                <a href="{{ route('accounts.expenses.index') }}">Expenses</a>
+                <span class="sep">/</span>
+                <span class="current">Add Expense</span>
+            </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-            <a href="{{ route('accounts.dashboard') }}" class="acc-btn acc-btn-secondary">
-                <i class="bi bi-speedometer2"></i> Accounts Dashboard
+        <div class="acc-topbar-actions">
+            <a href="{{ route('accounts.expenses.index') }}" class="acc-btn acc-btn-secondary">
+                <i class="bi bi-arrow-left"></i> Cancel
             </a>
+            <button type="button" onclick="document.getElementById('expenseForm').requestSubmit ? document.getElementById('expenseForm').requestSubmit() : document.getElementById('expenseForm').submit()" class="acc-btn acc-btn-primary">
+                <i class="bi bi-check-circle-fill"></i> Save Expense
+            </button>
         </div>
     </div>
+
+    <div class="acc-body">
 
     {{-- Form Card --}}
     <div class="acc-card">
@@ -329,7 +346,7 @@
             </div>
         </form>
     </div>
-
+    </div>
 </div>
 
 @push('scripts')

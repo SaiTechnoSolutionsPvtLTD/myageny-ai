@@ -5,10 +5,18 @@
 @push('styles')
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
-.adb-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.adb-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); }
-.adb-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; }
-.adb-sub { font-size:13px; color:#64748b; }
+.adb-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.adb-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.adb-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.adb-breadcrumb { font-size:12px; color:#9e9e9e; margin-top:2px; display:flex; align-items:center; gap:6px; }
+.adb-breadcrumb a { color:#9e9e9e; text-decoration:none; }
+.adb-breadcrumb a:hover { color:#fe5f04; }
+.adb-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.adb-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .adb-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .adb-body { padding:16px 20px 24px; }
+}
 
 .adb-stats-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; }
 .adb-stat-card { background:#fff; border-radius:14px; padding:16px 20px; border:1px solid #e2e8f0; display:flex; align-items:center; gap:16px; box-shadow:0 2px 6px rgba(0,0,0,.02); }
@@ -90,14 +98,26 @@
     {{-- Topbar --}}
     <div class="adb-topbar">
         <div>
-            <div class="adb-title">Ad Budget — For Clients</div>
-            <div class="adb-sub">Raise & track Digital Marketing campaign ad budget requests with 2-stage approval</div>
+            <div class="adb-title">
+                <i class="bi bi-megaphone" style="color:#fe5f04;"></i>
+                <span>Ad Budget — For Clients</span>
+            </div>
+            <div class="adb-breadcrumb">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span>/</span>
+                <span>Ad Budget</span>
+                <span>/</span>
+                <span style="color:#121212; font-weight:700;">Clients</span>
+            </div>
         </div>
-        <button type="button" class="adb-btn adb-btn-primary" onclick="openRaiseModal()">
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Raise Request
-        </button>
+        <div class="adb-actions">
+            <button type="button" class="adb-btn adb-btn-primary" onclick="openRaiseModal()">
+                <i class="bi bi-plus-lg"></i> Raise Request
+            </button>
+        </div>
     </div>
+
+    <div class="adb-body">
 
     {{-- Flash messages --}}
     @if(session('success'))
@@ -369,7 +389,8 @@
         @endif
     </div>
 
-</div>
+    </div>{{-- /adb-body --}}
+</div>{{-- /adb-page --}}
 
 {{-- Raise Request Form Modal (Step 1) --}}
 <div class="modal-overlay" id="raiseModal">

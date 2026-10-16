@@ -6,11 +6,39 @@
 <style>
 .master-hub-page {
     min-height: 100%;
-    padding: 28px 28px 60px 28px;
+    display: flex;
+    flex-direction: column;
     background:
         radial-gradient(circle at top left, rgba(254, 95, 4, 0.08), transparent 30%),
         linear-gradient(180deg, #f7f3ee 0%, #f3f5f8 100%);
     font-family: 'Inter', sans-serif;
+}
+
+.master-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 0 28px;
+    min-height: 60px;
+    background: #fff;
+    border-bottom: 1px solid #e1dee3;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+}
+.master-topbar-left { display:flex; flex-direction:column; justify-content:center; }
+.master-topbar-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.master-breadcrumbs { font-size:12px; color:#9e9e9e; display:flex; align-items:center; gap:6px; margin-top:2px; }
+.master-breadcrumbs a { color:#9e9e9e; text-decoration:none; transition:color .15s; }
+.master-breadcrumbs a:hover { color:#fe5f04; }
+.master-breadcrumbs .sep { color:#ccc; }
+.master-breadcrumbs .current { color:#424242; font-weight:600; }
+.master-topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.master-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .master-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .master-body { padding:16px 20px 24px; }
 }
 
 .master-hub-hero {
@@ -271,6 +299,28 @@
 
 @section('content')
 <div class="master-hub-page">
+
+    {{-- Standard Uniform Topbar --}}
+    <div class="master-topbar">
+        <div class="master-topbar-left">
+            <div class="master-topbar-title">
+                <i class="bi bi-grid-1x2-fill" style="color:#fe5f04;"></i>
+                <span>Master Hub</span>
+            </div>
+            <div class="master-breadcrumbs">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span class="sep">/</span>
+                <span class="current">Master Hub</span>
+            </div>
+        </div>
+        <div class="master-topbar-actions">
+            <a href="{{ route('accounts.dashboard') }}" style="display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; background:#f1f5f9; color:#334155;">
+                <i class="bi bi-arrow-left"></i> Accounts Dashboard
+            </a>
+        </div>
+    </div>
+
+    <div class="master-body">
 
     {{-- Hero Section --}}
     <div class="master-hub-hero">
@@ -585,6 +635,6 @@
         </a>
 
     </div>
-
+    </div>
 </div>
 @endsection

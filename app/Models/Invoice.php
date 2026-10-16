@@ -52,6 +52,7 @@ class Invoice extends Model
         'total_amount',
         'paid_amount',
         'total_tds',
+        'total_credited',
         'balance_due',
         'customer_notes',
         'terms_conditions',
@@ -61,18 +62,19 @@ class Invoice extends Model
     ];
 
     protected $casts = [
-        'invoice_date' => 'date',
-        'due_date'     => 'date',
-        'subtotal'     => 'decimal:2',
-        'total_cgst'   => 'decimal:2',
-        'total_sgst'   => 'decimal:2',
-        'total_igst'   => 'decimal:2',
-        'total_tax'    => 'decimal:2',
-        'round_off'    => 'decimal:2',
-        'total_amount' => 'decimal:2',
-        'paid_amount'  => 'decimal:2',
-        'total_tds'    => 'decimal:2',
-        'balance_due'  => 'decimal:2',
+        'invoice_date'   => 'date',
+        'due_date'       => 'date',
+        'subtotal'       => 'decimal:2',
+        'total_cgst'     => 'decimal:2',
+        'total_sgst'     => 'decimal:2',
+        'total_igst'     => 'decimal:2',
+        'total_tax'      => 'decimal:2',
+        'round_off'      => 'decimal:2',
+        'total_amount'   => 'decimal:2',
+        'paid_amount'    => 'decimal:2',
+        'total_tds'      => 'decimal:2',
+        'total_credited' => 'decimal:2',
+        'balance_due'    => 'decimal:2',
     ];
 
     public function items()
@@ -85,8 +87,13 @@ class Invoice extends Model
         return $this->hasMany(InvoicePayment::class, 'invoice_id')->orderBy('payment_date', 'desc')->orderBy('id', 'desc');
     }
 
+    public function creditNotes()
+    {
+        return $this->hasMany(CreditNote::class, 'invoice_id')->orderBy('credit_note_date', 'desc')->orderBy('id', 'desc');
+    }
+
     /**
-     * Recalculate invoice payment status and balance due based on recorded payments and TDS.
+     * Recalculate invoice payment status and balance due based on recorded payments, TDS, and credit notes.
      */
     public function recalculatePaymentStatus(): void
     {
@@ -98,23 +105,26 @@ class Invoice extends Model
             $totalSettled = $totalReceived + $totalTds;
         }
 
+        $totalCredited = (float) $this->creditNotes()->where('status', '!=', 'void')->sum('total_amount');
+
         $grandTotal = (float) $this->total_amount;
-        $balanceDue = max(0, $grandTotal - $totalSettled);
+        $balanceDue = max(0, $grandTotal - $totalSettled - $totalCredited);
 
         $status = $this->status;
         if ($balanceDue <= 0.001 && $grandTotal > 0) {
-            $status = 'paid';
-        } elseif ($totalSettled > 0) {
+            $status = ($totalCredited >= $grandTotal && $totalSettled <= 0) ? 'cancelled' : 'paid';
+        } elseif ($totalSettled > 0 || $totalCredited > 0) {
             $status = 'partially_paid';
         } elseif ($status === 'paid' || $status === 'partially_paid') {
             $status = 'sent';
         }
 
         $this->update([
-            'paid_amount' => $totalReceived,
-            'total_tds'   => $totalTds,
-            'balance_due' => $balanceDue,
-            'status'      => $status,
+            'paid_amount'    => $totalReceived,
+            'total_tds'      => $totalTds,
+            'total_credited' => $totalCredited,
+            'balance_due'    => $balanceDue,
+            'status'         => $status,
         ]);
     }
 
@@ -170,6 +180,7 @@ class Invoice extends Model
             'paid'           => '<span class="acm-badge status-paid"><i class="bi bi-check-circle-fill"></i> Paid</span>',
             'partially_paid' => '<span class="acm-badge status-partially-paid"><i class="bi bi-pie-chart-fill"></i> Partially Paid</span>',
             'sent'           => '<span class="acm-badge status-sent"><i class="bi bi-send-fill"></i> Sent</span>',
+            'created'        => '<span class="acm-badge status-created"><i class="bi bi-file-earmark-check-fill"></i> Created</span>',
             'overdue'        => '<span class="acm-badge status-overdue"><i class="bi bi-exclamation-triangle-fill"></i> Overdue</span>',
             'cancelled'      => '<span class="acm-badge status-cancelled"><i class="bi bi-x-circle-fill"></i> Cancelled</span>',
             default          => '<span class="acm-badge status-draft"><i class="bi bi-file-earmark"></i> Draft</span>',

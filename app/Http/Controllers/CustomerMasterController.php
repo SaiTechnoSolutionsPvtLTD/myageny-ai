@@ -248,6 +248,13 @@ class CustomerMasterController extends Controller
             ->first();
 
         if ($existingRecent) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Customer already exists.',
+                    'customer' => $existingRecent,
+                ]);
+            }
             return redirect()->back()->with('success', 'Customer created successfully!');
         }
 
@@ -259,7 +266,15 @@ class CustomerMasterController extends Controller
         $validated['billing_country']  = $validated['billing_country'] ?: 'India';
         $validated['shipping_country'] = $validated['shipping_country'] ?: 'India';
 
-        CustomerMaster::create($validated);
+        $customer = CustomerMaster::create($validated);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Customer created successfully!',
+                'customer' => $customer,
+            ]);
+        }
 
         return redirect()->back()->with('success', 'Customer created successfully!');
     }

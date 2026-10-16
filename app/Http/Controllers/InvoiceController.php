@@ -6,12 +6,18 @@ use App\Models\CustomerMaster;
 use App\Models\Department;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\InvoicePayment;
 use App\Models\InvoiceSetting;
 use App\Models\ItemMaster;
+use App\Models\Lead;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Throwable;
 
 class InvoiceController extends Controller
 {
@@ -110,7 +116,7 @@ class InvoiceController extends Controller
             'balance_due'   => (float) $allInvoices->sum('balance_due'),
             'paid_count'    => $allInvoices->where('status', 'paid')->count(),
             'partial_count' => $allInvoices->where('status', 'partially_paid')->count(),
-            'draft_count'   => $allInvoices->where('status', 'draft')->count(),
+            'draft_count'   => $allInvoices->whereIn('status', ['draft', 'created'])->count(),
             'overdue_count' => $allInvoices->where('status', 'overdue')->count(),
         ];
 
@@ -154,6 +160,13 @@ class InvoiceController extends Controller
         $defaultTerms = $setting->terms_conditions ?: InvoiceSetting::defaultTerms();
         $defaultNotes = $setting->notes;
 
+        // Fetch Converted Leads for Quick Customer auto-fill
+        $convertedLeadIds = CustomerMasterController::getConvertedLeadIds($companyId);
+        $recentConvertedLeads = Lead::whereIn('id', $convertedLeadIds)
+            ->latest('id')
+            ->take(80)
+            ->get(['id', 'contact_name', 'company_name', 'mobile_number', 'email']);
+
         return view('pages.accounts.sales.invoices.create', compact(
             'invoiceNumber',
             'setting',
@@ -162,7 +175,8 @@ class InvoiceController extends Controller
             'salesUsers',
             'states',
             'defaultTerms',
-            'defaultNotes'
+            'defaultNotes',
+            'recentConvertedLeads'
         ));
     }
 
@@ -296,9 +310,15 @@ class InvoiceController extends Controller
             'paid_amount'        => 'nullable|numeric|min:0',
             'balance_due'        => 'required|numeric',
 
+            'payment_date'       => 'nullable|date',
+            'payment_mode'       => 'nullable|string|max:50',
+            'payment_reference'  => 'nullable|string|max:100',
+            'payment_bank_name'  => 'nullable|string|max:100',
+            'payment_notes'      => 'nullable|string',
+
             'customer_notes'     => 'nullable|string',
             'terms_conditions'   => 'nullable|string',
-            'status'             => 'nullable|string|in:draft,sent,paid,partially_paid,overdue,cancelled',
+            'status'             => 'nullable|string|in:draft,created,sent,paid,partially_paid,overdue,cancelled',
         ]);
 
         if (empty($validated['customer_name']) && !empty($request->customer_id)) {
@@ -339,23 +359,31 @@ class InvoiceController extends Controller
 
         DB::beginTransaction();
         try {
-            // Determine automatic status based on payment made
+            // Determine automatic status based on payment made and email flag
             $grandTotal = (float) $validated['total_amount'];
             $paidAmount = (float) ($validated['paid_amount'] ?? 0);
             $balanceDue = max(0, $grandTotal - $paidAmount);
 
-            $status = $validated['status'] ?? 'draft';
-            if ($status === 'draft' || empty($status)) {
-                if ($paidAmount >= $grandTotal && $grandTotal > 0) {
-                    $status = 'paid';
-                } elseif ($paidAmount > 0) {
-                    $status = 'partially_paid';
-                } else {
-                    $status = 'sent';
-                }
+            $status = $validated['status'] ?? null;
+            if ($status === 'draft') {
+                // Keep draft if user clicked Save as Draft
+            } elseif ($paidAmount >= $grandTotal && $grandTotal > 0) {
+                $status = 'paid';
+            } elseif ($paidAmount > 0) {
+                $status = 'partially_paid';
+            } else {
+                // If mail is sent -> 'sent'; otherwise just created -> 'created'
+                $status = $request->boolean('send_email') ? 'sent' : ($status ?: 'created');
             }
 
-            $invoiceData = collect($validated)->except(['items'])->toArray();
+            $invoiceData = collect($validated)->except([
+                'items',
+                'payment_date',
+                'payment_mode',
+                'payment_reference',
+                'payment_bank_name',
+                'payment_notes',
+            ])->toArray();
             $invoiceData['company_id']  = $companyId;
             $invoiceData['created_by']  = $userId;
             $invoiceData['updated_by']  = $userId;
@@ -380,6 +408,39 @@ class InvoiceController extends Controller
                 InvoiceItem::create($itemRow);
             }
 
+            // If payment was made during invoice creation, record InvoicePayment history entry
+            if ($paidAmount > 0) {
+                $payCount = InvoicePayment::where('company_id', $companyId)->count() + 1;
+                $paymentNumber = 'RCP-' . date('ym') . '-' . str_pad($payCount, 4, '0', STR_PAD_LEFT);
+
+                $paymentDate = $request->input('payment_date') ?: ($invoice->invoice_date?->toDateString() ?: now()->toDateString());
+                $paymentMode = $request->input('payment_mode') ?: 'bank_transfer';
+                $paymentRef  = trim((string) $request->input('payment_reference')) ?: null;
+                $paymentBank = trim((string) $request->input('payment_bank_name')) ?: null;
+                $paymentNote = trim((string) $request->input('payment_notes')) ?: 'Initial payment recorded during invoice creation.';
+
+                InvoicePayment::create([
+                    'company_id'           => $companyId,
+                    'invoice_id'           => $invoice->id,
+                    'customer_id'          => $invoice->customer_id,
+                    'payment_number'       => $paymentNumber,
+                    'payment_date'         => $paymentDate,
+                    'amount_received'      => $paidAmount,
+                    'is_tds_deducted'      => false,
+                    'tds_percentage'       => 0,
+                    'tds_amount'           => 0,
+                    'total_settled_amount' => $paidAmount,
+                    'payment_mode'         => $paymentMode,
+                    'reference_number'     => $paymentRef,
+                    'bank_name'            => $paymentBank,
+                    'notes'                => $paymentNote,
+                    'recorded_by'          => $userId,
+                ]);
+
+                // Ensure invoice status, totals & balance_due are completely in sync
+                $invoice->recalculatePaymentStatus();
+            }
+
             // Auto-increment next_number in invoice settings if this matched format
             $setting = InvoiceSetting::forCompany($companyId);
             $expectedNumber = $setting->formatInvoiceNumber($setting->next_number);
@@ -388,6 +449,80 @@ class InvoiceController extends Controller
             }
 
             DB::commit();
+
+            // Handle email dispatch if requested by user
+            $mailSent = false;
+            $mailError = null;
+            if ($request->boolean('send_email')) {
+                $recipientEmail = trim((string) ($invoice->customer_email ?: $invoice->customer?->email));
+                if (!empty($recipientEmail) && filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+                    try {
+                        $invoice->loadMissing(['items.itemMaster', 'customer', 'salesPerson', 'creator']);
+                        $mailSetting = InvoiceSetting::forCompany($companyId);
+
+                        $pdf = null;
+                        try {
+                            $pdf = Pdf::loadView('pages.accounts.sales.invoices.pdf', [
+                                'invoice' => $invoice,
+                                'setting' => $mailSetting,
+                                'companyName' => $mailSetting->company_name ?: config('app.name'),
+                            ])
+                            ->setPaper('a4', 'portrait')
+                            ->setOptions([
+                                'defaultFont' => 'DejaVu Sans',
+                                'isHtml5ParserEnabled' => true,
+                                'isRemoteEnabled' => true,
+                                'isPhpEnabled' => true,
+                            ]);
+                        } catch (Throwable $pdfEx) {
+                            Log::warning('Invoice PDF generation failed: ' . $pdfEx->getMessage());
+                        }
+
+                        $companyName = $mailSetting->company_name ?: config('app.name');
+                        $subject = "Tax Invoice #{$invoice->invoice_number} from {$companyName}";
+                        $customerName = $invoice->customer_name;
+                        $filename = 'Invoice_' . str_replace(['/', '\\'], '_', $invoice->invoice_number) . '.pdf';
+
+                        Mail::send('emails.invoice', [
+                            'invoice'     => $invoice,
+                            'setting'     => $mailSetting,
+                            'companyName' => $companyName,
+                        ], function ($message) use ($recipientEmail, $customerName, $subject, $pdf, $filename) {
+                            $message->to($recipientEmail, $customerName ?: null)
+                                    ->subject($subject);
+                            if ($pdf) {
+                                $message->attachData($pdf->output(), $filename, [
+                                    'mime' => 'application/pdf',
+                                ]);
+                            }
+                        });
+
+                        $mailSent = true;
+
+                        if ($invoice->status === 'draft' || $invoice->status === 'created') {
+                            $invoice->update(['status' => 'sent']);
+                        }
+                    } catch (Throwable $mailEx) {
+                        Log::error('Invoice email sending failed: ' . $mailEx->getMessage(), [
+                            'invoice_id' => $invoice->id,
+                            'email'      => $recipientEmail,
+                        ]);
+                        $mailError = $mailEx->getMessage();
+                    }
+                } else {
+                    $mailError = 'Customer does not have a valid email address.';
+                }
+            }
+
+            if ($mailSent) {
+                return redirect()->route('accounts.sales.invoices.show', $invoice->id)
+                                 ->with('success', "Invoice #{$invoice->invoice_number} created and email successfully sent to {$invoice->customer_email}!");
+            }
+
+            if ($mailError && $request->boolean('send_email')) {
+                return redirect()->route('accounts.sales.invoices.show', $invoice->id)
+                                 ->with('success', "Invoice #{$invoice->invoice_number} created successfully, but mail could not be sent: {$mailError}");
+            }
 
             return redirect()->route('accounts.sales.invoices.show', $invoice->id)
                              ->with('success', "Invoice #{$invoice->invoice_number} created successfully!");
@@ -578,6 +713,33 @@ class InvoiceController extends Controller
                 InvoiceItem::create($itemRow);
             }
 
+            // If invoice has no payments yet but paid_amount is provided, record initial payment entry
+            if ($invoice->payments()->doesntExist() && $paidAmount > 0) {
+                $payCount = InvoicePayment::where('company_id', $invoice->company_id)->count() + 1;
+                $paymentNumber = 'RCP-' . date('ym') . '-' . str_pad($payCount, 4, '0', STR_PAD_LEFT);
+
+                InvoicePayment::create([
+                    'company_id'           => $invoice->company_id,
+                    'invoice_id'           => $invoice->id,
+                    'customer_id'          => $invoice->customer_id,
+                    'payment_number'       => $paymentNumber,
+                    'payment_date'         => $invoice->invoice_date?->toDateString() ?: now()->toDateString(),
+                    'amount_received'      => $paidAmount,
+                    'is_tds_deducted'      => false,
+                    'tds_percentage'       => 0,
+                    'tds_amount'           => 0,
+                    'total_settled_amount' => $paidAmount,
+                    'payment_mode'         => 'bank_transfer',
+                    'notes'                => 'Initial payment recorded during invoice update.',
+                    'recorded_by'          => auth()->id(),
+                ]);
+            }
+
+            // Sync invoice totals and status based on recorded payments
+            if ($invoice->payments()->exists()) {
+                $invoice->recalculatePaymentStatus();
+            }
+
             DB::commit();
 
             return redirect()->route('accounts.sales.invoices.show', $invoice->id)
@@ -637,6 +799,95 @@ class InvoiceController extends Controller
         }
 
         return redirect()->back()->with('success', 'Sales Person updated successfully.');
+    }
+
+    /**
+     * Send or re-send the invoice email with PDF attachment to customer.
+     */
+    public function sendEmail(Request $request, Invoice $invoice)
+    {
+        $validated = $request->validate([
+            'recipient_email' => 'required|email|max:255',
+            'subject'         => 'nullable|string|max:255',
+        ]);
+
+        $recipientEmail = trim($validated['recipient_email']);
+        $invoice->loadMissing(['items.itemMaster', 'customer', 'salesPerson', 'creator']);
+        $companyId   = $invoice->company_id ?: auth()->user()?->company_id;
+        $setting     = InvoiceSetting::forCompany($companyId);
+        $companyName = $setting->company_name ?: config('app.name');
+
+        if (empty($invoice->customer_email) || $invoice->customer_email !== $recipientEmail) {
+            $invoice->update(['customer_email' => $recipientEmail]);
+        }
+
+        $pdf = null;
+        try {
+            $pdf = Pdf::loadView('pages.accounts.sales.invoices.pdf', [
+                'invoice'     => $invoice,
+                'setting'     => $setting,
+                'companyName' => $companyName,
+            ])
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'defaultFont'          => 'DejaVu Sans',
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled'      => true,
+                'isPhpEnabled'         => true,
+            ]);
+        } catch (Throwable $pdfEx) {
+            Log::warning('Invoice PDF generation failed: ' . $pdfEx->getMessage());
+        }
+
+        $subject      = !empty($validated['subject']) ? $validated['subject'] : "Tax Invoice #{$invoice->invoice_number} from {$companyName}";
+        $customerName = $invoice->customer_name;
+        $filename     = 'Invoice_' . str_replace(['/', '\\'], '_', $invoice->invoice_number) . '.pdf';
+
+        try {
+            Mail::send('emails.invoice', [
+                'invoice'     => $invoice,
+                'setting'     => $setting,
+                'companyName' => $companyName,
+            ], function ($message) use ($recipientEmail, $customerName, $subject, $pdf, $filename) {
+                $message->to($recipientEmail, $customerName ?: null)
+                        ->subject($subject);
+                if ($pdf) {
+                    $message->attachData($pdf->output(), $filename, [
+                        'mime' => 'application/pdf',
+                    ]);
+                }
+            });
+
+            // Update status to 'sent' if draft or created, or if unpaid
+            if ($invoice->status === 'draft' || $invoice->status === 'created' || ($invoice->paid_amount <= 0 && $invoice->status !== 'cancelled')) {
+                $invoice->update(['status' => 'sent']);
+            }
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success'      => true,
+                    'message'      => "Invoice #{$invoice->invoice_number} email sent successfully to {$recipientEmail}!",
+                    'status'       => $invoice->status,
+                    'status_badge' => $invoice->status_badge,
+                ]);
+            }
+
+            return redirect()->back()->with('success', "Invoice #{$invoice->invoice_number} email sent successfully to {$recipientEmail}!");
+        } catch (Throwable $mailEx) {
+            Log::error('Invoice email sending failed: ' . $mailEx->getMessage(), [
+                'invoice_id' => $invoice->id,
+                'email'      => $recipientEmail,
+            ]);
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to send email: ' . $mailEx->getMessage(),
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'Failed to send email: ' . $mailEx->getMessage());
+        }
     }
 
     /**

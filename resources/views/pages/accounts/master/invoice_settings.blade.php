@@ -4,13 +4,21 @@
 
 @push('styles')
 <style>
-.inv-page { display:flex; flex-direction:column; gap:22px; padding:24px 28px; background:#f4f5f7; font-family:'Inter',sans-serif; min-height:100%; }
-.inv-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); flex-wrap:wrap; gap:12px; }
-.inv-breadcrumbs { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px; }
-.inv-breadcrumbs a { color:#64748b; text-decoration:none; }
+.inv-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
+.inv-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.inv-topbar-left { display:flex; flex-direction:column; justify-content:center; }
+.inv-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.inv-breadcrumbs { font-size:12px; color:#9e9e9e; display:flex; align-items:center; gap:6px; margin-top:2px; }
+.inv-breadcrumbs a { color:#9e9e9e; text-decoration:none; transition:color .15s; }
 .inv-breadcrumbs a:hover { color:#fe5f04; }
-.inv-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; }
-.inv-sub { font-size:13px; color:#64748b; }
+.inv-breadcrumbs .sep { color:#ccc; }
+.inv-breadcrumbs .current { color:#424242; font-weight:600; }
+.inv-topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.inv-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+@media (max-width: 900px) {
+    .inv-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .inv-body { padding:16px 20px 24px; }
+}
 
 .acm-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 18px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
 .acm-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 4px 14px rgba(254,95,4,.25); }
@@ -67,21 +75,22 @@
 @section('content')
 <div class="inv-page">
 
-    {{-- Topbar --}}
+    {{-- Standard Uniform Topbar --}}
     <div class="inv-topbar">
-        <div>
-            <div class="inv-breadcrumbs">
-                <a href="{{ route('accounts.master.index') }}">Accounts Master Hub</a>
-                <span>/</span>
-                <span style="color:#0f172a;">Invoice Settings</span>
-            </div>
+        <div class="inv-topbar-left">
             <div class="inv-title">
-                <i class="bi bi-receipt-cutoff" style="color:#e11d48;"></i>
+                <i class="bi bi-receipt-cutoff" style="color:#fe5f04;"></i>
                 <span>Invoice Settings</span>
             </div>
-            <div class="inv-sub">Configure invoice numbering format, branding logo, company details, banking & UPI credentials, terms & conditions, and authorized signature.</div>
+            <div class="inv-breadcrumbs">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span class="sep">/</span>
+                <a href="{{ route('accounts.master.index') }}">Master Hub</a>
+                <span class="sep">/</span>
+                <span class="current">Invoice Settings</span>
+            </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div class="inv-topbar-actions">
             <a href="{{ route('accounts.master.index') }}" class="acm-btn acm-btn-secondary">
                 <i class="bi bi-arrow-left"></i> Back to Master
             </a>
@@ -90,6 +99,8 @@
             </button>
         </div>
     </div>
+
+    <div class="inv-body">
 
     {{-- Alerts --}}
     @if(session('success'))
@@ -513,7 +524,7 @@
         @csrf
         @method('DELETE')
     </form>
-
+    </div>
 </div>
 
 @push('scripts')

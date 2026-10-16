@@ -445,6 +445,7 @@
                         <label class="pts-label">Product / Project</label>
                         <select name="filter_project_id" class="pts-select select2 filter-project-select" data-placeholder="All Projects">
                             <option value="">All Projects</option>
+                            <option value="other" @selected(($filters['filter_project_id'] ?? '') === 'other')>Other Tasks</option>
                             @foreach($assignedProjects as $project)
                                 <option value="{{ $project->id }}" @selected($filters['filter_project_id'] === (string) $project->id)>
                                     {{ $project->product_name }} | {{ $project->company_name ?: ($project->lead?->company_name ?: 'No company') }}
@@ -534,12 +535,13 @@
 
                                         // Prepare clean JSON representation for modal
                                         $tasksData = $group->map(function($t, $idx) {
+                                            $isOther = ($t->product_name === 'Other Tasks') || (empty($t->production_initiation_id) && empty($t->lead_id)) || ($t->project?->product_name === 'Other Tasks');
                                             return [
                                                 'id' => $t->id,
                                                 'sno' => $idx + 1,
                                                 'lead_id' => $t->lead_id ? 'LD-' . str_pad($t->lead_id, 4, '0', STR_PAD_LEFT) : 'N/A',
-                                                'lead_company' => $t->lead?->company_name ?: ($t->project?->company_name ?: 'No Company'),
-                                                'product_name' => $t->product_name ?: ($t->project?->product_name ?: 'General Task'),
+                                                'lead_company' => $t->lead?->company_name ?: ($t->project?->company_name ?: ($isOther ? 'Other Tasks' : 'No Company')),
+                                                'product_name' => $t->product_name ?: ($t->project?->product_name ?: ($isOther ? 'Other Tasks' : 'General Task')),
                                                 'task_description' => $t->task_description,
                                                 'attachments' => $t->attachment_list,
                                                 'status' => $t->status,
@@ -550,7 +552,8 @@
                                         })->values();
 
                                         $uniqueCompanies = $group->map(function ($task) {
-                                            return $task->lead?->company_name ?: ($task->project?->company_name ?: 'No Company');
+                                            $isOther = ($task->product_name === 'Other Tasks') || (empty($task->production_initiation_id) && empty($task->lead_id)) || ($task->project?->product_name === 'Other Tasks');
+                                            return $task->lead?->company_name ?: ($task->project?->company_name ?: ($isOther ? 'Other Tasks' : 'No Company'));
                                         })->unique()->values();
 
                                         $groupAttachmentCount = $group->sum(function ($task) {
@@ -731,11 +734,7 @@
             <div>
                 <div class="pts-card-title" style="font-size:17px; font-weight:900; color:#111827;">Add Support Task</div>
                 <div class="pts-card-sub" style="margin-top:2px;">
-                    @if(!empty($userDepartmentName))
-                        Allocate {{ $userDepartmentName }} support task to team members mapped under your supervision.
-                    @else
-                        Allocate support task to team members mapped under your supervision.
-                    @endif
+                    Allocate support task to yourself or team members mapped under your supervision.
                 </div>
             </div>
         </div>
@@ -755,18 +754,17 @@
                 </label>
                 <select name="production_initiation_id" id="st_production_initiation_id" class="pts-select pts-modal-select2" required data-placeholder="Choose project...">
                     <option value="">-- Select Project --</option>
+                    <option value="other">Other Tasks</option>
                     @foreach($supportTaskProjects ?? [] as $proj)
-                        <option value="{{ $proj->id }}">
-                            {{ $proj->resolved_company_name ?? 'Client' }} — {{ $proj->resolved_product_name ?? 'Project' }}
-                        </option>
+                        @if(strtolower(trim($proj->resolved_product_name ?? '')) !== 'other tasks' && strtolower(trim($proj->resolved_company_name ?? '')) !== 'other tasks')
+                            <option value="{{ $proj->id }}">
+                                {{ $proj->resolved_company_name ?? 'Client' }} — {{ $proj->resolved_product_name ?? 'Project' }}
+                            </option>
+                        @endif
                     @endforeach
                 </select>
                 <div class="pts-help" style="font-size:12px; color:#64748b; margin-top:4px;">
-                    @if(!empty($userDepartmentName))
-                        Showing approved {{ $userDepartmentName }} projects.
-                    @else
-                        Select the approved production project requiring support.
-                    @endif
+                    Select <strong>Other Tasks</strong> or choose an approved production project requiring support.
                 </div>
             </div>
 
@@ -775,15 +773,15 @@
                 <label class="pts-label" for="st_assigned_to_user_ids">
                     Allocation (Team Members) <span class="req" style="color:#ef4444;">*</span>
                 </label>
-                <select name="assigned_to_user_ids[]" id="st_assigned_to_user_ids" class="pts-select pts-modal-select2" multiple required data-placeholder="Select team members under your supervision...">
+                <select name="assigned_to_user_ids[]" id="st_assigned_to_user_ids" class="pts-select pts-modal-select2" multiple required data-placeholder="Select yourself or team members...">
                     @foreach($supportTaskTeamMembers ?? [] as $member)
                         <option value="{{ $member->id }}">
-                            {{ $member->name }} ({{ $member->role_display_name ?: 'Team Member' }})
+                            {{ $member->name }} ({{ $member->role_display_name ?: 'Team Member' }}){{ (int)$member->id === (int)auth()->id() ? ' (You)' : '' }}
                         </option>
                     @endforeach
                 </select>
                 <div class="pts-help" style="font-size:12px; color:#64748b; margin-top:4px;">
-                    Select one or more team members mapped under your supervision.
+                    Select yourself or team members mapped under your supervision.
                 </div>
             </div>
 

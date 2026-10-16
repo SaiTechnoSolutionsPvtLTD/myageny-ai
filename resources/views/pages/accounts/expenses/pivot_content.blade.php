@@ -1,9 +1,21 @@
 <style>
 /* Pivot Content Styles */
-.pivot-wrapper { display:flex; flex-direction:column; gap:20px; font-family:'Inter',sans-serif; }
-.pivot-topbar { display:flex; align-items:center; justify-content:space-between; background:#fff; padding:18px 24px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 2px 6px rgba(0,0,0,.02); flex-wrap:wrap; gap:12px; }
-.pivot-title { font-size:20px; font-weight:800; color:#0f172a; margin-bottom:2px; display:flex; align-items:center; gap:10px; }
-.pivot-sub { font-size:13px; color:#64748b; }
+.pivot-wrapper { display:flex; flex-direction:column; font-family:'Inter',sans-serif; }
+.pivot-topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:0 28px; min-height:60px; background:#fff; border-bottom:1px solid #e1dee3; position:sticky; top:0; z-index:30; }
+.pivot-topbar-left { display:flex; flex-direction:column; justify-content:center; }
+.pivot-title { font-size:18px; font-weight:800; color:#121212; display:flex; align-items:center; gap:8px; line-height:1.2; }
+.pivot-breadcrumbs { font-size:12px; color:#9e9e9e; display:flex; align-items:center; gap:6px; margin-top:2px; }
+.pivot-breadcrumbs a { color:#9e9e9e; text-decoration:none; transition:color .15s; }
+.pivot-breadcrumbs a:hover { color:#fe5f04; }
+.pivot-breadcrumbs .sep { color:#ccc; }
+.pivot-breadcrumbs .current { color:#424242; font-weight:600; }
+.pivot-topbar-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.pivot-body { padding:22px 28px 34px; display:flex; flex-direction:column; gap:20px; flex:1; }
+.modal-pivot-body .pivot-body { padding:0; }
+@media (max-width: 900px) {
+    .pivot-topbar { padding:14px 20px; flex-direction:column; align-items:flex-start; gap:12px; min-height:auto; }
+    .pivot-body { padding:16px 20px 24px; }
+}
 
 .acc-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
 .acc-btn-primary { background:linear-gradient(135deg,#fe5f04,#ff7c30); color:#fff; box-shadow:0 4px 14px rgba(254,95,4,.25); }
@@ -105,19 +117,20 @@
     {{-- Standalone Page Topbar (Shown only if not in modal) --}}
     @if(empty($isModal))
     <div class="pivot-topbar">
-        <div>
-            <div style="margin-bottom:6px;">
-                <a href="{{ route('accounts.expenses.index') }}" class="acc-btn acc-btn-secondary" style="padding:4px 10px; font-size:12px;">
-                    <i class="bi bi-arrow-left"></i> Back to Expense List
-                </a>
-            </div>
+        <div class="pivot-topbar-left">
             <div class="pivot-title">
                 <i class="bi bi-table" style="color:#fe5f04;"></i>
                 <span>Expense Pivot Report</span>
             </div>
-            <div class="pivot-sub">Category & Subcategory-wise aggregation with Fixed vs Variable split and full expense breakdown</div>
+            <div class="pivot-breadcrumbs">
+                <a href="{{ route('accounts.dashboard') }}">Accounts</a>
+                <span class="sep">/</span>
+                <a href="{{ route('accounts.expenses.index') }}">Expenses</a>
+                <span class="sep">/</span>
+                <span class="current">Pivot Report</span>
+            </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;" class="no-print">
+        <div class="pivot-topbar-actions no-print">
             <button type="button" class="acc-btn acc-btn-outline" onclick="window.print()">
                 <i class="bi bi-printer"></i> Print / Export
             </button>
@@ -127,6 +140,8 @@
         </div>
     </div>
     @endif
+
+    <div class="pivot-body">
 
     {{-- KPI Cards --}}
     <div class="acc-stats-grid">
@@ -493,7 +508,7 @@
         </div>
         @endif
     </div>
-
+    </div>
 </div>
 
 <script>

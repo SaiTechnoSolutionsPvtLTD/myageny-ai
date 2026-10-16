@@ -4,16 +4,24 @@
 
 @push('styles')
 <style>
-.inv-page { display:flex; flex-direction:column; gap:20px; padding:24px 28px; background:#f8fafc; font-family:'Inter',sans-serif; min-height:100%; }
+.inv-page { display:flex; flex-direction:column; min-height:100%; background:#f4f5f7; font-family:'Inter',sans-serif; }
 .inv-topbar {
     background: #ffffff;
-    padding: 16px 24px;
-    border-radius: 16px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    padding: 12px 28px;
+    border-bottom: 1px solid #e1dee3;
+    border-radius: 0;
+    box-shadow: none;
+    position: sticky;
+    top: 0;
+    z-index: 30;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
+}
+.inv-body { padding: 22px 28px 34px; display: flex; flex-direction: column; gap: 20px; flex: 1; }
+@media (max-width: 900px) {
+    .inv-topbar { padding: 12px 20px; }
+    .inv-body { padding: 16px 20px 24px; }
 }
 .inv-top-nav {
     display: flex;
@@ -192,62 +200,64 @@
     font-size: 10px;
 }
 
-/* Primary Action Buttons */
+/* Primary Action Buttons (Compact & Small) */
 .inv-header-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 .inv-btn-primary {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 9px 18px;
-    border-radius: 10px;
-    font-size: 13px;
+    gap: 5px;
+    padding: 6px 13px;
+    border-radius: 8px;
+    font-size: 12px;
     font-weight: 700;
     text-decoration: none;
     background: linear-gradient(135deg, #fe5f04, #ff7c30);
     color: #ffffff !important;
     border: none;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(254,95,4,0.25);
-    transition: all .2s ease;
+    box-shadow: 0 2px 6px rgba(254,95,4,0.18);
+    transition: all .15s ease;
+    line-height: 1.2;
 }
 .inv-btn-primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(254,95,4,0.35);
+    box-shadow: 0 4px 10px rgba(254,95,4,0.28);
     color: #ffffff !important;
 }
 .inv-btn-success {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 9px 18px;
-    border-radius: 10px;
-    font-size: 13px;
+    gap: 5px;
+    padding: 6px 13px;
+    border-radius: 8px;
+    font-size: 12px;
     font-weight: 700;
     text-decoration: none;
     background: linear-gradient(135deg, #16a34a, #15803d);
     color: #ffffff !important;
     border: none;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(22,163,74,0.25);
-    transition: all .2s ease;
+    box-shadow: 0 2px 6px rgba(22,163,74,0.18);
+    transition: all .15s ease;
+    line-height: 1.2;
 }
 .inv-btn-success:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(22,163,74,0.35);
+    box-shadow: 0 4px 10px rgba(22,163,74,0.28);
     color: #ffffff !important;
 }
 .inv-btn-secondary {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 9px 16px;
-    border-radius: 10px;
-    font-size: 13px;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
     font-weight: 700;
     text-decoration: none;
     background: #ffffff;
@@ -256,11 +266,81 @@
     cursor: pointer;
     box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     transition: all .15s ease;
+    line-height: 1.2;
 }
 .inv-btn-secondary:hover {
     background: #f8fafc;
     border-color: #94a3b8;
     color: #0f172a !important;
+}
+.inv-btn-danger-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    background: #fef2f2;
+    color: #b91c1c !important;
+    border: 1px solid #fecaca;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    transition: all .15s ease;
+    line-height: 1.2;
+}
+.inv-btn-danger-outline:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #991b1b !important;
+}
+
+/* Actions Dropdown */
+.inv-actions { position:relative; display:inline-flex; }
+.inv-action-trigger {
+    display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:8px;
+    font-size:12px; font-weight:700; color:#334155; background:#fff; border:1px solid #cbd5e1;
+    cursor:pointer; transition:all .15s ease; font-family:inherit; line-height:1.2;
+}
+.inv-action-trigger:hover,
+.inv-actions.open .inv-action-trigger {
+    border-color:#fe5f04; color:#fe5f04; background:#fff7ed; box-shadow:0 2px 8px rgba(254,95,4,.15);
+}
+.inv-actions.open .inv-action-trigger .bi-chevron-down {
+    transform:rotate(180deg);
+}
+.inv-action-menu {
+    position:absolute; top:calc(100% + 6px); right:0; min-width:195px; padding:6px; border-radius:10px;
+    border:1px solid #e2e8f0; background:#fff; box-shadow:0 12px 30px rgba(15,23,42,.14); z-index:1000; display:none;
+}
+.inv-actions.open .inv-action-menu {
+    display:block; animation:invActionIn .15s cubic-bezier(.16,1,.3,1);
+}
+@keyframes invActionIn {
+    from { opacity:0; transform:translateY(-4px); }
+    to { opacity:1; transform:translateY(0); }
+}
+.inv-action-item {
+    width:100%; display:flex; align-items:center; gap:9px; padding:8px 12px; border:none; background:transparent;
+    border-radius:6px; font-size:12px; font-weight:600; color:#334155; text-decoration:none; cursor:pointer; font-family:inherit; text-align:left; box-sizing:border-box; transition:background .15s, color .15s;
+}
+.inv-action-item:hover { background:#f8fafc; color:#0f172a; }
+.inv-action-item i { font-size:14px; width:16px; text-align:center; }
+.inv-action-item.payment:hover { background:#f0fdf4; color:#16a34a; }
+.inv-action-item.edit:hover { background:#fff7ed; color:#ea580c; }
+.inv-action-item.mail:hover { background:#f0f9ff; color:#0284c7; }
+.inv-action-item.print:hover { background:#f0fdf4; color:#16a34a; }
+.inv-action-item.credit:hover { background:#fef2f2; color:#dc2626; }
+.inv-action-item.delete { color:#dc2626; }
+.inv-action-item.delete:hover { background:#fef2f2; color:#b91c1c; }
+.inv-action-divider { height:1px; background:#f1f5f9; margin:4px 0; }
+@keyframes simModalIn {
+    from { opacity: 0; transform: scale(0.96) translateY(-8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes simSpin {
+    to { transform: rotate(360deg); }
 }
 
 .acm-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
@@ -278,6 +358,7 @@
 .status-paid { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
 .status-partially-paid { background:#fef3c7; color:#b45309; border:1px solid #fde68a; }
 .status-sent { background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; }
+.status-created { background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe; }
 .status-draft { background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; }
 .status-overdue { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
 .status-cancelled { background:#f1f5f9; color:#94a3b8; border:1px solid #cbd5e1; text-decoration:line-through; }
@@ -812,7 +893,9 @@
                             <span>#{{ $invoice->invoice_number }}</span>
                             <i class="bi bi-clipboard" style="font-size:11px; opacity:0.6;"></i>
                         </span>
-                        {!! $invoice->status_badge !!}
+                        <span id="invoiceStatusBadgeContainer">
+                            {!! $invoice->status_badge !!}
+                        </span>
                     </div>
                     <div class="inv-meta-row">
                         <span class="inv-meta-item">
@@ -843,15 +926,7 @@
             </div>
 
             <div class="inv-header-actions">
-                <a href="{{ route('accounts.sales.invoices.edit', $invoice->id) }}" class="inv-btn-secondary" title="Edit this invoice">
-                    <i class="bi bi-pencil-square"></i>
-                    <span>Edit</span>
-                </a>
-
-                <a href="{{ route('accounts.sales.invoices.print', $invoice->id) }}" target="_blank" class="inv-btn-primary" title="Print or download PDF">
-                    <i class="bi bi-printer"></i>
-                    <span>Print / Download PDF</span>
-                </a>
+              
 
                 @if($balDue > 0)
                     <button type="button" class="inv-btn-success" onclick="openRecordPaymentModal()" title="Record Payment / TDS">
@@ -859,9 +934,68 @@
                         <span>Record Payment</span>
                     </button>
                 @endif
+
+                <button type="button" class="inv-btn-danger-outline" onclick="openCreditNoteModal()" title="Issue Credit Note against this invoice">
+                    <i class="bi bi-file-earmark-minus"></i>
+                    <span>Add Credit Note</span>
+                </button>
+
+                <div class="inv-actions" data-inv-actions>
+                    <button type="button" class="inv-action-trigger" onclick="toggleInvoiceActionMenu(event, this)" title="Actions for Invoice #{{ $invoice->invoice_number }}">
+                        <i class="bi bi-gear-fill" style="font-size:11px; color:#fe5f04;"></i>
+                        <span>Actions</span>
+                        <i class="bi bi-chevron-down" style="font-size:10px; transition:transform .2s;"></i>
+                    </button>
+                    <div class="inv-action-menu">
+                        <a href="{{ route('accounts.sales.invoices.edit', $invoice->id) }}" class="inv-action-item edit">
+                            <i class="bi bi-pencil-square" style="color:#ea580c;"></i>
+                            <span>Edit Invoice</span>
+                        </a>
+
+                        <button type="button" class="inv-action-item mail" onclick="openSendInvoiceMailModal(event)">
+                            <i class="bi bi-envelope-paper-fill" style="color:#0284c7;"></i>
+                            <span>Send Mail</span>
+                        </button>
+
+                        <a href="{{ route('accounts.sales.invoices.print', $invoice->id) }}" target="_blank" class="inv-action-item print">
+                            <i class="bi bi-printer" style="color:#16a34a;"></i>
+                            <span>Print / PDF</span>
+                        </a>
+
+                        @if($balDue > 0)
+                            <button type="button" class="inv-action-item payment" onclick="openRecordPaymentModal()">
+                                <i class="bi bi-cash-stack" style="color:#16a34a;"></i>
+                                <span>Record Payment</span>
+                            </button>
+                        @endif
+
+                        <button type="button" class="inv-action-item credit" onclick="openCreditNoteModal()">
+                            <i class="bi bi-file-earmark-minus" style="color:#dc2626;"></i>
+                            <span>Add Credit Note</span>
+                        </button>
+
+                        <button type="button" class="inv-action-item" onclick="copyInvoiceLink()">
+                            <i class="bi bi-share" style="color:#2563eb;"></i>
+                            <span>Share Link</span>
+                        </button>
+
+                        <div class="inv-action-divider"></div>
+
+                        <form method="POST" action="{{ route('accounts.sales.invoices.destroy', $invoice->id) }}" onsubmit="return confirm('Are you sure you want to delete invoice #{{ $invoice->invoice_number }}? This action cannot be undone.')" style="margin:0;">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="inv-action-item delete">
+                                <i class="bi bi-trash3"></i>
+                                <span>Delete Invoice</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+
+    <div class="inv-body">
 
     {{-- Alerts --}}
     @if(session('success'))
@@ -1195,25 +1329,25 @@
                             <div style="margin-top:12px;">
                                 <div style="font-size:11px; line-height:1.6; color:#000;">
                                     @if($setting?->bank_name)
-                                        <div>Bank Name - <strong>{{ $setting->bank_name }}</strong></div>
+                                        <div>Bank Name - {{ $setting->bank_name }}</div>
                                     @endif
                                     @if($setting?->account_name)
-                                        <div>Account Name - <strong>{{ $setting->account_name }}</strong></div>
+                                        <div>Account Name - {{ $setting->account_name }}</div>
                                     @endif
                                     @if($setting?->account_number)
-                                        <div>Account Number - <strong>{{ $setting->account_number }}</strong></div>
+                                        <div>Account Number - {{ $setting->account_number }}</div>
                                     @endif
                                     @if($setting?->ifsc_code)
-                                        <div>IFSC Code - <strong>{{ $setting->ifsc_code }}</strong></div>
+                                        <div>IFSC Code - {{ $setting->ifsc_code }}</div>
                                     @endif
                                     @if($setting?->branch)
-                                        <div>Branch - <strong>{{ $setting->branch }}</strong></div>
+                                        <div>Branch - {{ $setting->branch }}</div>
                                     @endif
                                     @if($setting?->upi_id)
-                                        <div>UPI ID - <strong>{{ $setting->upi_id }}</strong></div>
+                                        <div>UPI ID - {{ $setting->upi_id }}</div>
                                     @endif
                                     @if($setting?->swift_code)
-                                        <div>Swift Code - <strong>{{ $setting->swift_code }}</strong></div>
+                                        <div>Swift Code - {{ $setting->swift_code }}</div>
                                     @endif
                                 </div>
                             </div>
@@ -1269,12 +1403,28 @@
                                         <td class="t-label">Total</td>
                                         <td class="t-val">₹{{ number_format((float) $invoice->total_amount, 2) }}</td>
                                     </tr>
+                                    @if((float) $invoice->total_credited > 0)
+                                        <tr>
+                                            <td class="t-label">Credits Applied (CN)</td>
+                                            <td class="t-val" style="color:#b91c1c; font-weight:700;">
+                                                (-) {{ number_format((float) $invoice->total_credited, 2) }}
+                                            </td>
+                                        </tr>
+                                    @endif
                                     <tr>
                                         <td class="t-label">Payment Made</td>
                                         <td class="t-val" style="color:{{ $invoice->paid_amount > 0 ? '#b91c1c' : '#000' }}; font-weight:700;">
                                             (-) {{ number_format((float) $invoice->paid_amount, 2) }}
                                         </td>
                                     </tr>
+                                    @if((float) $invoice->total_tds > 0)
+                                        <tr>
+                                            <td class="t-label">Amount Withheld</td>
+                                            <td class="t-val" style="color:#b91c1c; font-weight:700;">
+                                                (-) {{ number_format((float) $invoice->total_tds, 2) }}
+                                            </td>
+                                        </tr>
+                                    @endif
                                     <tr class="balance-row">
                                         <td class="t-label">Balance Due</td>
                                         <td class="t-val">₹{{ number_format((float) $invoice->balance_due, 2) }}</td>
@@ -1440,6 +1590,136 @@
             </div>
         @endif
     </div>
+
+    {{-- Credit Notes (CN) Section --}}
+    @php
+        $existingCredits = (float) $invoice->creditNotes()->where('status', '!=', 'void')->sum('total_amount');
+        $maxCreditable = max(0, (float) $invoice->total_amount - $existingCredits);
+    @endphp
+    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,.03); overflow:hidden;">
+        <div style="padding:16px 22px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; background:#f8fafc;">
+            <div>
+                <div style="font-size:16px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                    <i class="bi bi-file-earmark-minus" style="color:#dc2626;"></i>
+                    <span>Credit Notes Issued (CN)</span>
+                    <span style="font-size:12px; font-weight:700; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:2px 8px; border-radius:999px;">{{ $invoice->creditNotes->count() }} {{ Str::plural('Note', $invoice->creditNotes->count()) }}</span>
+                </div>
+                <div style="font-size:12px; color:#64748b; margin-top:2px;">
+                    Track invoice cancellations, post-invoice discounts, scope deductions, and credit memo adjustments.
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                @if($maxCreditable > 0)
+                    <button type="button" class="acm-btn" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c;" onclick="openCreditNoteModal()">
+                        <i class="bi bi-plus-lg"></i> Add Credit Note
+                    </button>
+                @else
+                    <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:#b91c1c; background:#fef2f2; border:1px solid #fecaca; padding:6px 12px; border-radius:8px;">
+                        <i class="bi bi-info-circle-fill"></i> Fully Credited
+                    </span>
+                @endif
+            </div>
+        </div>
+
+        @if($invoice->creditNotes->count() > 0)
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
+                    <thead>
+                        <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; color:#475569; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">
+                            <th style="padding:12px 16px;">Date & CN #</th>
+                            <th style="padding:12px 16px;">Reason</th>
+                            <th style="padding:12px 16px;">Remarks / Notes</th>
+                            <th style="padding:12px 16px; text-align:right;">Credited Amount (₹)</th>
+                            <th style="padding:12px 16px; text-align:center;">Status</th>
+                            <th style="padding:12px 16px;">Issued By</th>
+                            <th style="padding:12px 16px; text-align:right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($invoice->creditNotes as $cn)
+                            <tr style="border-bottom:1px solid #f1f5f9;">
+                                <td style="padding:12px 16px;">
+                                    <div style="font-weight:700; color:#0f172a;">{{ $cn->credit_note_date ? $cn->credit_note_date->format('d M Y') : '—' }}</div>
+                                    <a href="{{ route('accounts.sales.credit-notes.show', $cn->id) }}" style="font-size:11.5px; font-family:monospace; color:#b91c1c; font-weight:800; text-decoration:none;">
+                                        {{ $cn->credit_note_number }}
+                                    </a>
+                                </td>
+                                <td style="padding:12px 16px;">
+                                    <span style="display:inline-flex; align-items:center; gap:4px; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px;">
+                                        {{ \App\Models\CreditNote::REASONS[$cn->reason] ?? $cn->reason }}
+                                    </span>
+                                </td>
+                                <td style="padding:12px 16px; color:#64748b; font-size:12px;">
+                                    {{ $cn->notes ?: '—' }}
+                                    @if($cn->attachment_url)
+                                        <div style="margin-top:2px;">
+                                            <a href="{{ $cn->attachment_url }}" target="_blank" style="color:#2563eb; font-weight:700; font-size:11px; text-decoration:none;">
+                                                <i class="bi bi-paperclip"></i> Attachment
+                                            </a>
+                                        </div>
+                                    @endif
+                                </td>
+                                <td style="padding:12px 16px; text-align:right; font-weight:800; font-size:14px; color:#b91c1c;">
+                                    ₹{{ number_format((float) $cn->total_amount, 2) }}
+                                </td>
+                                <td style="padding:12px 16px; text-align:center;">
+                                    @if($cn->status === 'issued')
+                                        <span style="font-size:11px; font-weight:800; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; padding:2px 8px; border-radius:999px;">Active</span>
+                                    @else
+                                        <span style="font-size:11px; font-weight:800; background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; padding:2px 8px; border-radius:999px;">Void</span>
+                                    @endif
+                                </td>
+                                <td style="padding:12px 16px; font-size:12px; color:#475569;">
+                                    {{ $cn->creator?->name ?? 'System' }}
+                                </td>
+                                <td style="padding:12px 16px; text-align:right;">
+                                    <div style="display:inline-flex; align-items:center; gap:6px;">
+                                        <a href="{{ route('accounts.sales.credit-notes.show', $cn->id) }}" class="acm-btn acm-btn-outline" style="padding:4px 8px; font-size:11px;" title="View Note">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <a href="{{ route('accounts.sales.credit-notes.print', $cn->id) }}" target="_blank" class="acm-btn acm-btn-outline" style="padding:4px 8px; font-size:11px;" title="Print Note">
+                                            <i class="bi bi-printer"></i>
+                                        </a>
+                                        <form method="POST" action="{{ route('accounts.sales.credit-notes.destroy', $cn->id) }}" onsubmit="return confirm('Are you sure you want to delete Credit Note #{{ $cn->credit_note_number }}? Invoice balance will update.')" style="margin:0; display:inline-block;">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="acm-btn acm-btn-outline" style="padding:4px 8px; font-size:11px; color:#dc2626;" title="Delete Note">
+                                                <i class="bi bi-trash3"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                    <tfoot>
+                        <tr style="background:#f8fafc; font-weight:800; border-top:2px solid #e2e8f0;">
+                            <td colspan="3" style="padding:12px 16px; text-align:right; text-transform:uppercase; font-size:11.5px; color:#475569;">Total Active Credits Applied:</td>
+                            <td style="padding:12px 16px; text-align:right; color:#b91c1c; font-size:14.5px;">₹{{ number_format($existingCredits, 2) }}</td>
+                            <td colspan="3"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        @else
+            <div style="padding:32px 20px; text-align:center;">
+                <div style="width:48px; height:48px; border-radius:50%; background:#fef2f2; color:#dc2626; display:inline-flex; align-items:center; justify-content:center; font-size:22px; margin-bottom:8px;">
+                    <i class="bi bi-file-earmark-minus"></i>
+                </div>
+                <div style="font-size:14px; font-weight:700; color:#334155; margin-bottom:4px;">No Credit Notes Issued</div>
+                <div style="font-size:12.5px; color:#64748b; max-width:420px; margin:0 auto 14px;">
+                    Need to provide a post-invoice discount, handle a partial cancellation, or revise the bill? Issue a credit note against this invoice.
+                </div>
+                @if($maxCreditable > 0)
+                    <button type="button" class="acm-btn" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c;" onclick="openCreditNoteModal()">
+                        <i class="bi bi-plus-lg"></i> Add Credit Note
+                    </button>
+                @endif
+            </div>
+        @endif
+    </div>
+
+    </div>{{-- /inv-body --}}
 
 {{-- Modal: Record Payment & TDS Deduction --}}
 <div id="recordPaymentModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(3px); z-index:99999; align-items:center; justify-content:center; padding:16px;">
@@ -1663,6 +1943,237 @@
                 </button>
             </div>
         </form>
+    </div>
+</div>
+{{-- Modal: Add Credit Note (CN) --}}
+@php
+    $nextCnNumber = \App\Models\CreditNote::generateNextNumber(auth()->user()?->company_id);
+    $cnReasons = \App\Models\CreditNote::REASONS;
+    $currBalDue = (float) $invoice->balance_due;
+    $existingCreditsForModal = (float) $invoice->creditNotes()->where('status', '!=', 'void')->sum('total_amount');
+    $maxCreditableForModal = max(0, (float) $invoice->total_amount - $existingCreditsForModal);
+@endphp
+<div id="creditNoteModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(3px); z-index:99999; align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; border-radius:16px; box-shadow:0 20px 40px rgba(0,0,0,0.2); max-width:540px; width:100%; overflow:hidden; max-height:90vh; display:flex; flex-direction:column;">
+        <div style="padding:18px 22px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; background:#f8fafc; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:38px; height:38px; border-radius:10px; background:#fef2f2; color:#dc2626; display:flex; align-items:center; justify-content:center; font-size:20px;">
+                    <i class="bi bi-file-earmark-minus"></i>
+                </div>
+                <div>
+                    <h3 style="font-size:16px; font-weight:800; color:#0f172a; margin:0;">Issue Credit Note (CN)</h3>
+                    <p style="font-size:12px; color:#64748b; margin:0;">Invoice #{{ $invoice->invoice_number }} • Auto #{{ $nextCnNumber }}</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeCreditNoteModal()" style="background:none; border:none; font-size:18px; color:#94a3b8; cursor:pointer; padding:4px;">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+
+        <form method="POST" action="{{ route('accounts.sales.invoices.credit-notes.store', $invoice->id) }}" enctype="multipart/form-data" id="creditNoteForm" style="display:flex; flex-direction:column; overflow-y:auto;">
+            @csrf
+            <div style="padding:22px; display:flex; flex-direction:column; gap:16px;">
+
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px;">
+                    <div>
+                        <div style="font-size:10.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Invoice Total</div>
+                        <div style="font-size:14px; font-weight:800; color:#0f172a;">₹{{ number_format((float) $invoice->total_amount, 2) }}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Balance Due</div>
+                        <div style="font-size:14px; font-weight:800; color:#ea580c;">₹{{ number_format($currBalDue, 2) }}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Max Creditable</div>
+                        <div style="font-size:14px; font-weight:800; color:#15803d;">₹{{ number_format($maxCreditableForModal, 2) }}</div>
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:5px;">
+                            Credit Note Date <span style="color:#dc2626;">*</span>
+                        </label>
+                        <input type="date" name="credit_note_date" required value="{{ date('Y-m-d') }}" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:5px;">
+                            Reason <span style="color:#dc2626;">*</span>
+                        </label>
+                        <select name="reason" required style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff;">
+                            @foreach($cnReasons as $rKey => $rLabel)
+                                <option value="{{ $rKey }}">{{ $rLabel }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                        <label style="font-size:12px; font-weight:700; color:#334155; margin:0;">
+                            Credit Amount (₹) <span style="color:#dc2626;">*</span>
+                        </label>
+                        <div style="display:flex; gap:6px; font-size:11px;">
+                            @if($currBalDue > 0)
+                                <button type="button" onclick="fillCnDue()" style="font-weight:700; color:#2563eb; background:none; border:none; cursor:pointer; padding:0;">
+                                    Fill Balance Due
+                                </button>
+                                <span style="color:#cbd5e1;">•</span>
+                            @endif
+                            <button type="button" onclick="fillCnMax()" style="font-weight:700; color:#16a34a; background:none; border:none; cursor:pointer; padding:0;">
+                                Fill Full Invoice
+                            </button>
+                        </div>
+                    </div>
+                    <input type="number" step="0.01" min="0.01" max="{{ $maxCreditableForModal }}" name="total_amount" id="cnModalAmount" required value="{{ $currBalDue > 0 ? $currBalDue : $maxCreditableForModal }}" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:10px 12px; font-size:16px; font-weight:800; color:#b91c1c; outline:none; background:#fff;">
+                    <div style="font-size:11px; color:#64748b; margin-top:3px;">
+                        Max allowed for this invoice: <strong>₹{{ number_format($maxCreditableForModal, 2) }}</strong>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:5px;">
+                        Notes / Remarks / Justification (Optional)
+                    </label>
+                    <textarea name="notes" rows="2" placeholder="e.g. Approved discount on final milestone / Order cancelled by client..." style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff; resize:vertical;"></textarea>
+                </div>
+
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:5px;">
+                        Attachment / Email Proof (Optional)
+                    </label>
+                    <input type="file" name="attachment" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:6px 10px; font-size:12px; color:#0f172a; outline:none; background:#fff;">
+                </div>
+
+            </div>
+
+            <div style="padding:14px 22px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px; flex-shrink:0;">
+                <button type="button" onclick="closeCreditNoteModal()" style="padding:9px 18px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; font-size:13px; font-weight:700; color:#475569; cursor:pointer;">
+                    Cancel
+                </button>
+                <button type="submit" style="padding:9px 22px; border-radius:8px; border:none; background:linear-gradient(135deg, #dc2626, #b91c1c); color:#fff; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(220,38,38,0.3); display:inline-flex; align-items:center; gap:6px;">
+                    <i class="bi bi-check-lg"></i>
+                    <span>Apply Credit Note</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- Modal: Send Invoice Email Preview & Dispatch --}}
+<div id="sendInvoiceMailModal" onclick="if(event.target===this) closeSendInvoiceMailModal()" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; width:100%; height:100%; background:rgba(15,23,42,0.6); backdrop-filter:blur(3px); z-index:99999; align-items:center; justify-content:center; padding:16px; box-sizing:border-box;">
+    <div style="background:#fff; border-radius:16px; box-shadow:0 20px 45px rgba(15,23,42,0.25); max-width:680px; width:100%; overflow:hidden; max-height:92vh; display:flex; flex-direction:column; animation:simModalIn .2s cubic-bezier(.16,1,.3,1);">
+        
+        {{-- Header --}}
+        <div style="padding:18px 24px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; background:#f8fafc; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:40px; height:40px; border-radius:10px; background:#e0f2fe; color:#0284c7; display:flex; align-items:center; justify-content:center; font-size:20px;">
+                    <i class="bi bi-envelope-paper-fill"></i>
+                </div>
+                <div>
+                    <h3 style="font-size:16px; font-weight:800; color:#0f172a; margin:0;">Send Invoice Email</h3>
+                    <p style="font-size:12px; color:#64748b; margin:2px 0 0;">Preview & dispatch invoice #{{ $invoice->invoice_number }} to customer</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeSendInvoiceMailModal()" style="background:none; border:none; font-size:20px; color:#94a3b8; cursor:pointer; padding:4px; line-height:1;">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+
+        {{-- Body / Form --}}
+        <form id="sendInvoiceMailForm" onsubmit="submitSendInvoiceMail(event)" style="display:flex; flex-direction:column; overflow-y:auto;">
+            <div style="padding:22px 24px; display:flex; flex-direction:column; gap:16px;">
+                
+                {{-- Informational Banner --}}
+                <div style="background:#f0f9ff; border:1px solid #bae6fd; color:#0369a1; border-radius:10px; padding:12px 16px; font-size:12.5px; display:flex; align-items:flex-start; gap:10px;">
+                    <i class="bi bi-info-circle-fill" style="font-size:16px; margin-top:1px; flex-shrink:0;"></i>
+                    <div style="line-height:1.5;">
+                        Review the email details below. Clicking <strong>Send Mail</strong> will immediately email the invoice PDF copy to the recipient, and the status will update to <span class="acm-badge status-sent" style="font-size:10.5px; padding:2px 8px; vertical-align:middle;"><i class="bi bi-send-fill"></i> Sent</span>.
+                    </div>
+                </div>
+
+                {{-- Recipient & Subject Inputs --}}
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; display:flex; flex-direction:column; gap:14px;">
+                    <div>
+                        <label style="display:block; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#475569; margin-bottom:6px;">
+                            Recipient Email (To:) <span style="color:#dc2626;">*</span>
+                        </label>
+                        <input type="email" id="simRecipientEmail" required
+                               value="{{ $invoice->customer_email ?: $invoice->customer?->email }}"
+                               placeholder="customer@example.com"
+                               style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:9px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff; font-family:inherit;">
+                    </div>
+
+                    <div>
+                        <label style="display:block; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#475569; margin-bottom:6px;">
+                            Email Subject
+                        </label>
+                        <input type="text" id="simSubject"
+                               value="Tax Invoice #{{ $invoice->invoice_number }} from {{ $setting->company_name ?: config('app.name') }}"
+                               style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:9px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff; font-family:inherit;">
+                    </div>
+                </div>
+
+                {{-- Email Mockup Preview --}}
+                <div style="border:1px solid #cbd5e1; border-radius:12px; overflow:hidden; background:#ffffff;">
+                    {{-- Preview Header --}}
+                    <div style="background:linear-gradient(135deg, #fe5f04, #ff8533); padding:16px 20px; color:#ffffff; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="font-size:16px; font-weight:800; letter-spacing:-0.02em;">{{ $setting->company_name ?: config('app.name') }}</div>
+                            <div style="font-size:11px; opacity:0.9; font-weight:600;">TAX INVOICE NOTIFICATION</div>
+                        </div>
+                        <span style="background:rgba(255,255,255,0.25); color:#fff; font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; border:1px solid rgba(255,255,255,0.3);">
+                            {{ strtoupper($invoice->status ?? 'ISSUED') }}
+                        </span>
+                    </div>
+
+                    {{-- Preview Body --}}
+                    <div style="padding:18px 20px; font-size:13px; color:#334155; line-height:1.6;">
+                        <p style="margin:0 0 10px;">Dear <strong>{{ $invoice->customer_name ?: 'Valued Customer' }}</strong>,</p>
+                        <p style="margin:0 0 16px; color:#475569;">
+                            Thank you for your business! Please find below your invoice summary for <strong>#{{ $invoice->invoice_number }}</strong>. A PDF copy has also been attached to this email.
+                        </p>
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+                            <div>
+                                <span style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; display:block;">Invoice Date</span>
+                                <span style="font-weight:600; color:#0f172a;">{{ $invoice->invoice_date ? \Carbon\Carbon::parse($invoice->invoice_date)->format('d M, Y') : '-' }}</span>
+                            </div>
+                            <div>
+                                <span style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; display:block;">Due Date</span>
+                                <span style="font-weight:600; color:#dc2626;">{{ $invoice->due_date ? \Carbon\Carbon::parse($invoice->due_date)->format('d M, Y') : 'Due on Receipt' }}</span>
+                            </div>
+                            <div>
+                                <span style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; display:block;">Total Amount</span>
+                                <span style="font-weight:800; color:#fe5f04; font-size:15px;">₹{{ number_format((float)$invoice->total_amount, 2) }}</span>
+                            </div>
+                            <div>
+                                <span style="font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; display:block;">Balance Due</span>
+                                <span style="font-weight:800; color:#ea580c; font-size:15px;">₹{{ number_format((float)$invoice->balance_due, 2) }}</span>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; align-items:center; gap:8px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:6px; padding:8px 12px; font-size:12px; color:#334155;">
+                            <i class="bi bi-file-earmark-pdf-fill" style="color:#dc2626; font-size:18px;"></i>
+                            <span>Attachment: <strong>Invoice_{{ str_replace(['/', '\\'], '_', $invoice->invoice_number) }}.pdf</strong> (Official PDF copy)</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            {{-- Footer --}}
+            <div style="padding:14px 24px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px; flex-shrink:0;">
+                <button type="button" onclick="closeSendInvoiceMailModal()" style="padding:9px 18px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; font-size:13px; font-weight:700; color:#475569; cursor:pointer;">
+                    Cancel
+                </button>
+                <button type="submit" id="simSubmitBtn" style="padding:9px 22px; border-radius:8px; border:none; background:linear-gradient(135deg, #0284c7, #0369a1); color:#fff; font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(2,132,199,0.3); display:inline-flex; align-items:center; gap:6px;">
+                    <i class="bi bi-send-fill"></i>
+                    <span>Send Mail</span>
+                </button>
+            </div>
+        </form>
+
     </div>
 </div>
 
@@ -1903,7 +2414,153 @@ function calculateLiveSettled() {
     }
 }
 
+// Credit Note Modal Functions
+function openCreditNoteModal() {
+    const modal = document.getElementById('creditNoteModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeCreditNoteModal() {
+    const modal = document.getElementById('creditNoteModal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+}
+
+function fillCnDue() {
+    const input = document.getElementById('cnModalAmount');
+    if (input) {
+        input.value = '{{ $currBalDue }}';
+    }
+}
+
+function fillCnMax() {
+    const input = document.getElementById('cnModalAmount');
+    if (input) {
+        input.value = '{{ $maxCreditableForModal }}';
+    }
+}
+
+// Header Actions Dropdown
+function toggleInvoiceActionMenu(event, button) {
+    event.stopPropagation();
+    const wrapper = button.closest('[data-inv-actions]');
+    if (!wrapper) return;
+    const shouldOpen = !wrapper.classList.contains('open');
+    document.querySelectorAll('[data-inv-actions].open').forEach(menu => menu.classList.remove('open'));
+    if (shouldOpen) {
+        wrapper.classList.add('open');
+        const menu = wrapper.querySelector('.inv-action-menu');
+        if (menu) {
+            const btnRect = button.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - btnRect.bottom;
+            if (spaceBelow < 220 && btnRect.top > 220) {
+                menu.style.top = 'auto';
+                menu.style.bottom = 'calc(100% + 6px)';
+            } else {
+                menu.style.top = 'calc(100% + 6px)';
+                menu.style.bottom = 'auto';
+            }
+        }
+    }
+}
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('[data-inv-actions]')) {
+        document.querySelectorAll('[data-inv-actions].open').forEach(menu => menu.classList.remove('open'));
+    }
+});
+
+// Send Invoice Email Modal Functions
+function openSendInvoiceMailModal(event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    document.querySelectorAll('[data-inv-actions].open').forEach(menu => menu.classList.remove('open'));
+    const modal = document.getElementById('sendInvoiceMailModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeSendInvoiceMailModal() {
+    const modal = document.getElementById('sendInvoiceMailModal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+}
+
+async function submitSendInvoiceMail(e) {
+    e.preventDefault();
+    const btn = document.getElementById('simSubmitBtn');
+    const recipientEmail = document.getElementById('simRecipientEmail')?.value?.trim();
+    const subject = document.getElementById('simSubject')?.value?.trim();
+
+    if (!recipientEmail) {
+        alert('Please enter a valid recipient email address.');
+        return;
+    }
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span style="width:14px; height:14px; border:2px solid #fff; border-right-color:transparent; border-radius:50%; display:inline-block; animation:simSpin .6s linear infinite;"></span> <span>Sending Email...</span>';
+    }
+
+    try {
+        const response = await fetch('{{ route("accounts.sales.invoices.send-email", $invoice->id) }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                recipient_email: recipientEmail,
+                subject: subject
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            closeSendInvoiceMailModal();
+            if (data.status_badge) {
+                const badgeEl = document.getElementById('invoiceStatusBadgeContainer');
+                if (badgeEl) badgeEl.innerHTML = data.status_badge;
+            }
+            alert(data.message || 'Invoice email sent successfully!');
+            window.location.reload();
+        } else {
+            alert(data.message || 'Failed to send invoice email.');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-send-fill"></i> <span>Send Mail</span>';
+            }
+        }
+    } catch (err) {
+        console.error('Send mail error:', err);
+        alert('An error occurred while sending the email. Please try again.');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send-fill"></i> <span>Send Mail</span>';
+        }
+    }
+}
+
 document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeCreditNoteModal();
+        closeRecordPaymentModal();
+        closeChangeSalesPersonModal();
+        closeSendInvoiceMailModal();
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
         e.preventDefault();
         window.open('{{ route("accounts.sales.invoices.print", $invoice->id) }}', '_blank');
