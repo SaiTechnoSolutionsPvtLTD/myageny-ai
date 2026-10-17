@@ -175,6 +175,7 @@
 .crm-report-card.subcategory::after { background: #2563eb; }
 .crm-report-card.customer::after { background: #16a34a; }
 .crm-report-card.pivot::after { background: #8b5cf6; }
+.crm-report-card.pnl::after { background: #059669; }
 .crm-report-card.vendor::after { background: #0891b2; }
 .crm-report-card.tax::after { background: #ec4899; }
 
@@ -213,6 +214,10 @@
 .crm-report-card-icon.pivot {
     background: linear-gradient(135deg, #f5f3ff, #ede9fe);
     color: #7c3aed;
+}
+.crm-report-card-icon.pnl {
+    background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+    color: #059669;
 }
 .crm-report-card-icon.vendor {
     background: linear-gradient(135deg, #ecfeff, #cffafe);
@@ -405,6 +410,11 @@
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                             <line x1="3" y1="9" x2="21" y2="9"/>
                             <line x1="9" y1="21" x2="9" y2="9"/>
+                        </svg>
+                        @elseif($report['theme'] === 'pnl')
+                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M23 6l-9.5 9.5-5-5L1 18"/>
+                            <path d="M17 6h6v6"/>
                         </svg>
                         @elseif($report['theme'] === 'vendor')
                         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

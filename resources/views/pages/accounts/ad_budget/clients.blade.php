@@ -329,14 +329,18 @@
                                     $dCount = count($datesList);
                                 @endphp
                                 @if($dCount > 0)
-                                    <div style="font-size:10.5px; font-weight:700; color:#64748b; margin-bottom:2px;">
-                                        {{ $dCount }} {{ \Illuminate\Support\Str::plural('Date', $dCount) }}:
-                                    </div>
-                                    @foreach($datesList as $dt)
-                                        <span style="display:inline-block; padding:2px 7px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:5px; font-size:11px; font-weight:700; margin:1px;">
-                                            📅 {{ $dt }}
+                                    @if($dCount > 1)
+                                        <div style="font-size:12px; font-weight:700; color:#1e293b; white-space:nowrap;">
+                                            📅 {{ $datesList[0] }} <span style="color:#94a3b8; font-weight:500;">to</span> {{ end($datesList) }}
+                                        </div>
+                                        <div style="font-size:11px; font-weight:600; color:#64748b; margin-top:2px;">
+                                            {{ $item->number_of_days ?? $dCount }} Days total
+                                        </div>
+                                    @else
+                                        <span style="display:inline-block; padding:2px 7px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:5px; font-size:11px; font-weight:700;">
+                                            📅 {{ $datesList[0] }} (1 Day)
                                         </span>
-                                    @endforeach
+                                    @endif
                                 @else
                                     <span style="color:#94a3b8;">—</span>
                                 @endif
@@ -437,10 +441,10 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Select Dates (Multiple Dates Selection) <span style="color:#dc2626;">*</span></label>
-                    <input type="text" id="flatpickr_dates_input" class="form-input" placeholder="Click to select multiple dates…" required readonly>
+                    <label class="form-label">Select Date Range <span style="color:#dc2626;">*</span></label>
+                    <input type="text" id="flatpickr_dates_input" class="form-input" placeholder="Click to select date range (Start date to End date)…" required readonly>
                     <div class="date-tags-container" id="dateTagsList">
-                        <span style="font-size:12px; color:#94a3b8;">No dates selected yet. Pick dates from the picker above.</span>
+                        <span style="font-size:12px; color:#94a3b8;">No date range selected yet. Pick a start and end date from the picker above.</span>
                     </div>
                 </div>
 
@@ -756,13 +760,33 @@
 let selectedDatesArray = [];
 let flatpickrInstance = null;
 
+function getDatesInRange(startDate, endDate) {
+    const dates = [];
+    const curr = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const last = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+    while (curr <= last) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        dates.push(`${y}-${m}-${d}`);
+        curr.setDate(curr.getDate() + 1);
+    }
+    return dates;
+}
+
 document.addEventListener("DOMContentLoaded", function() {
     flatpickrInstance = flatpickr("#flatpickr_dates_input", {
-        mode: "multiple",
+        mode: "range",
         dateFormat: "Y-m-d",
         minDate: "today",
         onChange: function(selectedDates, dateStr, instance) {
-            selectedDatesArray = selectedDates.map(d => instance.formatDate(d, "Y-m-d"));
+            if (selectedDates.length === 2) {
+                selectedDatesArray = getDatesInRange(selectedDates[0], selectedDates[1]);
+            } else if (selectedDates.length === 1) {
+                selectedDatesArray = [instance.formatDate(selectedDates[0], "Y-m-d")];
+            } else {
+                selectedDatesArray = [];
+            }
             renderDateTags();
             calculateRaiseBudgetStats();
         }
@@ -816,23 +840,53 @@ function calculateRaiseBudgetStats() {
 
 function renderDateTags() {
     const container = document.getElementById('dateTagsList');
-    if (selectedDatesArray.length === 0) {
-        container.innerHTML = '<span style="font-size:12px; color:#94a3b8;">No dates selected yet. Pick dates from the picker above.</span>';
+    if (!selectedDatesArray || selectedDatesArray.length === 0) {
+        container.innerHTML = '<span style="font-size:12px; color:#94a3b8;">No date range selected yet. Pick a start and end date from the picker above.</span>';
         return;
     }
 
-    container.innerHTML = selectedDatesArray.map(date => `
-        <span class="date-tag">
-            📅 ${date}
-            <span class="date-tag-remove" onclick="removeDate('${date}')">×</span>
-        </span>
-    `).join('');
+    if (selectedDatesArray.length === 1) {
+        container.innerHTML = `
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; width:100%; background:#fff; border:1px solid #fed7aa; padding:8px 12px; border-radius:10px;">
+                <div style="display:flex; align-items:center; gap:8px; font-size:12.5px;">
+                    <span class="date-tag" style="background:#fff7ed; color:#ea580c; border-color:#fdba74; font-weight:700;">
+                        📅 ${selectedDatesArray[0]}
+                    </span>
+                    <span style="background:#f1f5f9; color:#475569; padding:3px 8px; border-radius:8px; font-size:11.5px; font-weight:700;">
+                        1 Day (Single Day Selected)
+                    </span>
+                </div>
+                <button type="button" onclick="clearDateRange()" style="border:none; background:transparent; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;">✕ Clear</button>
+            </div>
+        `;
+        return;
+    }
+
+    const startDate = selectedDatesArray[0];
+    const endDate = selectedDatesArray[selectedDatesArray.length - 1];
+    container.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; width:100%; background:#fff; border:1px solid #fed7aa; padding:8px 12px; border-radius:10px;">
+            <div style="display:flex; align-items:center; gap:8px; font-size:12.5px; flex-wrap:wrap;">
+                <span class="date-tag" style="background:#fff7ed; color:#ea580c; border-color:#fdba74; font-weight:700;">
+                    📅 From: ${startDate}
+                </span>
+                <span style="color:#94a3b8; font-weight:700;">➔</span>
+                <span class="date-tag" style="background:#fff7ed; color:#ea580c; border-color:#fdba74; font-weight:700;">
+                    📅 To: ${endDate}
+                </span>
+                <span style="background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:8px; font-size:11.5px; font-weight:700;">
+                    ${selectedDatesArray.length} Days Total
+                </span>
+            </div>
+            <button type="button" onclick="clearDateRange()" style="border:none; background:transparent; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;">✕ Clear</button>
+        </div>
+    `;
 }
 
-function removeDate(dateStr) {
-    selectedDatesArray = selectedDatesArray.filter(d => d !== dateStr);
+function clearDateRange() {
+    selectedDatesArray = [];
     if (flatpickrInstance) {
-        flatpickrInstance.setDate(selectedDatesArray, true);
+        flatpickrInstance.clear();
     }
     renderDateTags();
     calculateRaiseBudgetStats();
@@ -861,7 +915,7 @@ function proceedToConfirm() {
         return;
     }
     if (selectedDatesArray.length === 0) {
-        alert("Please select at least one date.");
+        alert("Please select a date range.");
         return;
     }
 
@@ -882,7 +936,18 @@ function proceedToConfirm() {
     document.getElementById('summary_amount').innerText = '₹' + parseFloat(amount).toLocaleString('en-IN', {minimumFractionDigits: 2});
     document.getElementById('summary_number_of_days').innerText = numDays + (numDays === 1 ? ' Day' : ' Days');
     document.getElementById('summary_average_per_day_budget').innerText = '₹' + parseFloat(avgPerDay).toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' / day';
-    document.getElementById('summary_dates').innerHTML = selectedDatesArray.map(d => `<span class="date-tag" style="margin:2px;">📅 ${d}</span>`).join(' ');
+    
+    if (selectedDatesArray.length > 1) {
+        document.getElementById('summary_dates').innerHTML = `
+            <span class="date-tag" style="margin:2px; font-weight:700;">📅 ${selectedDatesArray[0]} to ${selectedDatesArray[selectedDatesArray.length - 1]}</span>
+            <span style="font-size:11.5px; color:#64748b; font-weight:700;">(${numDays} Days)</span>
+        `;
+    } else {
+        document.getElementById('summary_dates').innerHTML = `
+            <span class="date-tag" style="margin:2px; font-weight:700;">📅 ${selectedDatesArray[0]}</span>
+            <span style="font-size:11.5px; color:#64748b; font-weight:700;">(1 Day)</span>
+        `;
+    }
     document.getElementById('summary_remarks').innerText = remarks || 'None';
 
     closeRaiseModal();
@@ -918,7 +983,10 @@ function openTlActionModal(btnOrItem, action) {
     actionInput.value = action;
     remarksInput.value = '';
 
-    const datesList = (item.selected_dates || []).join(', ');
+    const rawDates = (item.selected_dates || []);
+    const datesList = rawDates.length > 1
+        ? `${rawDates[0]} to ${rawDates[rawDates.length - 1]} (${numDays} Days)`
+        : (rawDates[0] || '—');
     const formattedAmount = '₹' + parseFloat(item.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
     const numDays = item.number_of_days || (item.selected_dates ? item.selected_dates.length : 0);
     const avgBudget = item.average_per_day_budget || (numDays > 0 ? (parseFloat(item.amount || 0) / numDays) : 0);
@@ -1078,7 +1146,15 @@ function openViewDetailsModal(btnOrItem) {
         viewAvgEl.innerText = '₹' + parseFloat(viewAvgBudget || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' / day';
     }
 
-    document.getElementById('view_dates').innerHTML = (item.selected_dates || []).map(d => `<span class="date-tag" style="margin:2px;">📅 ${d}</span>`).join(' ') || '—';
+    if ((item.selected_dates || []).length > 1) {
+        const dList = item.selected_dates;
+        document.getElementById('view_dates').innerHTML = `
+            <span class="date-tag" style="margin:2px; font-weight:700;">📅 ${dList[0]} to ${dList[dList.length - 1]}</span>
+            <span style="font-size:11.5px; color:#64748b; font-weight:700;">(${viewNumDays} Days)</span>
+        `;
+    } else {
+        document.getElementById('view_dates').innerHTML = (item.selected_dates || []).map(d => `<span class="date-tag" style="margin:2px;">📅 ${d}</span>`).join(' ') || '—';
+    }
     document.getElementById('view_status').innerText = (item.status || '').toUpperCase();
     document.getElementById('view_exec_remarks').innerText = item.remarks || 'None';
 

@@ -456,6 +456,11 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/expense-subcategory-wise', [App\Http\Controllers\AccountExpenseReportController::class, 'subcategoryWise'])->name('expense-subcategory-wise');
             Route::get('/expense-subcategory-wise/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportSubcategoryWiseExcel'])->name('expense-subcategory-wise.export-excel');
             Route::get('/expense-subcategory-wise/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportSubcategoryWisePdf'])->name('expense-subcategory-wise.export-pdf');
+
+            // Profit & Loss (P & L) Report
+            Route::get('/profit-and-loss', [App\Http\Controllers\AccountExpenseReportController::class, 'profitAndLoss'])->name('profit-and-loss');
+            Route::get('/profit-and-loss/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportProfitAndLossExcel'])->name('profit-and-loss.export-excel');
+            Route::get('/profit-and-loss/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportProfitAndLossPdf'])->name('profit-and-loss.export-pdf');
         });
     });
 
