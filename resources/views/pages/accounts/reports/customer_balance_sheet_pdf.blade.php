@@ -6,10 +6,12 @@
     <style>
         @page {
             size: A4 portrait;
-            margin: 12mm 10mm 12mm 10mm;
+            margin: 18mm 18mm 18mm 18mm;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { box-sizing: border-box; }
         body {
+            margin: 0;
+            padding: 0;
             font-family: 'DejaVu Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: #ffffff;
             color: #000000;
@@ -28,66 +30,69 @@
         .co-logo { max-height: 40px; max-width: 160px; margin-bottom: 6px; }
         .co-name { font-size: 14px; font-weight: bold; color: #000; line-height: 1.2; }
         .co-info { font-size: 9px; color: #333; margin-top: 3px; line-height: 1.4; }
-        .doc-title { font-size: 15px; font-weight: bold; color: #fe5f04; text-transform: uppercase; letter-spacing: 0.5px; }
-        .doc-period { font-size: 10px; font-weight: bold; color: #333; margin-top: 3px; }
-        .doc-date { font-size: 8.5px; color: #666; margin-top: 2px; }
+        .doc-title { font-size: 15px; font-weight: bold; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; }
+        .doc-period { font-size: 10px; font-weight: bold; color: #000000; margin-top: 3px; }
+        .doc-date { font-size: 8.5px; color: #000000; margin-top: 2px; }
 
         /* Customer & Summary Box */
-        .meta-tbl { width: 100%; border-collapse: collapse; margin-bottom: 14px; border: 1px solid #000; }
+        .meta-tbl { width: 100%; border-collapse: collapse; margin-bottom: 14px; border: 1px solid #cbd5e1; }
         .meta-tbl td { vertical-align: top; padding: 8px 10px; font-size: 9.5px; }
-        .cust-head { font-size: 8.5px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 3px; }
-        .cust-name { font-size: 11.5px; font-weight: bold; color: #000; }
-        .cust-co { font-size: 10px; font-weight: bold; color: #333; }
+        .cust-head { font-size: 8.5px; font-weight: bold; color: #000000; text-transform: uppercase; margin-bottom: 3px; }
+        .cust-name { font-size: 11.5px; font-weight: bold; color: #000000; }
+        .cust-co { font-size: 10px; font-weight: bold; color: #000000; }
 
         .sum-tbl { width: 100%; border-collapse: collapse; font-size: 9.5px; }
         .sum-tbl td { padding: 2px 0; }
-        .sum-label { color: #555; }
-        .sum-val { text-align: right; font-weight: bold; }
-        .sum-total td { border-top: 1px solid #000; padding-top: 3px; font-weight: bold; font-size: 10.5px; color: #c2410c; }
+        .sum-label { color: #000000; }
+        .sum-val { text-align: right; font-weight: bold; color: #000000; }
+        .sum-total td { border-top: 1px solid #cbd5e1; padding-top: 3px; font-weight: bold; font-size: 10.5px; color: #000000; }
 
         /* Ledger Table */
-        .tbl-ledger { width: 100%; border-collapse: collapse; font-size: 9px; border: 1px solid #000; }
+        .tbl-ledger { width: 100%; border-collapse: collapse; font-size: 9px; border: 1px solid #cbd5e1; }
         .tbl-ledger th {
-            background: #f1f5f9;
-            color: #000;
+            background: #f8fafc;
+            color: #000000;
             font-weight: bold;
-            font-size: 8.5px;
+            font-size: 8px;
             text-transform: uppercase;
             padding: 6px 8px;
-            border: 1px solid #000;
+            border: 1px solid #cbd5e1;
             text-align: left;
         }
         .tbl-ledger td {
             padding: 5px 8px;
-            border: 1px solid #000;
+            border: 1px solid #cbd5e1;
+            color: #000000;
             vertical-align: middle;
         }
         .tbl-ledger tfoot td {
             background: #f8fafc;
             font-weight: bold;
             padding: 6px 8px;
-            border: 1px solid #000;
+            border: 1px solid #cbd5e1;
+            color: #000000;
         }
         .text-right { text-align: right !important; }
         .text-center { text-align: center !important; }
 
-        /* Bank & Signature (Bank details normal weight) */
-        .btm-tbl { width: 100%; border-collapse: collapse; margin-top: 14px; border-top: 1px solid #000; padding-top: 8px; }
+        /* Bank & Signature */
+        .btm-tbl { width: 100%; border-collapse: collapse; margin-top: 14px; border-top: 1px solid #cbd5e1; padding-top: 8px; }
         .btm-tbl td { vertical-align: bottom; }
-        .bank-info { font-size: 9px; line-height: 1.5; color: #000; }
-        .bank-head { font-size: 9.5px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px; }
+        .bank-info { font-size: 9px; line-height: 1.5; color: #000000; }
+        .bank-head { font-size: 9.5px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px; color: #000000; }
         .sig-box { text-align: right; font-size: 9.5px; }
-        .sig-co { font-weight: bold; color: #000; }
+        .sig-co { font-weight: bold; color: #000000; }
         .sig-img { max-height: 40px; margin: 4px 0; }
-        .sig-title { font-size: 8.5px; font-weight: bold; color: #555; text-transform: uppercase; border-top: 1px solid #555; display: inline-block; padding-top: 3px; margin-top: 25px; }
+        .sig-title { font-size: 8.5px; font-weight: bold; color: #000000; text-transform: uppercase; border-top: 1px solid #cbd5e1; display: inline-block; padding-top: 3px; margin-top: 25px; }
     </style>
 <body>
     <script type="text/php">
     if (isset($pdf)) {
         $font = $fontMetrics->get_font("DejaVu Sans", "normal");
-        $size = 8.5;
+        $size = 7.5;
         $color = array(0.39, 0.45, 0.55);
-        $pdf->page_text($pdf->get_width() - 36, $pdf->get_height() - 22, "{PAGE_NUM}", $font, $size, $color);
+        $pdf->page_text($pdf->get_width() - 80, $pdf->get_height() - 28, "{PAGE_NUM} / {PAGE_COUNT}", $font, $size, $color);
+        $pdf->page_text(51, $pdf->get_height() - 28, "Customer Statement of Accounts • Confidential", $font, 7, $color);
     }
     </script>
 
@@ -196,12 +201,12 @@
                 <thead>
                     <tr>
                         <th style="width: 12%;">Date</th>
-                        <th style="width: 14%;">Type</th>
-                        <th style="width: 18%;">Ref #</th>
+                        <th style="width: 12%;">Type</th>
+                        <th style="width: 14%;">Ref #</th>
                         <th style="width: 26%;">Particulars</th>
-                        <th class="text-right" style="width: 15%;">Debit (Rs.)</th>
-                        <th class="text-right" style="width: 15%;">Credit (Rs.)</th>
-                        <th class="text-right" style="width: 15%;">Balance (Rs.)</th>
+                        <th class="text-right" style="width: 12%;">Debit (Rs.)</th>
+                        <th class="text-right" style="width: 12%;">Credit (Rs.)</th>
+                        <th class="text-right" style="width: 12%;">Balance (Rs.)</th>
                     </tr>
                 </thead>
                 <tbody>

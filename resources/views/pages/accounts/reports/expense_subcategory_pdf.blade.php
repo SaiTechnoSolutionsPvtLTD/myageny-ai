@@ -5,97 +5,70 @@
     <title>Expense Subcategory Wise Report - {{ \Carbon\Carbon::parse($dateFrom)->format('d M Y') }} to {{ \Carbon\Carbon::parse($dateTo)->format('d M Y') }}</title>
     <style>
         @page {
-            size: A4 landscape;
-            margin: 12mm 14mm 14mm 14mm;
+            size: A4 portrait;
+            margin: 15mm 16mm 15mm 16mm;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { box-sizing: border-box; }
         body {
+            margin: 0;
+            padding: 0;
             font-family: 'DejaVu Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: #ffffff;
-            color: #1e293b;
-            font-size: 8.5px;
-            line-height: 1.4;
+            color: #000000;
+            font-size: 8px;
+            line-height: 1.35;
         }
 
         .sheet { width: 100%; }
 
         /* Top Header */
         .hdr-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-        .hdr-left { vertical-align: top; width: 55%; }
-        .hdr-right { vertical-align: top; width: 45%; text-align: right; }
-        .co-logo { max-height: 38px; max-width: 150px; margin-bottom: 4px; }
-        .co-name { font-size: 15px; font-weight: bold; color: #0f172a; line-height: 1.2; letter-spacing: -0.2px; }
-        .co-info { font-size: 8px; color: #64748b; margin-top: 3px; line-height: 1.45; }
-        .doc-title { font-size: 15px; font-weight: 800; color: #2563eb; text-transform: uppercase; letter-spacing: 0.5px; }
-        .doc-period { font-size: 10.5px; font-weight: bold; color: #0f172a; margin-top: 3px; }
-        .doc-meta { font-size: 8px; color: #64748b; margin-top: 2px; }
+        .hdr-left { vertical-align: top; width: 55%; color: #000000; }
+        .hdr-right { vertical-align: top; width: 45%; text-align: right; color: #000000; }
+        .co-logo { max-height: 36px; max-width: 140px; margin-bottom: 4px; }
+        .co-name { font-size: 14px; font-weight: bold; color: #000000; line-height: 1.2; letter-spacing: -0.2px; }
+        .co-info { font-size: 8px; color: #000000; margin-top: 3px; line-height: 1.4; }
+        .doc-title { font-size: 14px; font-weight: bold; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; }
+        .doc-period { font-size: 10px; font-weight: bold; color: #000000; margin-top: 3px; }
+        .doc-meta { font-size: 8px; color: #000000; margin-top: 2px; }
 
         /* Header Divider */
-        .hdr-divider { width: 100%; height: 1px; background-color: #e2e8f0; margin: 8px 0 12px 0; border-bottom: 1.5px solid #2563eb; }
-
-        /* Summary KPI Cards */
-        .kpi-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 8px 0;
-            margin-bottom: 14px;
-        }
-        .kpi-card {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            padding: 8px 12px;
-            vertical-align: middle;
-        }
-        .kpi-card.total { border-left: 3.5px solid #2563eb; background: #fbfdff; }
-        .kpi-card.fixed { border-left: 3.5px solid #0284c7; background: #fbfdff; }
-        .kpi-card.variable { border-left: 3.5px solid #d97706; background: #fffdfa; }
-        .kpi-card.stats { border-left: 3.5px solid #10b981; background: #fafffd; }
-
-        .kpi-label { font-size: 7.5px; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
-        .kpi-val { font-size: 13.5px; font-weight: 800; margin-top: 2px; line-height: 1.1; }
-        .kpi-sub { font-size: 7.5px; color: #94a3b8; margin-top: 2px; }
+        .hdr-divider { width: 100%; height: 1px; background-color: #cbd5e1; margin: 8px 0 10px 0; }
 
         /* Section Title */
         .sec-title {
-            font-size: 9.5px;
-            font-weight: 800;
-            color: #0f172a;
+            font-size: 9px;
+            font-weight: bold;
+            color: #000000;
             text-transform: uppercase;
-            letter-spacing: 0.4px;
-            margin: 14px 0 6px 0;
-            padding-left: 6px;
-            border-left: 3px solid #2563eb;
+            letter-spacing: 0.3px;
+            margin: 12px 0 5px 0;
             line-height: 1.2;
         }
 
-        /* Tables */
+        /* Tables - Single clean border */
         .tbl-data {
             width: 100%;
             border-collapse: collapse;
-            font-size: 8px;
+            font-size: 7.5px;
             margin-bottom: 8px;
+            border: 1px solid #cbd5e1;
         }
         .tbl-data th {
             background-color: #f8fafc;
-            color: #334155;
+            color: #000000;
             font-weight: bold;
-            font-size: 7.5px;
+            font-size: 7px;
             text-transform: uppercase;
-            letter-spacing: 0.3px;
-            padding: 6px 8px;
-            border-top: 1px solid #cbd5e1;
-            border-bottom: 1.5px solid #cbd5e1;
-            border-left: 1px solid #f1f5f9;
-            border-right: 1px solid #f1f5f9;
+            letter-spacing: 0.2px;
+            padding: 5px 6px;
+            border: 1px solid #cbd5e1;
             vertical-align: middle;
         }
         .tbl-data td {
-            padding: 5.5px 8px;
-            border-bottom: 1px solid #e2e8f0;
-            border-left: 1px solid #f8fafc;
-            border-right: 1px solid #f8fafc;
-            color: #1e293b;
+            padding: 5px 6px;
+            border: 1px solid #cbd5e1;
+            color: #000000;
             vertical-align: middle;
         }
         .tbl-data tr:nth-child(even) td { background-color: #fafbfc; }
@@ -103,10 +76,9 @@
         .tbl-data tfoot td {
             background-color: #f8fafc;
             font-weight: bold;
-            padding: 7px 8px;
-            border-top: 1.5px solid #0f172a;
-            border-bottom: 2px solid #0f172a;
-            color: #0f172a;
+            padding: 6px;
+            border: 1px solid #cbd5e1;
+            color: #000000;
         }
 
         /* Helpers */
@@ -116,26 +88,25 @@
 
         .type-pill {
             display: inline-block;
-            padding: 1.5px 6px;
+            padding: 1px 4px;
             border-radius: 3px;
-            font-size: 7px;
+            font-size: 6.5px;
             font-weight: bold;
             text-transform: uppercase;
+            color: #000000;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
         }
-        .type-fixed { background: #e0f2fe; color: #0369a1; }
-        .type-var { background: #fef3c7; color: #b45309; }
+
+        .cat-tag {
+            display: inline-block;
+            font-weight: bold;
+            color: #000000;
+        }
 
         .code-pill {
-            background: #f1f5f9;
-            color: #475569;
-            padding: 1.5px 5px;
-            border-radius: 3px;
-            font-size: 7px;
+            color: #000000;
             font-family: monospace;
-            font-weight: bold;
-        }
-        .cat-tag {
-            color: #c2410c;
             font-weight: bold;
         }
     </style>
@@ -145,9 +116,9 @@
     if (isset($pdf)) {
         $font = $fontMetrics->get_font("DejaVu Sans", "normal");
         $size = 7.5;
-        $color = array(0.4, 0.45, 0.55);
-        $pdf->page_text($pdf->get_width() - 55, $pdf->get_height() - 22, "{PAGE_NUM} / {PAGE_COUNT}", $font, $size, $color);
-        $pdf->page_text(35, $pdf->get_height() - 22, "myAgenci.ai Accounts Financial Intelligence • Confidential", $font, 7, $color);
+        $color = array(0, 0, 0);
+        $pdf->page_text($pdf->get_width() - 80, $pdf->get_height() - 25, "{PAGE_NUM} / {PAGE_COUNT}", $font, $size, $color);
+        $pdf->page_text(45, $pdf->get_height() - 25, "myAgenci.ai Accounts Financial Intelligence • Confidential", $font, 7, $color);
     }
     </script>
 
@@ -198,174 +169,136 @@
         {{-- Divider --}}
         <div class="hdr-divider"></div>
 
-        {{-- Summary KPI Cards --}}
-        <table class="kpi-table">
-            <tr>
-                <td class="kpi-card total" style="width: 25%;">
-                    <div class="kpi-label">Total Subcategory Spend</div>
-                    <div class="kpi-val" style="color: #2563eb;">₹{{ number_format((float) $grandTotalAmount, 2) }}</div>
-                    <div class="kpi-sub">{{ $grandTotalCount }} total transactions recorded</div>
-                </td>
-                <td class="kpi-card fixed" style="width: 25%;">
-                    <div class="kpi-label">Fixed Expenses</div>
-                    <div class="kpi-val" style="color: #0284c7;">₹{{ number_format((float) $grandTotalFixed, 2) }}</div>
-                    <div class="kpi-sub">
-                        {{ $grandTotalAmount > 0 ? round(($grandTotalFixed / $grandTotalAmount) * 100, 1) : 0 }}% of subcategory spend
-                    </div>
-                </td>
-                <td class="kpi-card variable" style="width: 25%;">
-                    <div class="kpi-label">Variable Expenses</div>
-                    <div class="kpi-val" style="color: #d97706;">₹{{ number_format((float) $grandTotalVariable, 2) }}</div>
-                    <div class="kpi-sub">
-                        {{ $grandTotalAmount > 0 ? round(($grandTotalVariable / $grandTotalAmount) * 100, 1) : 0 }}% of subcategory spend
-                    </div>
-                </td>
-                <td class="kpi-card stats" style="width: 25%;">
-                    <div class="kpi-label">Top Subcategory Spend</div>
-                    <div class="kpi-val" style="font-size: 11px; color: #047857; margin-top: 4px;">
-                        {{ $topSubcategory ? $topSubcategory['subcategory_name'] : 'None' }}
-                    </div>
-                    <div class="kpi-sub">
-                        @if($topSubcategory && $topSubcategory['total'] > 0)
-                            ₹{{ number_format((float) $topSubcategory['total'], 2) }} ({{ $topSubcategory['percentage'] }}%)
-                        @else
-                            {{ $activeSubcategoriesCount }} active subcategories
-                        @endif
-                    </div>
-                </td>
-            </tr>
-        </table>
-
         {{-- Subcategory Summary Table --}}
         <div class="sec-title">1. Subcategory Summary Breakdown</div>
         <table class="tbl-data">
             <thead>
                 <tr>
-                    <th style="width: 32px;" class="text-center">#</th>
-                    <th style="width: 140px;">Parent Category</th>
-                    <th style="width: 65px;" class="text-center">Code</th>
-                    <th style="width: 200px;">Subcategory Name</th>
-                    <th style="width: 60px;" class="text-center">Entries</th>
-                    <th style="width: 95px;" class="text-right">Fixed (₹)</th>
-                    <th style="width: 95px;" class="text-right">Variable (₹)</th>
-                    <th style="width: 115px;" class="text-right">Total Amount (₹)</th>
-                    <th style="width: 65px;" class="text-right">% Share</th>
+                    <th style="width: 4%;" class="text-center">#</th>
+                    <th style="width: 16%;">Parent Category</th>
+                    <th style="width: 8%;" class="text-center">Code</th>
+                    <th style="width: 24%;">Subcategory Name</th>
+                    <th style="width: 7%;" class="text-center">Entries</th>
+                    <th style="width: 11%;" class="text-right">Fixed (₹)</th>
+                    <th style="width: 11%;" class="text-right">Variable (₹)</th>
+                    <th style="width: 11%;" class="text-right">Total Amount (₹)</th>
+                    <th style="width: 8%;" class="text-right">% Share</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($subcategoryRows as $row)
                     <tr>
-                        <td class="text-center" style="color: #94a3b8;">{{ $loop->iteration }}</td>
+                        <td class="text-center">{{ $loop->iteration }}</td>
                         <td><span class="cat-tag">{{ $row['category_name'] }}</span></td>
                         <td class="text-center">
                             @if(!empty($row['subcategory_code']) && $row['subcategory_code'] !== '—')
                                 <span class="code-pill">{{ $row['subcategory_code'] }}</span>
                             @else
-                                <span style="color: #cbd5e1;">—</span>
+                                <span>—</span>
                             @endif
                         </td>
                         <td>
-                            <strong style="color: #0f172a; font-size: 8.5px;">{{ $row['subcategory_name'] }}</strong>
+                            <strong>{{ $row['subcategory_name'] }}</strong>
                         </td>
-                        <td class="text-center" style="font-weight: bold; color: #475569;">
+                        <td class="text-center">
                             {{ $row['count'] }}
                         </td>
-                        <td class="text-right" style="color: #0369a1;">
+                        <td class="text-right">
                             {{ number_format((float) $row['fixed'], 2) }}
                         </td>
-                        <td class="text-right" style="color: #b45309;">
+                        <td class="text-right">
                             {{ number_format((float) $row['variable'], 2) }}
                         </td>
-                        <td class="text-right" style="font-weight: bold; color: #0f172a; font-size: 9px;">
-                            {{ number_format((float) $row['total'], 2) }}
+                        <td class="text-right">
+                            <strong>{{ number_format((float) $row['total'], 2) }}</strong>
                         </td>
-                        <td class="text-right" style="font-weight: bold; color: #475569;">
+                        <td class="text-right">
                             {{ number_format((float) $row['percentage'], 2) }}%
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9" class="text-center" style="color: #94a3b8; padding: 14px;">No subcategory records found for this period.</td>
+                        <td colspan="9" class="text-center" style="padding: 12px;">No subcategory records found for this period.</td>
                     </tr>
                 @endforelse
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="4" style="text-align: right; text-transform: uppercase; font-size: 8px; letter-spacing: 0.3px;">
+                    <td colspan="4" style="text-align: right; text-transform: uppercase;">
                         Grand Total Summary:
                     </td>
-                    <td class="text-center" style="font-size: 8.5px;">{{ $grandTotalCount }}</td>
-                    <td class="text-right" style="color: #0369a1;">{{ number_format((float) $grandTotalFixed, 2) }}</td>
-                    <td class="text-right" style="color: #b45309;">{{ number_format((float) $grandTotalVariable, 2) }}</td>
-                    <td class="text-right" style="color: #2563eb; font-size: 9.5px;">₹{{ number_format((float) $grandTotalAmount, 2) }}</td>
+                    <td class="text-center">{{ $grandTotalCount }}</td>
+                    <td class="text-right">{{ number_format((float) $grandTotalFixed, 2) }}</td>
+                    <td class="text-right">{{ number_format((float) $grandTotalVariable, 2) }}</td>
+                    <td class="text-right">₹{{ number_format((float) $grandTotalAmount, 2) }}</td>
                     <td class="text-right">100.00%</td>
                 </tr>
             </tfoot>
         </table>
 
         {{-- Detailed Transactions Table --}}
-        <div class="sec-title" style="margin-top: 14px;">2. Detailed Expense Line Items</div>
+        <div class="sec-title" style="margin-top: 12px;">2. Detailed Expense Line Items</div>
         <table class="tbl-data">
             <thead>
                 <tr>
-                    <th style="width: 28px;" class="text-center">#</th>
-                    <th style="width: 70px;" class="text-center">Date</th>
-                    <th style="width: 105px;">Expense #</th>
-                    <th style="width: 95px;">Invoice #</th>
-                    <th style="width: 110px;">Category</th>
-                    <th style="width: 105px;">Subcategory</th>
-                    <th style="width: 120px;">Vendor</th>
-                    <th style="width: 65px;" class="text-center">Type</th>
-                    <th style="width: 95px;" class="text-right">Amount (₹)</th>
-                    <th style="width: auto;">Remarks</th>
+                    <th style="width: 4%;" class="text-center">#</th>
+                    <th style="width: 10%;" class="text-center">Date</th>
+                    <th style="width: 14%;">Expense #</th>
+                    <th style="width: 9%;">Invoice #</th>
+                    <th style="width: 13%;">Category</th>
+                    <th style="width: 11%;">Subcategory</th>
+                    <th style="width: 10%;">Vendor</th>
+                    <th style="width: 7%;" class="text-center">Type</th>
+                    <th style="width: 12%;" class="text-right">Amount (₹)</th>
+                    <th style="width: 10%;">Remarks</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse($allExpenses as $idx => $exp)
                     <tr>
-                        <td class="text-center" style="color: #94a3b8;">{{ $idx + 1 }}</td>
-                        <td class="text-center" style="color: #475569;">
+                        <td class="text-center">{{ $idx + 1 }}</td>
+                        <td class="text-center">
                             {{ $exp->expense_date ? $exp->expense_date->format('d/m/Y') : '—' }}
                         </td>
                         <td>
-                            <strong style="color: #0f172a;">{{ $exp->expense_number }}</strong>
+                            <strong>{{ $exp->expense_number }}</strong>
                         </td>
-                        <td style="color: #475569;">
+                        <td>
                             {{ $exp->invoice_no ?: '—' }}
                         </td>
                         <td>
                             {{ $exp->category ? $exp->category->name : '—' }}
                         </td>
-                        <td style="color: #475569;">
+                        <td>
                             {{ $exp->subcategory ? $exp->subcategory->name : '—' }}
                         </td>
                         <td>
                             {{ $exp->vendor ? ($exp->vendor->vendor_name ?: $exp->vendor->company_name) : '—' }}
                         </td>
                         <td class="text-center">
-                            <span class="type-pill {{ $exp->expense_type === 'Fixed' ? 'type-fixed' : 'type-var' }}">
+                            <span class="type-pill">
                                 {{ $exp->expense_type }}
                             </span>
                         </td>
-                        <td class="text-right" style="font-weight: bold; color: #0f172a;">
-                            {{ number_format((float) $exp->amount, 2) }}
+                        <td class="text-right">
+                            <strong>{{ number_format((float) $exp->amount, 2) }}</strong>
                         </td>
-                        <td style="font-size: 7.5px; color: #64748b;">
+                        <td>
                             {{ $exp->remarks ?: '—' }}
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="10" class="text-center" style="color: #94a3b8; padding: 14px;">No transaction records available.</td>
+                        <td colspan="10" class="text-center" style="padding: 12px;">No transaction records available.</td>
                     </tr>
                 @endforelse
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="8" style="text-align: right; text-transform: uppercase; font-size: 8px; letter-spacing: 0.3px;">
+                    <td colspan="8" style="text-align: right; text-transform: uppercase;">
                         Total Transactions Amount:
                     </td>
-                    <td class="text-right" style="color: #2563eb; font-size: 9.5px;">₹{{ number_format((float) $grandTotalAmount, 2) }}</td>
+                    <td class="text-right">₹{{ number_format((float) $grandTotalAmount, 2) }}</td>
                     <td></td>
                 </tr>
             </tfoot>

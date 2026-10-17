@@ -139,7 +139,7 @@ class AccountExpenseReportController extends Controller
         $filename = 'Expense_Category_Report_' . $categorySlug . '_' . Carbon::parse($data['dateFrom'])->format('Ymd') . '_to_' . Carbon::parse($data['dateTo'])->format('Ymd') . '.pdf';
 
         $pdf = Pdf::loadView('pages.accounts.reports.expense_category_pdf', $data)
-            ->setPaper('a4', 'landscape')
+            ->setPaper('a4', 'portrait')
             ->setOption('isHtml5ParserEnabled', true)
             ->setOption('isRemoteEnabled', true)
             ->setOption('isPhpEnabled', true);
@@ -187,7 +187,7 @@ class AccountExpenseReportController extends Controller
         $filename = 'Expense_Subcategory_Report_' . $catSlug . '_' . $subSlug . '_' . Carbon::parse($data['dateFrom'])->format('Ymd') . '_to_' . Carbon::parse($data['dateTo'])->format('Ymd') . '.pdf';
 
         $pdf = Pdf::loadView('pages.accounts.reports.expense_subcategory_pdf', $data)
-            ->setPaper('a4', 'landscape')
+            ->setPaper('a4', 'portrait')
             ->setOption('isHtml5ParserEnabled', true)
             ->setOption('isRemoteEnabled', true)
             ->setOption('isPhpEnabled', true);

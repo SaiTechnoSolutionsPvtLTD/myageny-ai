@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\LeadProductPayment;
 use App\Models\User;
 use App\Mail\AdBudgetNotificationMail;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -20,6 +21,9 @@ class AdBudgetController extends Controller
      */
     public function clients(Request $request)
     {
+        $cutoffInfo = $this->getCutoffInfo();
+        $isRequestAllowed = $cutoffInfo['is_request_allowed'];
+        $isApprovalAllowed = $cutoffInfo['is_approval_allowed'];
         $query = AdBudgetRequest::with(['adAccount', 'requester', 'tlApprover', 'approver'])
             ->where('type', 'client')
             ->when($request->search, function ($q) use ($request) {
@@ -65,7 +69,10 @@ class AdBudgetController extends Controller
             'totalApproved',
             'pendingTlCount',
             'pendingAccCount',
-            'statusCounts'
+            'statusCounts',
+            'isRequestAllowed',
+            'isApprovalAllowed',
+            'cutoffInfo'
         ));
     }
 
@@ -74,6 +81,10 @@ class AdBudgetController extends Controller
      */
     public function storeClientRequest(Request $request)
     {
+        if (! $this->isRequestAllowed()) {
+            return redirect()->back()->withInput()->with('error', 'Daily Ad Budget Request creation is closed for today. Requests must be submitted before 11:30 AM IST.');
+        }
+
         $validated = $request->validate([
             'ad_account_id'          => 'required|exists:ad_account_masters,id',
             'amount'                 => 'required|numeric|min:1',
@@ -276,6 +287,10 @@ class AdBudgetController extends Controller
      */
     public function tlApprove(Request $request, AdBudgetRequest $adBudgetRequest)
     {
+        if (! $this->isApprovalAllowed()) {
+            return redirect()->back()->with('error', 'Ad Budget Approval window is closed for today. Approvals are allowed only until 12:30 PM IST.');
+        }
+
         $action = $request->input('action', 'approve');
 
         $validated = $request->validate([
@@ -314,6 +329,10 @@ class AdBudgetController extends Controller
      */
     public function accountsApprove(Request $request, AdBudgetRequest $adBudgetRequest)
     {
+        if (! $this->isApprovalAllowed()) {
+            return redirect()->back()->with('error', 'Ad Budget Approval window is closed for today. Approvals are allowed only until 12:30 PM IST.');
+        }
+
         $action = $request->input('action', 'approve');
 
         if ($action === 'reject') {
@@ -411,5 +430,67 @@ class AdBudgetController extends Controller
         } catch (\Exception $e) {
             Log::error('Ad Budget Mail Dispatch Error: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Check if client ad budget request creation is allowed today.
+     * Allowed only until 11:30 AM daily (Asia/Kolkata timezone).
+     */
+    protected function isRequestAllowed(): bool
+    {
+        $now = Carbon::now('Asia/Kolkata');
+        $cutoff = $now->copy()->setTime(11, 30, 0);
+        return $now->lessThan($cutoff);
+    }
+
+    /**
+     * Check if ad budget approval (TL / Accounts) is allowed today.
+     * Allowed only until 12:30 PM daily (Asia/Kolkata timezone).
+     */
+    protected function isApprovalAllowed(): bool
+    {
+        $now = Carbon::now('Asia/Kolkata');
+        $cutoff = $now->copy()->setTime(12, 30, 0);
+        return $now->lessThan($cutoff);
+    }
+
+    /**
+     * Get detailed cutoff and countdown information for ad budget client requests & approvals.
+     */
+    protected function getCutoffInfo(): array
+    {
+        $now = Carbon::now('Asia/Kolkata');
+
+        // Request cutoff: 11:30 AM
+        $requestCutoff = $now->copy()->setTime(11, 30, 0);
+        $isRequestAllowed = $now->lessThan($requestCutoff);
+        $reqSec = $isRequestAllowed ? $now->diffInSeconds($requestCutoff, false) : 0;
+        $reqMin = $isRequestAllowed ? (int) ceil($reqSec / 60) : 0;
+
+        // Approval cutoff: 12:30 PM
+        $approvalCutoff = $now->copy()->setTime(12, 30, 0);
+        $isApprovalAllowed = $now->lessThan($approvalCutoff);
+        $appSec = $isApprovalAllowed ? $now->diffInSeconds($approvalCutoff, false) : 0;
+        $appMin = $isApprovalAllowed ? (int) ceil($appSec / 60) : 0;
+
+        return [
+            'is_request_allowed'   => $isRequestAllowed,
+            'request_cutoff_time'  => '11:30 AM',
+            'request_seconds'      => max(0, $reqSec),
+            'request_minutes'      => max(0, $reqMin),
+            'formatted_request_remaining' => $reqMin > 60
+                ? floor($reqMin / 60) . 'h ' . ($reqMin % 60) . 'm'
+                : $reqMin . 'm',
+
+            'is_approval_allowed'  => $isApprovalAllowed,
+            'approval_cutoff_time' => '12:30 PM',
+            'approval_seconds'     => max(0, $appSec),
+            'approval_minutes'     => max(0, $appMin),
+            'formatted_approval_remaining' => $appMin > 60
+                ? floor($appMin / 60) . 'h ' . ($appMin % 60) . 'm'
+                : $appMin . 'm',
+
+            'current_time'         => $now->format('h:i A'),
+        ];
     }
 }

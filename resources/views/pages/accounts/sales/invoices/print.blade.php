@@ -355,7 +355,7 @@
 
         @page {
             size: A4 portrait;
-            margin: 8mm 6mm 10mm 6mm;
+            margin: 16mm 16mm 16mm 16mm;
             @bottom-right {
                 content: counter(page);
                 font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;

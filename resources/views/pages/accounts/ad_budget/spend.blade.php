@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Ad Spent Management')
+@section('title', 'Ad Spend Management')
 
 @push('styles')
 <style>
@@ -72,14 +72,14 @@ textarea.form-input { border-radius:12px; }
         <div>
             <div class="adb-title">
                 <i class="bi bi-graph-up-arrow" style="color:#fe5f04;"></i>
-                <span>Ad Spent Management</span>
+                <span>Ad Spend Management</span>
             </div>
             <div class="adb-breadcrumb">
                 <a href="{{ route('accounts.dashboard') }}">Accounts</a>
                 <span>/</span>
                 <span>Ad Budget</span>
                 <span>/</span>
-                <span style="color:#121212; font-weight:700;">Spent</span>
+                <span style="color:#121212; font-weight:700;">Spend</span>
             </div>
         </div>
         <div class="adb-actions">
@@ -145,10 +145,10 @@ textarea.form-input { border-radius:12px; }
                 <span>For Partners</span>
             </a>
             <a href="{{ route('accounts.ad-budget.spend') }}" class="adb-tab-item active">
-                <span>Ad Spent</span>
+                <span>Ad Spend</span>
             </a>
             <a href="{{ route('accounts.ad-budget.allocation-vs-spent') }}" class="adb-tab-item">
-                <span>Allocation Vs Spent</span>
+                <span>Allocation Vs Spend</span>
             </a>
         </div>
 

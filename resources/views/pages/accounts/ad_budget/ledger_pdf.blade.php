@@ -5,15 +5,15 @@
     <title>Passbook Statement - {{ $accountLabel }}</title>
     <style>
         @page {
-            margin: 10mm 12mm 12mm 12mm;
+            margin: 18mm 22mm 18mm 22mm;
             size: a4 landscape;
         }
         * {
             box-sizing: border-box;
-            margin: 0;
-            padding: 0;
         }
         body {
+            margin: 0;
+            padding: 0;
             font-family: 'DejaVu Sans', sans-serif;
             font-size: 9px;
             color: #1e293b;
@@ -24,7 +24,7 @@
         /* Running Footer */
         .page-footer {
             position: fixed;
-            bottom: -7mm;
+            bottom: -10mm;
             left: 0;
             right: 0;
             height: 16px;
@@ -37,7 +37,7 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 12px;
-            border-bottom: 2px solid #fe5f04;
+            border-bottom: 1px solid #cbd5e1;
             padding-bottom: 10px;
         }
         .company-name {
@@ -108,22 +108,24 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 14px;
+            border: 1px solid #cbd5e1;
         }
         .ledger-table th {
-            background: #0f172a;
-            color: #ffffff;
+            background: #f8fafc;
+            color: #000000;
             font-size: 8px;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 0.04em;
-            padding: 7px 8px;
-            border: 1px solid #1e293b;
+            padding: 6px 8px;
+            border: 1px solid #cbd5e1;
             vertical-align: middle;
         }
         .ledger-table td {
-            padding: 6px 8px;
+            padding: 5px 8px;
             font-size: 8.5px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid #cbd5e1;
+            color: #000000;
             vertical-align: middle;
         }
 
@@ -263,7 +265,7 @@
                 <div class="summary-val" style="color:#c2410c;">+₹{{ number_format($periodAllocated, 2) }}</div>
             </td>
             <td class="summary-card" style="width:25%; background:#eff6ff; border:1px solid #bfdbfe; border-left:none;">
-                <div class="summary-lbl" style="color:#2563eb;">Total Ad Spent (Debit -)</div>
+                <div class="summary-lbl" style="color:#2563eb;">Total Ad Spend (Debit -)</div>
                 <div class="summary-val" style="color:#1d4ed8;">-₹{{ number_format($periodSpent, 2) }}</div>
             </td>
             <td class="summary-card" style="width:25%; background:{{ $periodClosingBalance >= 0 ? '#f0fdf4' : '#fef2f2' }}; border:1px solid {{ $periodClosingBalance >= 0 ? '#bbf7d0' : '#fecaca' }}; border-left:none; border-radius:0 5px 5px 0;">
@@ -290,7 +292,7 @@
                 <th style="width:9%; text-align:center;">Type</th>
                 <th style="width:15%; text-align:left;">User / Ref</th>
                 <th style="width:11%; text-align:right;">Allocated (Cr +)</th>
-                <th style="width:11%; text-align:right;">Spent (Dr -)</th>
+                <th style="width:11%; text-align:right;">Spend (Dr -)</th>
                 <th style="width:12%; text-align:right;">Balance</th>
             </tr>
         </thead>

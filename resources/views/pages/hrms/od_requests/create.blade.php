@@ -4,6 +4,7 @@
 
 @push('styles')
     @include('pages.hrms.employee_onboarding.styles')
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         .od-create-layout { display:grid; grid-template-columns:minmax(0, 1fr) 340px; gap:18px; align-items:start; }
         .od-flow { display:flex; flex-direction:column; gap:10px; }
@@ -12,6 +13,47 @@
         .od-flow-sub { margin-top:4px; font-size:12px; color:#7c7c7c; line-height:1.5; }
         .od-note { padding:12px 14px; border-radius:12px; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; font-size:12px; line-height:1.5; }
         @media (max-width: 980px) { .od-create-layout { grid-template-columns:1fr; } }
+
+        /* Time Picker Inputs */
+        .od-time-input-wrap {
+            position: relative;
+            width: 100%;
+        }
+        .od-time-input-wrap .eob-input {
+            padding-right: 40px;
+            cursor: pointer;
+            background-color: #fff;
+        }
+        .od-time-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            color: #9ca3af;
+            display: flex;
+            align-items: center;
+        }
+        .flatpickr-calendar.hasTime.noCalendar {
+            border-radius: 14px !important;
+            border: 1px solid #fed7aa !important;
+            box-shadow: 0 10px 25px -5px rgba(254, 95, 4, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+            padding: 8px !important;
+            background: #ffffff !important;
+        }
+        .flatpickr-time .flatpickr-am-pm {
+            font-weight: 800 !important;
+            color: #fe5f04 !important;
+            border-radius: 8px !important;
+        }
+        .flatpickr-time .flatpickr-am-pm:hover,
+        .flatpickr-time .flatpickr-am-pm:focus {
+            background: #fff7ed !important;
+        }
+        .flatpickr-time input:hover,
+        .flatpickr-time input:focus {
+            background: #fff7ed !important;
+        }
 
         /* Confirmation Modal */
         .od-confirm-modal {
@@ -239,8 +281,14 @@
                             {{-- Gateout Time --}}
                             <div class="eob-group">
                                 <label class="eob-label">Gateout Time <span class="eob-label-required">*</span></label>
-                                <input type="time" name="gate_out_time" id="gate_out_time" class="eob-input"
-                                       value="{{ old('gate_out_time') }}" required>
+                                <div class="od-time-input-wrap">
+                                    <input type="text" name="gate_out_time" id="gate_out_time" class="eob-input"
+                                           value="{{ old('gate_out_time') ? \Carbon\Carbon::parse(old('gate_out_time'))->format('h:i A') : '' }}"
+                                           placeholder="Select Gateout Time (e.g. 09:30 AM)" required autocomplete="off">
+                                    <span class="od-time-icon">
+                                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    </span>
+                                </div>
                                 <div class="eob-help">Departure / gate out time.</div>
                                 @error('gate_out_time')<div class="eob-error" style="color:#ef4444;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
                             </div>
@@ -248,8 +296,14 @@
                             {{-- Gatein Time --}}
                             <div class="eob-group">
                                 <label class="eob-label">Gatein Time <span class="eob-label-required">*</span></label>
-                                <input type="time" name="gate_in_time" id="gate_in_time" class="eob-input"
-                                       value="{{ old('gate_in_time') }}" required>
+                                <div class="od-time-input-wrap">
+                                    <input type="text" name="gate_in_time" id="gate_in_time" class="eob-input"
+                                           value="{{ old('gate_in_time') ? \Carbon\Carbon::parse(old('gate_in_time'))->format('h:i A') : '' }}"
+                                           placeholder="Select Gatein Time (e.g. 06:00 PM)" required autocomplete="off">
+                                    <span class="od-time-icon">
+                                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    </span>
+                                </div>
                                 <div class="eob-help">Return / gate in time.</div>
                                 @error('gate_in_time')<div class="eob-error" style="color:#ef4444;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror
                             </div>
@@ -319,6 +373,16 @@
             <p style="font-size: 15px; color: #1f2937; margin: 0; line-height: 1.6;">
                 Are you sure you want to submit this <strong>On Duty (OD)</strong> request?
             </p>
+            <div style="margin:14px 0 16px; padding:12px 16px; background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; text-align:left;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; color:#4b5563;">
+                    <span style="font-weight:600;">OD Date(s):</span>
+                    <strong id="confirmSummaryDate" style="color:#111827;">-</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:13px; color:#4b5563;">
+                    <span style="font-weight:600;">Gate Timing:</span>
+                    <strong id="confirmSummaryTime" style="color:#c2410c;">-</strong>
+                </div>
+            </div>
             <p style="font-size: 13px; color: #6b7280; margin: 8px 0 0; line-height: 1.5;">
                 An email notification will be dispatched to your Level 1 reporting manager for approval.
             </p>
@@ -356,8 +420,28 @@
 @endsection
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize 12-Hour (AM/PM) Flatpickr Time Pickers
+    flatpickr("#gate_out_time", {
+        enableTime: true,
+        noCalendar: true,
+        dateFormat: "h:i K",
+        time_24hr: false,
+        minuteIncrement: 5,
+        allowInput: true
+    });
+
+    flatpickr("#gate_in_time", {
+        enableTime: true,
+        noCalendar: true,
+        dateFormat: "h:i K",
+        time_24hr: false,
+        minuteIncrement: 5,
+        allowInput: true
+    });
+
     var fromInput = document.getElementById('from_date');
     var toInput = document.getElementById('to_date');
     var totalHelp = document.getElementById('totalDaysHelp');
@@ -403,6 +487,20 @@ function showConfirmOdModal() {
         form.reportValidity();
         return;
     }
+
+    var fromDate = document.getElementById('from_date')?.value || '';
+    var toDate = document.getElementById('to_date')?.value || '';
+    var gateOut = document.getElementById('gate_out_time')?.value || '';
+    var gateIn = document.getElementById('gate_in_time')?.value || '';
+
+    var dateSummary = (fromDate && toDate && fromDate !== toDate) ? (fromDate + ' to ' + toDate) : (fromDate || toDate || '-');
+    var timeSummary = (gateOut && gateIn) ? (gateOut + ' - ' + gateIn) : (gateOut || gateIn || '-');
+
+    var dateEl = document.getElementById('confirmSummaryDate');
+    var timeEl = document.getElementById('confirmSummaryTime');
+    if (dateEl) dateEl.innerText = dateSummary;
+    if (timeEl) timeEl.innerText = timeSummary;
+
     document.getElementById('confirmOdModal').classList.add('show');
 }
 

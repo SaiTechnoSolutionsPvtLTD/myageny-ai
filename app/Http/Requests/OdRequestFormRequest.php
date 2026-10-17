@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 
 class OdRequestFormRequest extends FormRequest
@@ -9,6 +10,29 @@ class OdRequestFormRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('gate_out_time') && filled($this->gate_out_time)) {
+            try {
+                $this->merge([
+                    'gate_out_time' => Carbon::parse($this->gate_out_time)->format('H:i'),
+                ]);
+            } catch (\Throwable $e) {
+                // Keep raw input to allow date_format rule to handle validation failure
+            }
+        }
+
+        if ($this->has('gate_in_time') && filled($this->gate_in_time)) {
+            try {
+                $this->merge([
+                    'gate_in_time' => Carbon::parse($this->gate_in_time)->format('H:i'),
+                ]);
+            } catch (\Throwable $e) {
+                // Keep raw input to allow date_format rule to handle validation failure
+            }
+        }
     }
 
     public function rules(): array

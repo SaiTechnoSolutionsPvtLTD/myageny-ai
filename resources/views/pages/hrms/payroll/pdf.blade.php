@@ -12,15 +12,15 @@
     <title>Payslip - {{ $item->employee_name }} ({{ $item->employee_code }})</title>
     <style>
         @page {
-            margin: 20px 24px;
+            margin: 16mm 18mm;
             size: a4 portrait;
         }
         * {
             box-sizing: border-box;
-            margin: 0;
-            padding: 0;
         }
         body {
+            margin: 0;
+            padding: 0;
             font-family: 'DejaVu Sans', sans-serif;
             font-size: 11px;
             color: #1e293b;

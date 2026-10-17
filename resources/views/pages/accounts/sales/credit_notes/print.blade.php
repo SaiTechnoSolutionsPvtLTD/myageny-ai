@@ -16,7 +16,7 @@
         }
         @media print {
             body { padding: 0; }
-            @page { size: A4; margin: 12mm; }
+            @page { size: A4; margin: 16mm 18mm 16mm 18mm; }
         }
         .cn-sheet {
             max-width: 800px;

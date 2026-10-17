@@ -146,7 +146,7 @@
             .sheet { border: none !important; box-shadow: none !important; padding: 0; width: 100% !important; max-width: 100% !important; }
             @page {
                 size: A4 portrait;
-                margin: 10mm 10mm 12mm 10mm;
+                margin: 16mm 18mm 16mm 18mm;
                 @bottom-right {
                     content: counter(page);
                     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;

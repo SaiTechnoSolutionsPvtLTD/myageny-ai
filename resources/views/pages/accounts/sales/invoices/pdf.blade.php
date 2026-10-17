@@ -6,10 +6,12 @@
     <style>
         @page {
             size: A4 portrait;
-            margin: 12mm 10mm 12mm 10mm;
+            margin: 16mm 18mm 16mm 18mm;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { box-sizing: border-box; }
         body {
+            margin: 0;
+            padding: 0;
             font-family: 'DejaVu Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: #ffffff;
             color: #000000;
@@ -255,7 +257,7 @@
         $font = $fontMetrics->get_font("DejaVu Sans", "normal");
         $size = 8.5;
         $color = array(0.39, 0.45, 0.55);
-        $pdf->page_text($pdf->get_width() - 36, $pdf->get_height() - 22, "{PAGE_NUM}", $font, $size, $color);
+        $pdf->page_text($pdf->get_width() - 55, $pdf->get_height() - 25, "{PAGE_NUM}", $font, $size, $color);
     }
     </script>
 

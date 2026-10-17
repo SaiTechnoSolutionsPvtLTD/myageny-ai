@@ -166,10 +166,10 @@
                         For Partners
                     </a>
                     <a href="{{ route('accounts.ad-budget.spend') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.spend') ? 'active' : '' }}">
-                        Ad Spent
+                        Ad Spend
                     </a>
                     <a href="{{ route('accounts.ad-budget.allocation-vs-spent') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.allocation-vs-spent') ? 'active' : '' }}">
-                        Allocation Vs Spent
+                        Allocation Vs Spend
                     </a>
                 </div>
 

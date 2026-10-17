@@ -4,6 +4,7 @@
 
 @push('styles')
     @include('pages.hrms.employee_onboarding.styles')
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         .pr-create-layout { display:grid; grid-template-columns:minmax(0, 1fr) 340px; gap:18px; align-items:start; }
         .pr-flow { display:flex; flex-direction:column; gap:10px; }
@@ -12,6 +13,47 @@
         .pr-flow-sub { margin-top:4px; font-size:12px; color:#7c7c7c; line-height:1.5; }
         .pr-note { padding:12px 14px; border-radius:12px; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; font-size:12px; line-height:1.5; }
         @media (max-width: 980px) { .pr-create-layout { grid-template-columns:1fr; } }
+
+        /* Time Picker Inputs */
+        .pr-time-input-wrap {
+            position: relative;
+            width: 100%;
+        }
+        .pr-time-input-wrap .eob-input {
+            padding-right: 40px;
+            cursor: pointer;
+            background-color: #fff;
+        }
+        .pr-time-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            color: #9ca3af;
+            display: flex;
+            align-items: center;
+        }
+        .flatpickr-calendar.hasTime.noCalendar {
+            border-radius: 14px !important;
+            border: 1px solid #fed7aa !important;
+            box-shadow: 0 10px 25px -5px rgba(254, 95, 4, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+            padding: 8px !important;
+            background: #ffffff !important;
+        }
+        .flatpickr-time .flatpickr-am-pm {
+            font-weight: 800 !important;
+            color: #fe5f04 !important;
+            border-radius: 8px !important;
+        }
+        .flatpickr-time .flatpickr-am-pm:hover,
+        .flatpickr-time .flatpickr-am-pm:focus {
+            background: #fff7ed !important;
+        }
+        .flatpickr-time input:hover,
+        .flatpickr-time input:focus {
+            background: #fff7ed !important;
+        }
 
         /* Confirmation Modal */
         .pr-confirm-modal {
@@ -211,13 +253,23 @@
 
                         <div class="eob-group">
                             <label class="eob-label">From Time <span class="eob-label-required">*</span></label>
-                            <input type="time" name="from_time" class="eob-input" value="{{ old('from_time') }}" required>
+                            <div class="pr-time-input-wrap">
+                                <input type="text" name="from_time" id="from_time" class="eob-input" value="{{ old('from_time') ? \Carbon\Carbon::parse(old('from_time'))->format('h:i A') : '' }}" placeholder="Select From Time (e.g. 09:30 AM)" required autocomplete="off">
+                                <span class="pr-time-icon">
+                                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                </span>
+                            </div>
                             @error('from_time')<div class="eob-error">{{ $message }}</div>@enderror
                         </div>
 
                         <div class="eob-group">
                             <label class="eob-label">To Time <span class="eob-label-required">*</span></label>
-                            <input type="time" name="to_time" class="eob-input" value="{{ old('to_time') }}" required>
+                            <div class="pr-time-input-wrap">
+                                <input type="text" name="to_time" id="to_time" class="eob-input" value="{{ old('to_time') ? \Carbon\Carbon::parse(old('to_time'))->format('h:i A') : '' }}" placeholder="Select To Time (e.g. 11:30 AM)" required autocomplete="off">
+                                <span class="pr-time-icon">
+                                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                </span>
+                            </div>
                             @error('to_time')<div class="eob-error">{{ $message }}</div>@enderror
                         </div>
 
@@ -276,6 +328,16 @@
         </div>
         <div class="pr-confirm-body">
             <p style="font-size:15px; font-weight:800; color:#111827; margin-bottom:8px;">Are you sure you want to submit this permission request?</p>
+            <div style="margin:14px 0 16px; padding:12px 16px; background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; text-align:left;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; color:#4b5563;">
+                    <span style="font-weight:600;">Permission Date:</span>
+                    <strong id="confirmSummaryDate" style="color:#111827;">-</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:13px; color:#4b5563;">
+                    <span style="font-weight:600;">Requested Time:</span>
+                    <strong id="confirmSummaryTime" style="color:#c2410c;">-</strong>
+                </div>
+            </div>
             <p style="font-size:13px; color:#6b7280; line-height:1.5;">An automated email notification will be sent to Stage 1 approvers according to your mapped Leave Hierarchy.</p>
         </div>
         <div class="pr-confirm-foot">
@@ -309,13 +371,55 @@
 @endsection
 
 @push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Initialize 12-Hour (AM/PM) Flatpickr Time Pickers
+            const fromPicker = flatpickr("#from_time", {
+                enableTime: true,
+                noCalendar: true,
+                dateFormat: "h:i K",
+                time_24hr: false,
+                minuteIncrement: 5,
+                allowInput: true
+            });
+
+            const toPicker = flatpickr("#to_time", {
+                enableTime: true,
+                noCalendar: true,
+                dateFormat: "h:i K",
+                time_24hr: false,
+                minuteIncrement: 5,
+                allowInput: true
+            });
+
+            const btnConfirm = document.getElementById('btnConfirmPermissionSubmit');
+            if (btnConfirm) {
+                btnConfirm.addEventListener('click', function() {
+                    const form = document.getElementById('createPermissionForm');
+                    closeConfirmPermissionModal();
+                    showPermissionProcessOverlay();
+                    form.submit();
+                });
+            }
+        });
+
         function showConfirmPermissionModal() {
             const form = document.getElementById('createPermissionForm');
             if (!form.checkValidity()) {
                 form.reportValidity();
                 return;
             }
+
+            const permDate = form.querySelector('[name="permission_date"]')?.value || '';
+            const fromTime = document.getElementById('from_time')?.value || '';
+            const toTime = document.getElementById('to_time')?.value || '';
+
+            const dateSpan = document.getElementById('confirmSummaryDate');
+            const timeSpan = document.getElementById('confirmSummaryTime');
+            if (dateSpan) dateSpan.innerText = permDate ? permDate : '-';
+            if (timeSpan) timeSpan.innerText = (fromTime && toTime) ? `${fromTime} - ${toTime}` : '-';
+
             document.getElementById('confirmPermissionModal').classList.add('show');
         }
         function closeConfirmPermissionModal() {
@@ -359,17 +463,5 @@
                 percentText.innerText = currentProgress + '%';
             }, 250);
         }
-
-        document.addEventListener('DOMContentLoaded', function () {
-            const btnConfirm = document.getElementById('btnConfirmPermissionSubmit');
-            if (btnConfirm) {
-                btnConfirm.addEventListener('click', function() {
-                    const form = document.getElementById('createPermissionForm');
-                    closeConfirmPermissionModal();
-                    showPermissionProcessOverlay();
-                    form.submit();
-                });
-            }
-        });
     </script>
 @endpush

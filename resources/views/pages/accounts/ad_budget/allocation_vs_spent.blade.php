@@ -391,7 +391,7 @@
                 <i class="bi bi-credit-card-2-front"></i>
             </div>
             <div>
-                <div class="adb-stat-label">Total Ad Spent (Debit -)</div>
+                <div class="adb-stat-label">Total Ad Spend (Debit -)</div>
                 <div class="adb-stat-val" style="color:#2563eb;">-₹{{ number_format($periodSpent, 2) }}</div>
                 <div style="font-size:11.5px; color:#64748b; margin-top:2px;">{{ $selectedAccount ? $selectedAccount->account_name : 'All Accounts Pool' }}</div>
             </div>
@@ -424,10 +424,10 @@
                 <span>For Partners</span>
             </a>
             <a href="{{ route('accounts.ad-budget.spend') }}" class="adb-tab-item">
-                <span>Ad Spent</span>
+                <span>Ad Spend</span>
             </a>
             <a href="{{ route('accounts.ad-budget.allocation-vs-spent') }}" class="adb-tab-item active">
-                <span>Allocation Vs Spent (Ledger)</span>
+                <span>Allocation Vs Spend (Ledger)</span>
             </a>
         </div>
 
@@ -483,7 +483,7 @@
                             <th style="width:105px; text-align:center;">Type</th>
                             <th>Particulars / Description</th>
                             <th style="width:145px; text-align:right;">Allocated (Credit +)</th>
-                            <th style="width:135px; text-align:right;">Spent (Debit -)</th>
+                            <th style="width:135px; text-align:right;">Spend (Debit -)</th>
                             <th style="width:150px; text-align:right;">Running Balance</th>
                             <th style="width:140px;">User / Ref</th>
                         </tr>

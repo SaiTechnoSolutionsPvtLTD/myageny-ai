@@ -89,6 +89,9 @@
 .progress-bar-wrap { width:100%; height:8px; background:#e2e8f0; border-radius:999px; overflow:hidden; margin-top:16px; position:relative; }
 .progress-bar-fill { height:100%; width:0%; background:linear-gradient(90deg,#fe5f04,#ff7c30); border-radius:999px; animation:progressAnim 3s ease-in-out forwards; }
 @keyframes progressAnim { 0%{ width:5%; } 30%{ width:40%; } 70%{ width:80%; } 95%{ width:95%; } }
+.adb-btn.is-disabled, .adb-btn:disabled { background:#f1f5f9 !important; border-color:#e2e8f0 !important; color:#94a3b8 !important; cursor:not-allowed !important; box-shadow:none !important; }
+.adb-pulse-dot { width:7px; height:7px; border-radius:50%; background:currentColor; display:inline-block; animation:adbPulse 1.8s infinite; }
+@keyframes adbPulse { 0%, 100% { opacity:1; transform:scale(1); } 50% { opacity:0.3; transform:scale(0.85); } }
 </style>
 @endpush
 
@@ -111,13 +114,70 @@
             </div>
         </div>
         <div class="adb-actions">
-            <button type="button" class="adb-btn adb-btn-primary" onclick="openRaiseModal()">
-                <i class="bi bi-plus-lg"></i> Raise Request
-            </button>
+            @if($isRequestAllowed)
+                <button type="button" class="adb-btn adb-btn-primary" id="adbRaiseBtn" onclick="openRaiseModal()" title="Raise Request (Allowed until 11:30 AM)">
+                    <i class="bi bi-plus-lg"></i> Raise Request
+                </button>
+            @else
+                <button type="button" class="adb-btn is-disabled" id="adbRaiseBtn" disabled title="Ad Budget Request creation closed for today at 11:30 AM" style="background:#f1f5f9; color:#94a3b8; border:1px solid #e2e8f0; cursor:not-allowed;">
+                    <i class="bi bi-lock-fill"></i> Raise Request (Closed at 11:30 AM)
+                </button>
+            @endif
         </div>
     </div>
 
     <div class="adb-body">
+
+    <!-- Daily Ad Budget Schedule & Cutoff Banner (Daily Task Pattern) -->
+    <div id="adbNoticeBanner" class="adb-notice-banner {{ $isRequestAllowed ? 'open' : 'closed' }}" style="display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 20px; border-radius:14px; margin-bottom:4px; {{ $isRequestAllowed ? 'background:linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%); border:1px solid #bbf7d0; color:#15803d;' : 'background:linear-gradient(135deg, #fff7ed 0%, #fef2f2 100%); border:1px solid #fed7aa; color:#9a3412;' }}">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <div id="adbNoticeIcon" style="width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:18px; {{ $isRequestAllowed ? 'background:#dcfce7; color:#15803d;' : 'background:#ffedd5; color:#ea580c;' }}">
+                @if($isRequestAllowed)
+                    <i class="bi bi-clock-history"></i>
+                @else
+                    <i class="bi bi-lock-fill"></i>
+                @endif
+            </div>
+            <div>
+                <div id="adbNoticeTitle" style="font-size:13.5px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                    @if($isRequestAllowed)
+                        <span>Daily Budget Request Window Open</span>
+                        <span class="adb-pulse-dot" style="color:#16a34a;"></span>
+                    @else
+                        <span>Daily Budget Request Window Closed for Today</span>
+                    @endif
+                </div>
+                <div id="adbNoticeDesc" style="font-size:12px; margin-top:2px; opacity:0.95; line-height:1.45;">
+                    @if($isRequestAllowed)
+                        Daily client budget requests must be raised before <strong>11:30 AM</strong>. Approvals are open until <strong>12:30 PM</strong>.
+                    @else
+                        Daily budget request creation closed at <strong>11:30 AM</strong>. Approvals: {{ $isApprovalAllowed ? 'Open until 12:30 PM' : 'Closed at 12:30 PM' }}.
+                    @endif
+                </div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span id="adbNoticeReqPill" style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; {{ $isRequestAllowed ? 'background:#dcfce7; color:#15803d; border:1px solid #86efac;' : 'background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;' }}">
+                @if($isRequestAllowed)
+                    <i class="bi bi-hourglass-split"></i>
+                    <span>Requests: Open until 11:30 AM ({{ $cutoffInfo['formatted_request_remaining'] }} left)</span>
+                @else
+                    <i class="bi bi-slash-circle"></i>
+                    <span>Requests: Closed at 11:30 AM</span>
+                @endif
+            </span>
+
+            <span id="adbNoticeAppPill" style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; {{ $isApprovalAllowed ? 'background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;' : 'background:#f1f5f9; color:#64748b; border:1px solid #cbd5e1;' }}">
+                @if($isApprovalAllowed)
+                    <i class="bi bi-shield-check"></i>
+                    <span>Approvals: Open until 12:30 PM ({{ $cutoffInfo['formatted_approval_remaining'] }} left)</span>
+                @else
+                    <i class="bi bi-lock"></i>
+                    <span>Approvals: Closed at 12:30 PM</span>
+                @endif
+            </span>
+        </div>
+    </div>
 
     {{-- Flash messages --}}
     @if(session('success'))
@@ -368,27 +428,42 @@
                                 <div style="display:flex; align-items:center; gap:6px;">
                                     {{-- Step 1: DM TL Approval Buttons --}}
                                     @if($item->status === 'tl_pending' && $isDmTlUser)
-                                         <button type="button" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;"
-                                                 data-item="{{ json_encode($item) }}" onclick="openTlActionModal(this, 'approve')">
-                                             ✓ TL Approve
-                                         </button>
-                                         <button type="button" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;"
-                                                 data-item="{{ json_encode($item) }}" onclick="openTlActionModal(this, 'reject')">
-                                             ✕ Reject
-                                         </button>
+                                        @if($isApprovalAllowed)
+                                             <button type="button" class="adb-btn adb-tl-approve-btn" style="padding:4px 10px; font-size:11px; background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;"
+                                                     data-item="{{ json_encode($item) }}" onclick="openTlActionModal(this, 'approve')">
+                                                 ✓ TL Approve
+                                             </button>
+                                             <button type="button" class="adb-btn adb-tl-reject-btn" style="padding:4px 10px; font-size:11px; background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;"
+                                                     data-item="{{ json_encode($item) }}" onclick="openTlActionModal(this, 'reject')">
+                                                 ✕ Reject
+                                             </button>
+                                        @else
+                                             <button type="button" class="adb-btn is-disabled" disabled style="padding:4px 10px; font-size:11px; background:#f1f5f9; color:#94a3b8; border:1px solid #e2e8f0; cursor:not-allowed;" title="Approval closed at 12:30 PM">
+                                                 <i class="bi bi-lock-fill"></i> TL Approve (Closed)
+                                             </button>
+                                             <button type="button" class="adb-btn is-disabled" disabled style="padding:4px 10px; font-size:11px; background:#f1f5f9; color:#94a3b8; border:1px solid #e2e8f0; cursor:not-allowed;" title="Approval closed at 12:30 PM">
+                                                 ✕ Reject
+                                             </button>
+                                        @endif
                                     @endif
 
                                     {{-- Step 2: Accounts Team Approval Button --}}
                                     @if($item->status === 'accounts_pending' && $isAccountsUser)
-                                        <button type="button" class="adb-btn" style="padding:4px 10px; font-size:11px; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;"
-                                                data-id="{{ $item->id }}"
-                                                data-ad-account-id="{{ $item->ad_account_id }}"
-                                                data-ad-account-name="{{ $item->adAccount ? ($item->adAccount->account_name . ' (' . $item->adAccount->platform . ')') : '—' }}"
-                                                data-amount="{{ $item->amount }}"
-                                                data-item="{{ json_encode($item) }}"
-                                                onclick="openAccountsApproveModal(this)">
-                                            Approve & Fill Details
-                                        </button>
+                                        @if($isApprovalAllowed)
+                                            <button type="button" class="adb-btn adb-accounts-approve-btn" style="padding:4px 10px; font-size:11px; background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;"
+                                                    data-id="{{ $item->id }}"
+                                                    data-ad-account-id="{{ $item->ad_account_id }}"
+                                                    data-ad-account-name="{{ $item->adAccount ? ($item->adAccount->account_name . ' (' . $item->adAccount->platform . ')') : '—' }}"
+                                                    data-amount="{{ $item->amount }}"
+                                                    data-item="{{ json_encode($item) }}"
+                                                    onclick="openAccountsApproveModal(this)">
+                                                Approve & Fill Details
+                                            </button>
+                                        @else
+                                            <button type="button" class="adb-btn is-disabled" disabled style="padding:4px 10px; font-size:11px; background:#f1f5f9; color:#94a3b8; border:1px solid #e2e8f0; cursor:not-allowed;" title="Approval closed at 12:30 PM">
+                                                <i class="bi bi-lock-fill"></i> Approve (Closed at 12:30 PM)
+                                            </button>
+                                        @endif
                                     @endif
 
                                     {{-- View Details Button for Executive & TL & Accounts --}}
@@ -757,6 +832,140 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
+// Cutoff countdown variables (11:30 AM for Requests, 12:30 PM for Approvals)
+var _isRequestAllowed = {{ $isRequestAllowed ? 'true' : 'false' }};
+var _requestSecondsRemaining = {{ $cutoffInfo['request_seconds'] }};
+var _isApprovalAllowed = {{ $isApprovalAllowed ? 'true' : 'false' }};
+var _approvalSecondsRemaining = {{ $cutoffInfo['approval_seconds'] }};
+
+function updateAdbCountdown() {
+    if (_isRequestAllowed) {
+        _requestSecondsRemaining--;
+        if (_requestSecondsRemaining <= 0) {
+            applyRequestCutoffClosed();
+        } else {
+            var mins = Math.ceil(_requestSecondsRemaining / 60);
+            var formatted = mins > 60 ? Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm' : mins + 'm';
+            var reqPill = document.getElementById('adbNoticeReqPill');
+            if (reqPill) {
+                reqPill.innerHTML = '<i class="bi bi-hourglass-split"></i><span>Requests: Open until 11:30 AM (' + formatted + ' left)</span>';
+            }
+        }
+    }
+
+    if (_isApprovalAllowed) {
+        _approvalSecondsRemaining--;
+        if (_approvalSecondsRemaining <= 0) {
+            applyApprovalCutoffClosed();
+        } else {
+            var aMins = Math.ceil(_approvalSecondsRemaining / 60);
+            var aFormatted = aMins > 60 ? Math.floor(aMins / 60) + 'h ' + (aMins % 60) + 'm' : aMins + 'm';
+            var appPill = document.getElementById('adbNoticeAppPill');
+            if (appPill) {
+                appPill.innerHTML = '<i class="bi bi-shield-check"></i><span>Approvals: Open until 12:30 PM (' + aFormatted + ' left)</span>';
+            }
+        }
+    }
+}
+
+function applyRequestCutoffClosed() {
+    _isRequestAllowed = false;
+    var topBtn = document.getElementById('adbRaiseBtn');
+    if (topBtn) {
+        topBtn.className = 'adb-btn is-disabled';
+        topBtn.disabled = true;
+        topBtn.style.background = '#f1f5f9';
+        topBtn.style.color = '#94a3b8';
+        topBtn.style.border = '1px solid #e2e8f0';
+        topBtn.style.cursor = 'not-allowed';
+        topBtn.title = 'Ad Budget Request creation closed for today at 11:30 AM';
+        topBtn.innerHTML = '<i class="bi bi-lock-fill"></i> Raise Request (Closed at 11:30 AM)';
+        topBtn.onclick = null;
+    }
+
+    var banner = document.getElementById('adbNoticeBanner');
+    if (banner) {
+        banner.className = 'adb-notice-banner closed';
+        banner.style.background = 'linear-gradient(135deg, #fff7ed 0%, #fef2f2 100%)';
+        banner.style.border = '1px solid #fed7aa';
+        banner.style.color = '#9a3412';
+    }
+    var icon = document.getElementById('adbNoticeIcon');
+    if (icon) {
+        icon.style.background = '#ffedd5';
+        icon.style.color = '#ea580c';
+        icon.innerHTML = '<i class="bi bi-lock-fill"></i>';
+    }
+    var title = document.getElementById('adbNoticeTitle');
+    if (title) {
+        title.innerHTML = '<span>Daily Budget Request Window Closed for Today</span>';
+    }
+    var desc = document.getElementById('adbNoticeDesc');
+    if (desc) {
+        desc.innerHTML = 'Daily budget request creation closed at <strong>11:30 AM</strong>. Approvals: ' + (_isApprovalAllowed ? 'Open until 12:30 PM' : 'Closed at 12:30 PM') + '.';
+    }
+    var reqPill = document.getElementById('adbNoticeReqPill');
+    if (reqPill) {
+        reqPill.style.background = '#fee2e2';
+        reqPill.style.color = '#b91c1c';
+        reqPill.style.border = '1px solid #fecaca';
+        reqPill.innerHTML = '<i class="bi bi-slash-circle"></i><span>Requests: Closed at 11:30 AM</span>';
+    }
+
+    closeRaiseModal();
+    closeConfirmModal();
+}
+
+function applyApprovalCutoffClosed() {
+    _isApprovalAllowed = false;
+
+    document.querySelectorAll('.adb-tl-approve-btn, .adb-tl-reject-btn').forEach(function(btn) {
+        btn.className = 'adb-btn is-disabled';
+        btn.disabled = true;
+        btn.style.background = '#f1f5f9';
+        btn.style.color = '#94a3b8';
+        btn.style.border = '1px solid #e2e8f0';
+        btn.style.cursor = 'not-allowed';
+        btn.title = 'Approval closed at 12:30 PM';
+        btn.onclick = null;
+        if (btn.classList.contains('adb-tl-approve-btn')) {
+            btn.innerHTML = '<i class="bi bi-lock-fill"></i> TL Approve (Closed)';
+        }
+    });
+
+    document.querySelectorAll('.adb-accounts-approve-btn').forEach(function(btn) {
+        btn.className = 'adb-btn is-disabled';
+        btn.disabled = true;
+        btn.style.background = '#f1f5f9';
+        btn.style.color = '#94a3b8';
+        btn.style.border = '1px solid #e2e8f0';
+        btn.style.cursor = 'not-allowed';
+        btn.title = 'Approval closed at 12:30 PM';
+        btn.innerHTML = '<i class="bi bi-lock-fill"></i> Approve (Closed at 12:30 PM)';
+        btn.onclick = null;
+    });
+
+    var appPill = document.getElementById('adbNoticeAppPill');
+    if (appPill) {
+        appPill.style.background = '#f1f5f9';
+        appPill.style.color = '#64748b';
+        appPill.style.border = '1px solid #cbd5e1';
+        appPill.innerHTML = '<i class="bi bi-lock"></i><span>Approvals: Closed at 12:30 PM</span>';
+    }
+
+    var desc = document.getElementById('adbNoticeDesc');
+    if (desc) {
+        desc.innerHTML = 'Daily budget requests: ' + (_isRequestAllowed ? 'Open until 11:30 AM' : 'Closed at 11:30 AM') + '. Approvals: Closed at 12:30 PM.';
+    }
+
+    closeTlActionModal();
+    closeAccApproveModal();
+}
+
+if ((_isRequestAllowed && _requestSecondsRemaining > 0) || (_isApprovalAllowed && _approvalSecondsRemaining > 0)) {
+    setInterval(updateAdbCountdown, 1000);
+}
+
 let selectedDatesArray = [];
 let flatpickrInstance = null;
 
@@ -893,6 +1102,10 @@ function clearDateRange() {
 }
 
 function openRaiseModal() {
+    if (!_isRequestAllowed) {
+        alert("Daily Ad Budget Request creation is closed for today at 11:30 AM IST.");
+        return;
+    }
     calculateRaiseBudgetStats();
     document.getElementById('raiseModal').classList.add('active');
 }
@@ -963,6 +1176,10 @@ function closeConfirmModal() {
 }
 
 function openTlActionModal(btnOrItem, action) {
+    if (!_isApprovalAllowed) {
+        alert("Ad Budget Approval window is closed for today at 12:30 PM IST.");
+        return;
+    }
     let item = btnOrItem;
     if (btnOrItem instanceof HTMLElement) {
         try {
@@ -1028,6 +1245,10 @@ function closeTlActionModal() {
 }
 
 function openAccountsApproveModal(target) {
+    if (!_isApprovalAllowed) {
+        alert("Ad Budget Approval window is closed for today at 12:30 PM IST.");
+        return;
+    }
     let id = null;
     let targetAccountId = '';
     let reqAccName = '—';
