@@ -442,9 +442,20 @@ Route::middleware(['auth'])->group(function () {
 
         // Accounts Reports Group
         Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AccountExpenseReportController::class, 'index'])->name('index');
             Route::get('/customer-balance-sheet', [App\Http\Controllers\CustomerBalanceSheetController::class, 'index'])->name('customer-balance-sheet');
             Route::get('/customer-balance-sheet/export-pdf', [App\Http\Controllers\CustomerBalanceSheetController::class, 'exportPdf'])->name('customer-balance-sheet.export-pdf');
             Route::get('/customer-balance-sheet/print', [App\Http\Controllers\CustomerBalanceSheetController::class, 'print'])->name('customer-balance-sheet.print');
+
+            // Expense Category Wise Report
+            Route::get('/expense-category-wise', [App\Http\Controllers\AccountExpenseReportController::class, 'categoryWise'])->name('expense-category-wise');
+            Route::get('/expense-category-wise/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportCategoryWiseExcel'])->name('expense-category-wise.export-excel');
+            Route::get('/expense-category-wise/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportCategoryWisePdf'])->name('expense-category-wise.export-pdf');
+
+            // Expense Subcategory Wise Report
+            Route::get('/expense-subcategory-wise', [App\Http\Controllers\AccountExpenseReportController::class, 'subcategoryWise'])->name('expense-subcategory-wise');
+            Route::get('/expense-subcategory-wise/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportSubcategoryWiseExcel'])->name('expense-subcategory-wise.export-excel');
+            Route::get('/expense-subcategory-wise/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportSubcategoryWisePdf'])->name('expense-subcategory-wise.export-pdf');
         });
     });
 

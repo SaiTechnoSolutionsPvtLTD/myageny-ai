@@ -104,13 +104,17 @@
             <div class="inv-breadcrumbs">
                 <a href="{{ route('accounts.dashboard') }}">Accounts</a>
                 <span>/</span>
-                <span>Reports</span>
+                <a href="{{ route('accounts.reports.index') }}">Reports</a>
                 <span>/</span>
                 <span style="color:#fe5f04; font-weight:600;">Customer Balance Sheet</span>
             </div>
         </div>
 
         <div class="inv-actions">
+            <a href="{{ route('accounts.reports.index') }}" class="acm-btn acm-btn-secondary" title="Back to All Reports">
+                <i class="bi bi-grid-fill"></i>
+                <span>All Reports</span>
+            </a>
             @if(!empty($selectedCustomer))
                 <a href="{{ route('accounts.reports.customer-balance-sheet.print', request()->query()) }}" target="_blank" class="acm-btn acm-btn-print">
                     <i class="bi bi-printer-fill"></i>

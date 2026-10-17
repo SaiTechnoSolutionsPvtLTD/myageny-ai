@@ -308,13 +308,31 @@
                                     {{ $item->adAccount?->platform }} {{ $item->adAccount?->account_id ? '('.$item->adAccount->account_id.')' : '' }}
                                 </div>
                             </td>
-                            <td style="font-weight:700; color:#475569;">₹{{ number_format($item->amount, 2) }}</td>
+                            <td style="font-weight:700; color:#475569;">
+                                <div>₹{{ number_format($item->amount, 2) }}</div>
+                                @php
+                                    $numDays = $item->number_of_days ?: (!empty($item->selected_dates) ? count((array) $item->selected_dates) : 0);
+                                    $avgPerDay = $item->average_per_day_budget ?: ($numDays > 0 ? round($item->amount / $numDays, 2) : 0);
+                                @endphp
+                                @if($numDays > 0)
+                                    <div style="font-size:11px; color:#ea580c; font-weight:700; margin-top:3px; white-space:nowrap;">
+                                        <i class="bi bi-calendar-check"></i> {{ $numDays }} {{ \Illuminate\Support\Str::plural('day', $numDays) }} • ₹{{ number_format($avgPerDay, 2) }}/day
+                                    </div>
+                                @endif
+                            </td>
                             <td style="font-weight:800; color:{{ $item->approved_amount > 0 ? '#15803d' : '#94a3b8' }};">
                                 {{ $item->approved_amount > 0 ? '₹'.number_format($item->approved_amount, 2) : '—' }}
                             </td>
                             <td>
-                                @if(!empty($item->selected_dates))
-                                    @foreach((array)$item->selected_dates as $dt)
+                                @php
+                                    $datesList = (array) ($item->selected_dates ?? []);
+                                    $dCount = count($datesList);
+                                @endphp
+                                @if($dCount > 0)
+                                    <div style="font-size:10.5px; font-weight:700; color:#64748b; margin-bottom:2px;">
+                                        {{ $dCount }} {{ \Illuminate\Support\Str::plural('Date', $dCount) }}:
+                                    </div>
+                                    @foreach($datesList as $dt)
                                         <span style="display:inline-block; padding:2px 7px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:5px; font-size:11px; font-weight:700; margin:1px;">
                                             📅 {{ $dt }}
                                         </span>
@@ -415,7 +433,7 @@
 
                 <div class="form-group">
                     <label class="form-label">Budget Amount (₹) <span style="color:#dc2626;">*</span></label>
-                    <input type="number" id="amount" class="form-input" step="0.01" min="1" placeholder="e.g. 5000.00" required>
+                    <input type="number" id="amount" class="form-input" step="0.01" min="1" placeholder="e.g. 5000.00" required oninput="calculateRaiseBudgetStats()">
                 </div>
 
                 <div class="form-group">
@@ -423,6 +441,30 @@
                     <input type="text" id="flatpickr_dates_input" class="form-input" placeholder="Click to select multiple dates…" required readonly>
                     <div class="date-tags-container" id="dateTagsList">
                         <span style="font-size:12px; color:#94a3b8;">No dates selected yet. Pick dates from the picker above.</span>
+                    </div>
+                </div>
+
+                {{-- Auto-calculated Fields: Number of Days & Average Per Day Budget --}}
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px;">
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label" style="display:flex; align-items:center; gap:5px; font-size:11.5px;">
+                            <i class="bi bi-calendar-check" style="color:#fe5f04;"></i>
+                            <span>Number of Days</span>
+                        </label>
+                        <div style="position:relative;">
+                            <input type="text" id="number_of_days_display" class="form-input" style="background:#fff; font-weight:800; color:#0f172a; padding-right:48px;" readonly value="0">
+                            <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); font-size:11px; font-weight:700; color:#64748b; pointer-events:none;">Days</span>
+                        </div>
+                        <span style="font-size:10.5px; color:#64748b; margin-top:2px;">Auto-calculated from selected dates</span>
+                    </div>
+
+                    <div class="form-group" style="margin:0;">
+                        <label class="form-label" style="display:flex; align-items:center; gap:5px; font-size:11.5px;">
+                            <i class="bi bi-calculator" style="color:#fe5f04;"></i>
+                            <span>Average Per Day Budget</span>
+                        </label>
+                        <input type="text" id="average_per_day_budget_display" class="form-input" style="background:#fff; font-weight:800; color:#fe5f04;" readonly value="₹0.00 / day">
+                        <span style="font-size:10.5px; color:#64748b; margin-top:2px;">Budget Amount ÷ Number of Days</span>
                     </div>
                 </div>
 
@@ -451,6 +493,8 @@
             @csrf
             <input type="hidden" name="ad_account_id" id="hidden_ad_account_id">
             <input type="hidden" name="amount" id="hidden_amount">
+            <input type="hidden" name="number_of_days" id="hidden_number_of_days">
+            <input type="hidden" name="average_per_day_budget" id="hidden_average_per_day_budget">
             <input type="hidden" name="selected_dates" id="hidden_selected_dates">
             <input type="hidden" name="remarks" id="hidden_remarks">
 
@@ -467,6 +511,14 @@
                     <div class="summary-row">
                         <span class="summary-label">Budget Amount:</span>
                         <span class="summary-val" style="color:#fe5f04; font-size:16px;" id="summary_amount"></span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Number of Days:</span>
+                        <span class="summary-val" style="font-weight:800; color:#0f172a;" id="summary_number_of_days"></span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Avg Per Day Budget:</span>
+                        <span class="summary-val" style="color:#ea580c; font-weight:800;" id="summary_average_per_day_budget"></span>
                     </div>
                     <div class="summary-row">
                         <span class="summary-label">Selected Dates:</span>
@@ -533,9 +585,17 @@
                         <span style="color:#64748b;">Requested Ad Account:</span>
                         <strong id="acc_requested_account_display" style="color:#ea580c;"></strong>
                     </div>
-                    <div style="display:flex; justify-content:space-between;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                         <span style="color:#64748b;">Requested Amount:</span>
                         <strong id="acc_requested_amount_display" style="color:#059669;"></strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span style="color:#64748b;">Number of Days:</span>
+                        <strong id="acc_days_display" style="color:#0f172a;"></strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#64748b;">Avg Budget / Day:</span>
+                        <strong id="acc_avg_per_day_display" style="color:#ea580c;"></strong>
                     </div>
                 </div>
 
@@ -602,6 +662,14 @@
                 <div class="summary-row">
                     <span class="summary-label">Requested Amount:</span>
                     <span class="summary-val" id="view_req_amount"></span>
+                </div>
+                <div class="summary-row">
+                    <span class="summary-label">Number of Days:</span>
+                    <span class="summary-val" style="font-weight:800; color:#0f172a;" id="view_number_of_days"></span>
+                </div>
+                <div class="summary-row">
+                    <span class="summary-label">Avg Per Day Budget:</span>
+                    <span class="summary-val" style="color:#ea580c; font-weight:800;" id="view_avg_per_day_budget"></span>
                 </div>
                 <div class="summary-row">
                     <span class="summary-label">Selected Dates:</span>
@@ -696,6 +764,7 @@ document.addEventListener("DOMContentLoaded", function() {
         onChange: function(selectedDates, dateStr, instance) {
             selectedDatesArray = selectedDates.map(d => instance.formatDate(d, "Y-m-d"));
             renderDateTags();
+            calculateRaiseBudgetStats();
         }
     });
 
@@ -723,6 +792,28 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 });
 
+function calculateRaiseBudgetStats() {
+    const amountInput = document.getElementById('amount');
+    const amountVal = parseFloat(amountInput ? amountInput.value : 0) || 0;
+    const numDays = selectedDatesArray.length;
+
+    const daysInput = document.getElementById('number_of_days_display');
+    const avgInput = document.getElementById('average_per_day_budget_display');
+
+    if (daysInput) {
+        daysInput.value = numDays;
+    }
+
+    if (avgInput) {
+        if (numDays > 0 && amountVal > 0) {
+            const avg = amountVal / numDays;
+            avgInput.value = '₹' + avg.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' / day';
+        } else {
+            avgInput.value = '₹0.00 / day';
+        }
+    }
+}
+
 function renderDateTags() {
     const container = document.getElementById('dateTagsList');
     if (selectedDatesArray.length === 0) {
@@ -744,9 +835,11 @@ function removeDate(dateStr) {
         flatpickrInstance.setDate(selectedDatesArray, true);
     }
     renderDateTags();
+    calculateRaiseBudgetStats();
 }
 
 function openRaiseModal() {
+    calculateRaiseBudgetStats();
     document.getElementById('raiseModal').classList.add('active');
 }
 function closeRaiseModal() {
@@ -772,16 +865,23 @@ function proceedToConfirm() {
         return;
     }
 
+    const numDays = selectedDatesArray.length;
+    const avgPerDay = numDays > 0 ? (parseFloat(amount) / numDays).toFixed(2) : 0;
+
     const selectedOption = accSelect.options[accSelect.selectedIndex];
     const accName = selectedOption.getAttribute('data-name') + ' (' + selectedOption.getAttribute('data-platform') + ')';
 
     document.getElementById('hidden_ad_account_id').value = accId;
     document.getElementById('hidden_amount').value = amount;
+    document.getElementById('hidden_number_of_days').value = numDays;
+    document.getElementById('hidden_average_per_day_budget').value = avgPerDay;
     document.getElementById('hidden_selected_dates').value = selectedDatesArray.join(',');
     document.getElementById('hidden_remarks').value = remarks;
 
     document.getElementById('summary_ad_account').innerText = accName;
     document.getElementById('summary_amount').innerText = '₹' + parseFloat(amount).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    document.getElementById('summary_number_of_days').innerText = numDays + (numDays === 1 ? ' Day' : ' Days');
+    document.getElementById('summary_average_per_day_budget').innerText = '₹' + parseFloat(avgPerDay).toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' / day';
     document.getElementById('summary_dates').innerHTML = selectedDatesArray.map(d => `<span class="date-tag" style="margin:2px;">📅 ${d}</span>`).join(' ');
     document.getElementById('summary_remarks').innerText = remarks || 'None';
 
@@ -820,12 +920,16 @@ function openTlActionModal(btnOrItem, action) {
 
     const datesList = (item.selected_dates || []).join(', ');
     const formattedAmount = '₹' + parseFloat(item.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    const numDays = item.number_of_days || (item.selected_dates ? item.selected_dates.length : 0);
+    const avgBudget = item.average_per_day_budget || (numDays > 0 ? (parseFloat(item.amount || 0) / numDays) : 0);
+    const formattedAvg = '₹' + parseFloat(avgBudget || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' / day';
 
     summary.innerHTML = `
         <div style="font-weight:800; color:#0f172a; margin-bottom:6px; font-size:14px;">Request #${item.id} — ${item.ad_account ? item.ad_account.account_name : '—'}</div>
         <div style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:#475569;">
             <div><strong>Requester:</strong> ${item.requester ? item.requester.name : '—'}</div>
             <div><strong>Requested Amount:</strong> <span style="color:#0f172a; font-weight:700;">${formattedAmount}</span></div>
+            <div><strong>Duration:</strong> <span style="font-weight:700; color:#0f172a;">${numDays} Days</span> (${formattedAvg})</div>
             <div><strong>Selected Dates:</strong> ${datesList || '—'}</div>
             <div><strong>Executive Remarks:</strong> ${item.remarks || 'None'}</div>
         </div>
@@ -860,24 +964,24 @@ function openAccountsApproveModal(target) {
     let targetAccountId = '';
     let reqAccName = '—';
     let amount = '';
+    let parsedItem = {};
 
     if (target instanceof HTMLElement) {
         id = target.getAttribute('data-id');
         targetAccountId = target.getAttribute('data-ad-account-id') || '';
         reqAccName = target.getAttribute('data-ad-account-name') || '—';
         amount = target.getAttribute('data-amount') || '';
-        if (!targetAccountId || reqAccName === '—') {
-            try {
-                const parsed = JSON.parse(target.getAttribute('data-item') || '{}');
-                id = id || parsed.id;
-                targetAccountId = targetAccountId || String(parsed.ad_account_id || (parsed.ad_account ? parsed.ad_account.id : '') || '');
-                if ((!reqAccName || reqAccName === '—') && parsed.ad_account) {
-                    reqAccName = parsed.ad_account.account_name + ' (' + parsed.ad_account.platform + ')';
-                }
-                amount = amount || parsed.amount;
-            } catch(e) {}
-        }
+        try {
+            parsedItem = JSON.parse(target.getAttribute('data-item') || '{}');
+            id = id || parsedItem.id;
+            targetAccountId = targetAccountId || String(parsedItem.ad_account_id || (parsedItem.ad_account ? parsedItem.ad_account.id : '') || '');
+            if ((!reqAccName || reqAccName === '—') && parsedItem.ad_account) {
+                reqAccName = parsedItem.ad_account.account_name + ' (' + parsedItem.ad_account.platform + ')';
+            }
+            amount = amount || parsedItem.amount;
+        } catch(e) {}
     } else if (target && typeof target === 'object') {
+        parsedItem = target;
         id = target.id;
         targetAccountId = String(target.ad_account_id || (target.ad_account ? target.ad_account.id : '') || '');
         reqAccName = target.ad_account ? (target.ad_account.account_name + ' (' + target.ad_account.platform + ')') : '—';
@@ -897,6 +1001,17 @@ function openAccountsApproveModal(target) {
     const accAmountDisplay = document.getElementById('acc_requested_amount_display');
     if (accAmountDisplay) {
         accAmountDisplay.innerText = '₹' + parseFloat(amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    }
+
+    const accNumDays = parsedItem.number_of_days || (parsedItem.selected_dates ? parsedItem.selected_dates.length : 0);
+    const accAvgBudget = parsedItem.average_per_day_budget || (accNumDays > 0 ? (parseFloat(parsedItem.amount || amount || 0) / accNumDays) : 0);
+    const accDaysDisp = document.getElementById('acc_days_display');
+    if (accDaysDisp) {
+        accDaysDisp.innerText = accNumDays + (accNumDays === 1 ? ' Day' : ' Days');
+    }
+    const accAvgDisp = document.getElementById('acc_avg_per_day_display');
+    if (accAvgDisp) {
+        accAvgDisp.innerText = '₹' + parseFloat(accAvgBudget || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' / day';
     }
 
     const selectElem = document.getElementById('acc_ad_account_id');
@@ -947,9 +1062,22 @@ function openViewDetailsModal(btnOrItem) {
         }
     }
 
+    const viewNumDays = item.number_of_days || (item.selected_dates ? item.selected_dates.length : 0);
+    const viewAvgBudget = item.average_per_day_budget || (viewNumDays > 0 ? (parseFloat(item.amount || 0) / viewNumDays) : 0);
+
     document.getElementById('view_req_id').innerText = '#' + item.id;
     document.getElementById('view_requester').innerText = item.requester ? item.requester.name : '—';
     document.getElementById('view_req_amount').innerText = '₹' + parseFloat(item.amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    
+    const viewDaysEl = document.getElementById('view_number_of_days');
+    if (viewDaysEl) {
+        viewDaysEl.innerText = viewNumDays + (viewNumDays === 1 ? ' Day' : ' Days');
+    }
+    const viewAvgEl = document.getElementById('view_avg_per_day_budget');
+    if (viewAvgEl) {
+        viewAvgEl.innerText = '₹' + parseFloat(viewAvgBudget || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' / day';
+    }
+
     document.getElementById('view_dates').innerHTML = (item.selected_dates || []).map(d => `<span class="date-tag" style="margin:2px;">📅 ${d}</span>`).join(' ') || '—';
     document.getElementById('view_status').innerText = (item.status || '').toUpperCase();
     document.getElementById('view_exec_remarks').innerText = item.remarks || 'None';

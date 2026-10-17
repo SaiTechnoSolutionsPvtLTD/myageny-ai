@@ -252,10 +252,8 @@
                     </a>
                 </div>
 
-                <!-- Reports Dropdown -->
-                <a href="javascript:void(0)"
-                   class="nav-item has-dropdown {{ request()->routeIs('accounts.reports.*') ? 'active open' : '' }}"
-                   onclick="toggleDropdown(this)">
+                <!-- Reports (Direct link to Cards Hub, identical to CRM module) -->
+                <a href="{{ route('accounts.reports.index') }}" class="nav-item {{ request()->routeIs('accounts.reports.*') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.reports.*'))
                         <div class="active-indicator"></div>
                     @endif
@@ -266,16 +264,8 @@
                             <line x1="6" y1="20" x2="6" y2="14"></line>
                         </svg>
                         <span>Reports</span>
-                        <img src="{{ asset('images/42_3081.svg') }}" alt="Expand" class="chevron">
                     </div>
                 </a>
-
-                <!-- Reports Submenu -->
-                <div class="submenu {{ request()->routeIs('accounts.reports.*') ? 'show' : '' }}">
-                    <a href="{{ route('accounts.reports.customer-balance-sheet') }}" class="submenu-item {{ request()->routeIs('accounts.reports.customer-balance-sheet*') ? 'active' : '' }}">
-                        Customer Balance Sheet
-                    </a>
-                </div>
 
                 <a href="{{ route('accounts.master.index') }}" class="nav-item {{ request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*'))

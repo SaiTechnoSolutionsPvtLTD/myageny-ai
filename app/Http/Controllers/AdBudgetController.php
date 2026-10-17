@@ -75,11 +75,13 @@ class AdBudgetController extends Controller
     public function storeClientRequest(Request $request)
     {
         $validated = $request->validate([
-            'ad_account_id'  => 'required|exists:ad_account_masters,id',
-            'amount'         => 'required|numeric|min:1',
-            'selected_dates' => 'required',
-            'client_name'    => 'nullable|string|max:255',
-            'remarks'        => 'nullable|string',
+            'ad_account_id'          => 'required|exists:ad_account_masters,id',
+            'amount'                 => 'required|numeric|min:1',
+            'selected_dates'         => 'required',
+            'number_of_days'         => 'nullable|integer|min:1',
+            'average_per_day_budget' => 'nullable|numeric|min:0',
+            'client_name'            => 'nullable|string|max:255',
+            'remarks'                => 'nullable|string',
         ]);
 
         $dates = [];
@@ -93,15 +95,21 @@ class AdBudgetController extends Controller
             return redirect()->back()->withInput()->with('error', 'Please select at least one valid date.');
         }
 
+        $numberOfDays = count($dates);
+        $amount = (float) $validated['amount'];
+        $avgPerDay = $numberOfDays > 0 ? round($amount / $numberOfDays, 2) : 0;
+
         $user = auth()->user();
         $initialStatus = ($user->hasAdminLikeRole() || $user->hasTlLikeRole()) ? 'accounts_pending' : 'tl_pending';
 
-        $validated['selected_dates'] = $dates;
-        $validated['type']           = 'client';
-        $validated['requested_by']   = auth()->id();
-        $validated['company_id']     = $user?->company_id;
-        $validated['branch_id']      = $user?->branch_id;
-        $validated['status']         = $initialStatus;
+        $validated['selected_dates']         = $dates;
+        $validated['number_of_days']         = $numberOfDays;
+        $validated['average_per_day_budget'] = $avgPerDay;
+        $validated['type']                   = 'client';
+        $validated['requested_by']           = auth()->id();
+        $validated['company_id']             = $user?->company_id;
+        $validated['branch_id']              = $user?->branch_id;
+        $validated['status']                 = $initialStatus;
 
         if ($initialStatus === 'accounts_pending') {
             $validated['tl_approved_by'] = auth()->id();

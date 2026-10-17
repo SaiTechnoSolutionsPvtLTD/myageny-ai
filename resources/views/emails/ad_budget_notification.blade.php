@@ -80,6 +80,16 @@
                     <th>Requested Amount</th>
                     <td>₹{{ number_format($adBudgetRequest->amount, 2) }}</td>
                 </tr>
+                @php
+                    $numDays = $adBudgetRequest->number_of_days ?: (!empty($adBudgetRequest->selected_dates) ? count((array) $adBudgetRequest->selected_dates) : 0);
+                    $avgPerDay = $adBudgetRequest->average_per_day_budget ?: ($numDays > 0 ? round($adBudgetRequest->amount / $numDays, 2) : 0);
+                @endphp
+                @if($numDays > 0)
+                <tr>
+                    <th>Duration & Avg / Day</th>
+                    <td>{{ $numDays }} {{ \Illuminate\Support\Str::plural('Day', $numDays) }} (₹{{ number_format($avgPerDay, 2) }} / day)</td>
+                </tr>
+                @endif
                 @if($adBudgetRequest->approved_amount > 0)
                 <tr>
                     <th>Approved Amount</th>

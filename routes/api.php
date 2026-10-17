@@ -849,4 +849,19 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::post('/expenses/{id}', [AccountsApiController::class, 'updateExpense'])->name('expenses.update');
     Route::delete('/expenses/{id}', [AccountsApiController::class, 'destroyExpense'])->name('expenses.destroy');
     Route::delete('/expenses/{id}/attachments/{index}', [AccountsApiController::class, 'deleteExpenseAttachment'])->name('expenses.attachments.destroy');
+
+    // Accounts Sales (Invoices & Payments)
+    Route::get('/sales/invoices', [AccountsApiController::class, 'salesInvoices'])->name('sales.invoices.index');
+    Route::get('/sales/invoices/meta', [AccountsApiController::class, 'salesInvoiceMeta'])->name('sales.invoices.meta');
+    Route::post('/sales/invoices', [AccountsApiController::class, 'storeSalesInvoice'])->name('sales.invoices.store');
+    Route::get('/sales/invoices/{id}', [AccountsApiController::class, 'showSalesInvoice'])->name('sales.invoices.show');
+    Route::put('/sales/invoices/{id}', [AccountsApiController::class, 'updateSalesInvoice'])->name('sales.invoices.update');
+    Route::patch('/sales/invoices/{id}/sales-person', [AccountsApiController::class, 'updateInvoiceSalesPerson'])->name('sales.invoices.sales-person');
+    Route::delete('/sales/invoices/{id}', [AccountsApiController::class, 'destroySalesInvoice'])->name('sales.invoices.destroy');
+
+    Route::post('/sales/invoices/{id}/payments', [AccountsApiController::class, 'storeInvoicePayment'])->name('sales.invoices.payments.store');
+    Route::delete('/sales/invoices/{id}/payments/{paymentId}', [AccountsApiController::class, 'destroyInvoicePayment'])->name('sales.invoices.payments.destroy');
+
+    Route::get('/sales/payments', [AccountsApiController::class, 'salesPayments'])->name('sales.payments.index');
+    Route::delete('/sales/payments/{paymentId}', [AccountsApiController::class, 'destroySalesPaymentStandalone'])->name('sales.payments.destroy');
 });

@@ -16,6 +16,14 @@ use App\Models\AccountExpense;
 use App\Models\AccountExpenseCategory;
 use App\Models\AccountExpenseSubcategory;
 use App\Models\VendorMaster;
+use App\Models\CustomerMaster;
+use App\Models\Department;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
+use App\Models\InvoicePayment;
+use App\Models\InvoiceSetting;
+use App\Models\ItemMaster;
+use App\Http\Controllers\InvoiceController;
 use App\Console\Commands\GenerateRecurringAccountExpensesCommand;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -2419,5 +2427,739 @@ class AccountsApiController extends Controller
         }
 
         return $item;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  8. ACCOUNTS SALES (INVOICES & PAYMENTS)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function salesInvoices(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+            $perPage = (int) $request->query('per_page', 15);
+
+            $query = Invoice::query()->with(['customer', 'salesPerson']);
+            if ($companyId) {
+                $query->where('company_id', $companyId);
+            }
+
+            if ($search = trim((string) $request->query('search'))) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('invoice_number', 'LIKE', "%{$search}%")
+                      ->orWhere('customer_name', 'LIKE', "%{$search}%")
+                      ->orWhere('company_name', 'LIKE', "%{$search}%")
+                      ->orWhere('customer_phone', 'LIKE', "%{$search}%")
+                      ->orWhere('customer_email', 'LIKE', "%{$search}%");
+                });
+            }
+
+            if ($status = $request->query('status')) {
+                if ($status !== 'all' && $status !== '') {
+                    $query->where('status', $status);
+                }
+            }
+
+            if ($from = $request->query('from_date')) {
+                $query->whereDate('invoice_date', '>=', $from);
+            }
+            if ($to = $request->query('to_date')) {
+                $query->whereDate('invoice_date', '<=', $to);
+            }
+
+            // KPI aggregates
+            $baseQuery = Invoice::query();
+            if ($companyId) {
+                $baseQuery->where('company_id', $companyId);
+            }
+            $allInvoices = (clone $baseQuery)->get();
+            $stats = [
+                'total_count'   => $allInvoices->count(),
+                'total_amount'  => (float) $allInvoices->sum('total_amount'),
+                'paid_amount'   => (float) $allInvoices->sum('paid_amount'),
+                'total_tds'     => (float) $allInvoices->sum('total_tds'),
+                'balance_due'   => (float) $allInvoices->sum('balance_due'),
+                'paid_count'    => $allInvoices->where('status', 'paid')->count(),
+                'partial_count' => $allInvoices->where('status', 'partially_paid')->count(),
+                'draft_count'   => $allInvoices->where('status', 'draft')->count(),
+                'overdue_count' => $allInvoices->where('status', 'overdue')->count(),
+            ];
+
+            $invoices = $query->orderBy('invoice_date', 'desc')
+                              ->orderBy('id', 'desc')
+                              ->paginate($perPage);
+
+            return response()->json([
+                'status' => true,
+                'stats'  => $stats,
+                'data'   => $invoices->items(),
+                'meta'   => [
+                    'current_page' => $invoices->currentPage(),
+                    'last_page'    => $invoices->lastPage(),
+                    'per_page'     => $invoices->perPage(),
+                    'total'        => $invoices->total(),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts salesInvoices error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load sales invoices: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function salesInvoiceMeta(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $invoiceNumber = Invoice::generateNextInvoiceNumber($companyId);
+            $setting       = InvoiceSetting::forCompany($companyId);
+
+            $customers = CustomerMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('customer_name')
+                ->get()
+                ->map(fn($c) => [
+                    'id'                 => $c->id,
+                    'customer_name'      => $c->customer_name,
+                    'company_name'       => $c->company_name,
+                    'mobile_number'      => $c->mobile_number,
+                    'email'              => $c->email,
+                    'gst_number'         => $c->gst_number,
+                    'pan_number'         => $c->pan_number,
+                    'payment_terms'      => $c->payment_terms ?: 'Due on Receipt',
+                    'billing_attention'  => $c->billing_attention ?: $c->customer_name,
+                    'billing_address'    => trim(($c->billing_address_street_1 ?? '') . ' ' . ($c->billing_address_street_2 ?? '')),
+                    'billing_city'       => $c->billing_city,
+                    'billing_state'      => $c->billing_state,
+                    'billing_pincode'    => $c->billing_pin_code,
+                    'billing_country'    => $c->billing_country ?: 'India',
+                    'shipping_attention' => $c->shipping_attention ?: ($c->billing_attention ?: $c->customer_name),
+                    'shipping_address'   => trim(($c->shipping_address_street_1 ?? '') . ' ' . ($c->shipping_address_street_2 ?? '')),
+                    'shipping_city'      => $c->shipping_city ?: $c->billing_city,
+                    'shipping_state'     => $c->shipping_state ?: $c->billing_state,
+                    'shipping_pincode'   => $c->shipping_pin_code ?: $c->billing_pin_code,
+                    'shipping_country'   => $c->shipping_country ?: ($c->billing_country ?: 'India'),
+                ]);
+
+            $items = ItemMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('item_name')
+                ->get()
+                ->map(fn($it) => [
+                    'id'           => $it->id,
+                    'item_name'    => $it->item_name,
+                    'description'  => $it->description,
+                    'hsn_sac_code' => $it->hsn_sac_code,
+                    'rate'         => (float) $it->rate,
+                    'gst'          => (float) $it->gst,
+                ]);
+
+            $salesUsers = User::query()
+                ->where(function ($query) {
+                    $deptIds = Department::where(function ($dq) {
+                        $dq->where('name', 'LIKE', '%Sales%')
+                           ->orWhere('name', 'LIKE', '%Customer Success%')
+                           ->orWhere('name', 'LIKE', '%CST%');
+                    })->pluck('id');
+
+                    if ($deptIds->isNotEmpty()) {
+                        $query->whereHas('roles', fn ($rq) => $rq->whereIn('department_id', $deptIds));
+                    }
+                })
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'email']);
+
+            if ($salesUsers->isEmpty()) {
+                $salesUsers = User::where('is_active', true)->orderBy('name')->take(20)->get(['id', 'name', 'email']);
+            }
+
+            $states = [];
+            foreach (InvoiceController::$indianStates as $codeName => $stateName) {
+                $states[] = [
+                    'label' => $codeName,
+                    'value' => $codeName,
+                    'state' => $stateName,
+                ];
+            }
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'invoice_number' => $invoiceNumber,
+                    'customers'      => $customers,
+                    'items'          => $items,
+                    'sales_users'    => $salesUsers,
+                    'states'         => $states,
+                    'default_terms'  => $setting->terms_conditions ?: InvoiceSetting::defaultTerms(),
+                    'default_notes'  => $setting->notes,
+                    'payment_terms'  => ['Due on Receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60'],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts salesInvoiceMeta error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load invoice meta: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function showSalesInvoice(int $id): JsonResponse
+    {
+        try {
+            $companyId = auth()->user()?->company_id;
+            $invoice = Invoice::with(['items.itemMaster', 'customer', 'salesPerson', 'creator', 'payments.recordedBy'])
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($id);
+
+            return response()->json([
+                'status' => true,
+                'data'   => $invoice,
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invoice not found: ' . $e->getMessage(),
+            ], 404);
+        }
+    }
+
+    public function storeSalesInvoice(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $userId    = $request->user()?->id;
+
+            $validated = $request->validate([
+                'customer_id'        => 'nullable|integer',
+                'customer_name'      => 'nullable|string|max:255',
+                'company_name'       => 'nullable|string|max:255',
+                'customer_email'     => 'nullable|email|max:255',
+                'customer_phone'     => 'nullable|string|max:50',
+                'customer_gstin'     => 'nullable|string|max:50',
+                'customer_pan'       => 'nullable|string|max:30',
+                'sales_person_id'    => 'nullable|integer',
+
+                'invoice_number'     => 'required|string|max:100',
+                'invoice_date'       => 'required|date',
+                'due_date'           => 'nullable|date',
+                'payment_terms'      => 'nullable|string|max:100',
+                'place_of_supply'    => 'nullable|string|max:100',
+
+                'billing_attention'  => 'nullable|string|max:255',
+                'billing_address'    => 'nullable|string',
+                'billing_city'       => 'nullable|string|max:100',
+                'billing_state'      => 'nullable|string|max:100',
+                'billing_pincode'    => 'nullable|string|max:20',
+                'billing_country'    => 'nullable|string|max:100',
+                'billing_gstin'      => 'nullable|string|max:50',
+
+                'shipping_attention' => 'nullable|string|max:255',
+                'shipping_address'   => 'nullable|string',
+                'shipping_city'      => 'nullable|string|max:100',
+                'shipping_state'     => 'nullable|string|max:100',
+                'shipping_pincode'   => 'nullable|string|max:20',
+                'shipping_country'   => 'nullable|string|max:100',
+                'shipping_gstin'     => 'nullable|string|max:50',
+
+                'items'              => 'required|array|min:1',
+                'items.*.item_id'    => 'nullable|integer',
+                'items.*.item_name'  => 'required|string|max:255',
+                'items.*.description'=> 'nullable|string',
+                'items.*.hsn_sac_code'=> 'nullable|string|max:50',
+                'items.*.qty'        => 'required|numeric|min:0.01',
+                'items.*.rate'       => 'required|numeric|min:0',
+                'items.*.amount'     => 'required|numeric|min:0',
+                'items.*.cgst_percent' => 'nullable|numeric|min:0|max:100',
+                'items.*.cgst_amount'  => 'nullable|numeric|min:0',
+                'items.*.sgst_percent' => 'nullable|numeric|min:0|max:100',
+                'items.*.sgst_amount'  => 'nullable|numeric|min:0',
+                'items.*.igst_percent' => 'nullable|numeric|min:0|max:100',
+                'items.*.igst_amount'  => 'nullable|numeric|min:0',
+                'items.*.total_amount' => 'nullable|numeric|min:0',
+
+                'subtotal'           => 'required|numeric|min:0',
+                'total_cgst'         => 'nullable|numeric|min:0',
+                'total_sgst'         => 'nullable|numeric|min:0',
+                'total_igst'         => 'nullable|numeric|min:0',
+                'total_tax'          => 'nullable|numeric|min:0',
+                'round_off'          => 'nullable|numeric',
+                'total_amount'       => 'required|numeric|min:0',
+                'paid_amount'        => 'nullable|numeric|min:0',
+                'balance_due'        => 'required|numeric',
+
+                'customer_notes'     => 'nullable|string',
+                'terms_conditions'   => 'nullable|string',
+                'status'             => 'nullable|string|in:draft,sent,paid,partially_paid,overdue,cancelled',
+            ]);
+
+            if (empty($validated['customer_name']) && !empty($request->customer_id)) {
+                $cust = CustomerMaster::find($request->customer_id);
+                if ($cust) {
+                    $validated['customer_name']  = $cust->customer_name;
+                    $validated['company_name']   = $validated['company_name'] ?? $cust->company_name;
+                    $validated['customer_email'] = $validated['customer_email'] ?? $cust->email;
+                    $validated['customer_phone'] = $validated['customer_phone'] ?? $cust->mobile_number;
+                    $validated['customer_gstin'] = $validated['customer_gstin'] ?? ($validated['billing_gstin'] ?? $cust->gst_number);
+                    $validated['customer_pan']   = $validated['customer_pan'] ?? $cust->pan_number;
+                }
+            }
+            if (empty($validated['customer_name'])) {
+                $validated['customer_name'] = 'Valued Customer';
+            }
+
+            \Illuminate\Support\Facades\DB::beginTransaction();
+
+            $grandTotal = (float) $validated['total_amount'];
+            $paidAmount = (float) ($validated['paid_amount'] ?? 0);
+            $balanceDue = max(0, $grandTotal - $paidAmount);
+
+            $status = $validated['status'] ?? 'sent';
+            if ($paidAmount >= $grandTotal && $grandTotal > 0) {
+                $status = 'paid';
+            } elseif ($paidAmount > 0) {
+                $status = 'partially_paid';
+            }
+
+            $invoiceData = collect($validated)->except(['items'])->toArray();
+            $invoiceData['company_id']  = $companyId;
+            $invoiceData['created_by']  = $userId;
+            $invoiceData['updated_by']  = $userId;
+            $invoiceData['paid_amount'] = $paidAmount;
+            $invoiceData['balance_due'] = $balanceDue;
+            $invoiceData['status']      = $status;
+
+            $invoice = Invoice::create($invoiceData);
+
+            foreach ($validated['items'] as $index => $itemRow) {
+                $itemRow['invoice_id']   = $invoice->id;
+                $itemRow['sort_order']   = $index + 1;
+                $itemRow['total_amount'] = !empty($itemRow['total_amount']) ? $itemRow['total_amount'] : ($itemRow['amount'] ?? 0);
+                InvoiceItem::create($itemRow);
+            }
+
+            $setting = InvoiceSetting::forCompany($companyId);
+            $expectedNumber = $setting->formatInvoiceNumber($setting->next_number);
+            if ($invoice->invoice_number === $expectedNumber) {
+                $setting->increment('next_number');
+            }
+
+            \Illuminate\Support\Facades\DB::commit();
+
+            $invoice->load(['items', 'customer', 'salesPerson']);
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Invoice #{$invoice->invoice_number} created successfully!",
+                'data'    => $invoice,
+            ]);
+        } catch (Throwable $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            Log::error('Mobile Accounts storeSalesInvoice error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to create invoice: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function updateSalesInvoice(Request $request, int $id): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $userId    = $request->user()?->id;
+
+            $invoice = Invoice::when($companyId, fn($q) => $q->where('company_id', $companyId))->findOrFail($id);
+
+            $validated = $request->validate([
+                'customer_id'        => 'nullable|integer',
+                'customer_name'      => 'nullable|string|max:255',
+                'company_name'       => 'nullable|string|max:255',
+                'customer_email'     => 'nullable|email|max:255',
+                'customer_phone'     => 'nullable|string|max:50',
+                'customer_gstin'     => 'nullable|string|max:50',
+                'customer_pan'       => 'nullable|string|max:30',
+                'sales_person_id'    => 'nullable|integer',
+
+                'invoice_date'       => 'required|date',
+                'due_date'           => 'nullable|date',
+                'payment_terms'      => 'nullable|string|max:100',
+                'place_of_supply'    => 'nullable|string|max:100',
+
+                'billing_attention'  => 'nullable|string|max:255',
+                'billing_address'    => 'nullable|string',
+                'billing_city'       => 'nullable|string|max:100',
+                'billing_state'      => 'nullable|string|max:100',
+                'billing_pincode'    => 'nullable|string|max:20',
+                'billing_country'    => 'nullable|string|max:100',
+                'billing_gstin'      => 'nullable|string|max:50',
+
+                'shipping_attention' => 'nullable|string|max:255',
+                'shipping_address'   => 'nullable|string',
+                'shipping_city'      => 'nullable|string|max:100',
+                'shipping_state'     => 'nullable|string|max:100',
+                'shipping_pincode'   => 'nullable|string|max:20',
+                'shipping_country'   => 'nullable|string|max:100',
+                'shipping_gstin'     => 'nullable|string|max:50',
+
+                'items'              => 'required|array|min:1',
+                'items.*.item_id'    => 'nullable|integer',
+                'items.*.item_name'  => 'required|string|max:255',
+                'items.*.description'=> 'nullable|string',
+                'items.*.hsn_sac_code'=> 'nullable|string|max:50',
+                'items.*.qty'        => 'required|numeric|min:0.01',
+                'items.*.rate'       => 'required|numeric|min:0',
+                'items.*.amount'     => 'required|numeric|min:0',
+                'items.*.cgst_percent' => 'nullable|numeric|min:0|max:100',
+                'items.*.cgst_amount'  => 'nullable|numeric|min:0',
+                'items.*.sgst_percent' => 'nullable|numeric|min:0|max:100',
+                'items.*.sgst_amount'  => 'nullable|numeric|min:0',
+                'items.*.igst_percent' => 'nullable|numeric|min:0|max:100',
+                'items.*.igst_amount'  => 'nullable|numeric|min:0',
+                'items.*.total_amount' => 'nullable|numeric|min:0',
+
+                'subtotal'           => 'required|numeric|min:0',
+                'total_cgst'         => 'nullable|numeric|min:0',
+                'total_sgst'         => 'nullable|numeric|min:0',
+                'total_igst'         => 'nullable|numeric|min:0',
+                'total_tax'          => 'nullable|numeric|min:0',
+                'round_off'          => 'nullable|numeric',
+                'total_amount'       => 'required|numeric|min:0',
+
+                'customer_notes'     => 'nullable|string',
+                'terms_conditions'   => 'nullable|string',
+                'status'             => 'nullable|string|in:draft,sent,paid,partially_paid,overdue,cancelled',
+            ]);
+
+            \Illuminate\Support\Facades\DB::beginTransaction();
+
+            $invoiceData = collect($validated)->except(['items'])->toArray();
+            $invoiceData['updated_by'] = $userId;
+
+            $invoice->update($invoiceData);
+
+            $invoice->items()->delete();
+            foreach ($validated['items'] as $index => $itemRow) {
+                $itemRow['invoice_id']   = $invoice->id;
+                $itemRow['sort_order']   = $index + 1;
+                $itemRow['total_amount'] = !empty($itemRow['total_amount']) ? $itemRow['total_amount'] : ($itemRow['amount'] ?? 0);
+                InvoiceItem::create($itemRow);
+            }
+
+            $invoice->recalculatePaymentStatus();
+
+            \Illuminate\Support\Facades\DB::commit();
+
+            $invoice->load(['items', 'customer', 'salesPerson']);
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Invoice #{$invoice->invoice_number} updated successfully!",
+                'data'    => $invoice,
+            ]);
+        } catch (Throwable $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            Log::error('Mobile Accounts updateSalesInvoice error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to update invoice: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function updateInvoiceSalesPerson(Request $request, int $id): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $invoice = Invoice::when($companyId, fn($q) => $q->where('company_id', $companyId))->findOrFail($id);
+
+            $validated = $request->validate([
+                'sales_person_id' => 'nullable|exists:users,id',
+            ]);
+
+            $invoice->update([
+                'sales_person_id' => $validated['sales_person_id'] ?? null,
+                'updated_by'      => $request->user()?->id,
+            ]);
+
+            $invoice->load('salesPerson');
+
+            return response()->json([
+                'status'            => true,
+                'message'           => 'Sales person updated successfully!',
+                'sales_person_id'   => $invoice->sales_person_id,
+                'sales_person_name' => $invoice->salesPerson?->name ?? '—',
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to update sales person: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function destroySalesInvoice(int $id): JsonResponse
+    {
+        try {
+            $companyId = auth()->user()?->company_id;
+            $invoice = Invoice::when($companyId, fn($q) => $q->where('company_id', $companyId))->findOrFail($id);
+
+            $num = $invoice->invoice_number;
+            $invoice->items()->delete();
+            $invoice->payments()->delete();
+            $invoice->delete();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Invoice #{$num} deleted successfully.",
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete invoice: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function storeInvoicePayment(Request $request, int $id): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $invoice = Invoice::when($companyId, fn($q) => $q->where('company_id', $companyId))->findOrFail($id);
+
+            $validated = $request->validate([
+                'payment_date'     => 'required|date',
+                'amount_received'  => 'required|numeric|min:0.01',
+                'is_tds_deducted'  => 'nullable|boolean',
+                'tds_percentage'   => 'nullable|numeric|min:0|max:100',
+                'tds_amount'       => 'nullable|numeric|min:0',
+                'payment_mode'     => 'required|string|max:50',
+                'reference_number' => 'nullable|string|max:100',
+                'bank_name'        => 'nullable|string|max:100',
+                'notes'            => 'nullable|string',
+                'attachment'       => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp,doc,docx|max:10240',
+            ]);
+
+            $isTds = $request->boolean('is_tds_deducted');
+            $amountReceived = (float) $validated['amount_received'];
+            $tdsPct = $isTds ? (float) ($validated['tds_percentage'] ?? 0) : 0;
+            $tdsAmount = $isTds ? (float) ($validated['tds_amount'] ?? 0) : 0;
+            $totalSettled = $amountReceived + $tdsAmount;
+
+            $attachmentPath = null;
+            $attachmentName = null;
+            if ($request->hasFile('attachment')) {
+                $file = $request->file('attachment');
+                $filename = time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
+                $destination = public_path('uploads/invoices/payments');
+                if (!file_exists($destination)) {
+                    mkdir($destination, 0755, true);
+                }
+                $file->move($destination, $filename);
+                $attachmentPath = 'uploads/invoices/payments/' . $filename;
+                $attachmentName = $file->getClientOriginalName();
+            }
+
+            $payCount = InvoicePayment::where('company_id', $invoice->company_id)->count() + 1;
+            $paymentNumber = 'RCP-' . date('ym') . '-' . str_pad($payCount, 4, '0', STR_PAD_LEFT);
+
+            $payment = InvoicePayment::create([
+                'company_id'           => $invoice->company_id,
+                'invoice_id'           => $invoice->id,
+                'customer_id'          => $invoice->customer_id,
+                'payment_number'       => $paymentNumber,
+                'payment_date'         => $validated['payment_date'],
+                'amount_received'      => $amountReceived,
+                'is_tds_deducted'      => $isTds,
+                'tds_percentage'       => $tdsPct,
+                'tds_amount'           => $tdsAmount,
+                'total_settled_amount' => $totalSettled,
+                'payment_mode'         => $validated['payment_mode'],
+                'reference_number'     => $validated['reference_number'] ?? null,
+                'bank_name'            => $validated['bank_name'] ?? null,
+                'notes'                => $validated['notes'] ?? null,
+                'attachment_path'      => $attachmentPath,
+                'attachment_name'      => $attachmentName,
+                'recorded_by'          => $request->user()?->id,
+            ]);
+
+            $invoice->recalculatePaymentStatus();
+            $invoice->refresh();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Payment of ₹" . number_format($amountReceived, 2) . " recorded successfully!",
+                'data'    => [
+                    'payment'     => $payment,
+                    'paid_amount' => (float) $invoice->paid_amount,
+                    'balance_due' => (float) $invoice->balance_due,
+                    'status'      => $invoice->status,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts storeInvoicePayment error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to record payment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function destroyInvoicePayment(int $invoiceId, int $paymentId): JsonResponse
+    {
+        try {
+            $companyId = auth()->user()?->company_id;
+            $invoice = Invoice::when($companyId, fn($q) => $q->where('company_id', $companyId))->findOrFail($invoiceId);
+            $payment = InvoicePayment::where('invoice_id', $invoice->id)->findOrFail($paymentId);
+
+            if ($payment->attachment_path && file_exists(public_path($payment->attachment_path))) {
+                @unlink(public_path($payment->attachment_path));
+            }
+
+            $payment->delete();
+            $invoice->recalculatePaymentStatus();
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'Payment record deleted and invoice balance successfully updated.',
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete payment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function salesPayments(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $perPage = (int) $request->query('per_page', 20);
+
+            $query = InvoicePayment::query()
+                ->with(['invoice', 'customer', 'recordedBy'])
+                ->latest('payment_date')
+                ->latest('id');
+
+            if ($companyId) {
+                $query->where('company_id', $companyId);
+            }
+
+            if ($search = trim((string) $request->query('search'))) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('payment_number', 'LIKE', "%{$search}%")
+                      ->orWhere('reference_number', 'LIKE', "%{$search}%")
+                      ->orWhere('bank_name', 'LIKE', "%{$search}%")
+                      ->orWhereHas('invoice', function ($iq) use ($search) {
+                          $iq->where('invoice_number', 'LIKE', "%{$search}%")
+                             ->orWhere('customer_name', 'LIKE', "%{$search}%")
+                             ->orWhere('company_name', 'LIKE', "%{$search}%");
+                      })
+                      ->orWhereHas('customer', function ($cq) use ($search) {
+                          $cq->where('customer_name', 'LIKE', "%{$search}%")
+                             ->orWhere('company_name', 'LIKE', "%{$search}%");
+                      });
+                });
+            }
+
+            if ($mode = $request->query('payment_mode')) {
+                if ($mode !== 'all' && $mode !== '') {
+                    $query->where('payment_mode', $mode);
+                }
+            }
+
+            if ($request->has('has_tds') && $request->query('has_tds') !== '' && $request->query('has_tds') !== 'all') {
+                if ($request->boolean('has_tds')) {
+                    $query->where(function($q) {
+                        $q->where('is_tds_deducted', true)->orWhere('tds_amount', '>', 0);
+                    });
+                } else {
+                    $query->where(function($q) {
+                        $q->where('is_tds_deducted', false)->where('tds_amount', '<=', 0);
+                    });
+                }
+            }
+
+            if ($from = $request->query('from_date')) {
+                $query->whereDate('payment_date', '>=', $from);
+            }
+            if ($to = $request->query('to_date')) {
+                $query->whereDate('payment_date', '<=', $to);
+            }
+
+            $baseQuery = InvoicePayment::query();
+            if ($companyId) {
+                $baseQuery->where('company_id', $companyId);
+            }
+            $allPayments = (clone $baseQuery)->get();
+            $stats = [
+                'total_count'    => $allPayments->count(),
+                'total_received' => (float) $allPayments->sum('amount_received'),
+                'total_tds'      => (float) $allPayments->sum('tds_amount'),
+                'total_settled'  => (float) $allPayments->sum('total_settled_amount'),
+                'tds_count'      => $allPayments->where('tds_amount', '>', 0)->count(),
+            ];
+
+            $payments = $query->paginate($perPage);
+
+            return response()->json([
+                'status' => true,
+                'stats'  => $stats,
+                'data'   => $payments->items(),
+                'meta'   => [
+                    'current_page' => $payments->currentPage(),
+                    'last_page'    => $payments->lastPage(),
+                    'per_page'     => $payments->perPage(),
+                    'total'        => $payments->total(),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts salesPayments error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load payments: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function destroySalesPaymentStandalone(int $paymentId): JsonResponse
+    {
+        try {
+            $companyId = auth()->user()?->company_id;
+            $payment = InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))->findOrFail($paymentId);
+
+            $invoice = $payment->invoice;
+
+            if ($payment->attachment_path && file_exists(public_path($payment->attachment_path))) {
+                @unlink(public_path($payment->attachment_path));
+            }
+
+            $paymentNumber = $payment->payment_number;
+            $payment->delete();
+
+            if ($invoice) {
+                $invoice->recalculatePaymentStatus();
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Payment record #{$paymentNumber} deleted successfully.",
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete payment: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

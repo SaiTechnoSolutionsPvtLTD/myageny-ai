@@ -78,9 +78,12 @@
     .filter-col-actions { width:100%; justify-content:flex-end; }
 }
 
-.acm-tbl { width:100%; border-collapse:collapse; }
-.acm-tbl th { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:#64748b; padding:12px 16px; border-bottom:1px solid #e2e8f0; background:#f8fafc; text-align:left; white-space:nowrap; }
+.acm-tbl { width:100%; border-collapse:separate; border-spacing:0; }
+.acm-tbl th { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:#475569; padding:13px 16px; border-bottom:1px solid #e2e8f0; background:#f8fafc; text-align:left; white-space:nowrap; }
 .acm-tbl td { padding:14px 16px; font-size:13px; color:#1e293b; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.acm-tbl tbody tr { transition:background-color .15s ease; }
+.acm-tbl tbody tr:hover { background-color:#f8fafc; }
+.acm-tbl tbody tr:last-child td { border-bottom:none; }
 
 .acm-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
 .status-paid { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
@@ -91,8 +94,35 @@
 .status-overdue { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
 .status-cancelled { background:#f1f5f9; color:#94a3b8; border:1px solid #cbd5e1; text-decoration:line-through; }
 
-.inv-code { font-family:monospace; font-weight:800; color:#0f172a; text-decoration:none; font-size:13px; }
-.inv-code:hover { color:#fe5f04; text-decoration:underline; }
+.inv-code {
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:2px 7px;
+    background:#fff7ed;
+    border:1px solid #fed7aa;
+    border-radius:5px;
+    font-family:'JetBrains Mono', Consolas, monospace;
+    font-weight:700;
+    color:#c2410c;
+    text-decoration:none;
+    font-size:11.5px;
+    white-space:nowrap;
+    transition:all .15s ease;
+}
+.inv-code i {
+    font-size:10px;
+}
+.inv-code:hover {
+    background:#fe5f04;
+    border-color:#ea580c;
+    color:#fff;
+    text-decoration:none;
+    box-shadow:0 2px 6px rgba(254,95,4,.25);
+}
+.inv-code:hover i {
+    color:#fff !important;
+}
 
 /* Actions Dropdown */
 .inv-actions { position:relative; display:inline-flex; justify-content:flex-end; }
@@ -330,63 +360,73 @@
                 <table class="acm-tbl">
                     <thead>
                         <tr>
-                            <th>Invoice #</th>
-                            <th>Customer & Company</th>
-                            <th>Date</th>
-                            <th>Due Date</th>
-                            <th style="text-align:right;">Amount (₹)</th>
-                            <th style="text-align:right;">Paid (₹)</th>
-                            <th style="text-align:right;">Balance Due (₹)</th>
-                            <th>Status</th>
-                            <th style="text-align:right;">Actions</th>
+                            <th style="white-space:nowrap;">Invoice #</th>
+                            <th style="min-width:180px;">Customer & Company</th>
+                            <th style="white-space:nowrap;">Date</th>
+                            <th style="white-space:nowrap;">Due Date</th>
+                            <th style="text-align:right; white-space:nowrap;">Amount (₹)</th>
+                            <th style="text-align:right; white-space:nowrap;">Paid (₹)</th>
+                            <th style="text-align:right; white-space:nowrap;">Balance Due (₹)</th>
+                            <th style="text-align:center; white-space:nowrap;">Status</th>
+                            <th style="text-align:right; white-space:nowrap;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach($invoices as $inv)
                         <tr>
-                            <td>
-                                <a href="{{ route('accounts.sales.invoices.show', $inv->id) }}" class="inv-code">
-                                    {{ $inv->invoice_number }}
+                            <td style="white-space:nowrap;">
+                                <a href="{{ route('accounts.sales.invoices.show', $inv->id) }}" class="inv-code" title="View Invoice {{ $inv->invoice_number }}">
+                                    <i class="bi bi-receipt" style="color:#ea580c; font-size:10.5px;"></i>
+                                    <span>{{ $inv->invoice_number }}</span>
                                 </a>
                                 @if($inv->salesPerson)
-                                    <div style="font-size:11px; color:#64748b; margin-top:2px;">
-                                        <i class="bi bi-person"></i> {{ $inv->salesPerson->name }}
+                                    <div style="font-size:10.5px; color:#64748b; margin-top:2px; white-space:nowrap; display:flex; align-items:center; gap:3px;">
+                                        <i class="bi bi-person" style="font-size:10.5px; color:#94a3b8;"></i>
+                                        <span>{{ $inv->salesPerson->name }}</span>
                                     </div>
                                 @endif
                             </td>
                             <td>
-                                <div style="font-weight:700; color:#0f172a;">{{ $inv->customer_name }}</div>
+                                <div style="font-size:12px; font-weight:600; color:#0f172a; line-height:1.3;">{{ $inv->customer_name }}</div>
                                 @if($inv->company_name)
-                                    <div style="font-size:11px; color:#64748b; margin-top:2px;">
-                                        <i class="bi bi-building"></i> {{ $inv->company_name }}
+                                    <div style="font-size:10.5px; color:#64748b; margin-top:2px; display:flex; align-items:center; gap:4px;">
+                                        <i class="bi bi-building" style="font-size:9.5px; color:#94a3b8;"></i>
+                                        <span>{{ $inv->company_name }}</span>
                                     </div>
                                 @endif
                             </td>
-                            <td>
-                                <div style="font-size:13px; color:#334155;">{{ \Carbon\Carbon::parse($inv->invoice_date)->format('d M Y') }}</div>
+                            <td style="white-space:nowrap;">
+                                <div style="font-size:12.5px; font-weight:600; color:#334155; white-space:nowrap; display:inline-flex; align-items:center; gap:6px;">
+                                    <i class="bi bi-calendar3" style="color:#94a3b8; font-size:11px;"></i>
+                                    <span>{{ \Carbon\Carbon::parse($inv->invoice_date)->format('d M Y') }}</span>
+                                </div>
                             </td>
-                            <td>
+                            <td style="white-space:nowrap;">
                                 @if($inv->due_date)
-                                    <div style="font-size:13px; color:{{ \Carbon\Carbon::parse($inv->due_date)->isPast() && $inv->balance_due > 0 ? '#dc2626' : '#334155' }};">
-                                        {{ \Carbon\Carbon::parse($inv->due_date)->format('d M Y') }}
-                                        @if(\Carbon\Carbon::parse($inv->due_date)->isPast() && $inv->balance_due > 0)
-                                            <span style="font-size:10px; font-weight:800; color:#dc2626; display:block;">OVERDUE</span>
+                                    @php
+                                        $isOverdue = \Carbon\Carbon::parse($inv->due_date)->isPast() && $inv->balance_due > 0;
+                                    @endphp
+                                    <div style="font-size:12.5px; font-weight:600; color:{{ $isOverdue ? '#dc2626' : '#334155' }}; white-space:nowrap; display:inline-flex; align-items:center; gap:6px;">
+                                        <i class="bi {{ $isOverdue ? 'bi-exclamation-circle-fill' : 'bi-calendar-event' }}" style="color:{{ $isOverdue ? '#dc2626' : '#94a3b8' }}; font-size:11px;"></i>
+                                        <span>{{ \Carbon\Carbon::parse($inv->due_date)->format('d M Y') }}</span>
+                                        @if($isOverdue)
+                                            <span style="font-size:9.5px; font-weight:800; color:#dc2626; background:#fee2e2; border:1px solid #fecaca; padding:1px 6px; border-radius:4px; line-height:1.2; text-transform:uppercase; letter-spacing:0.02em;">OVERDUE</span>
                                         @endif
                                     </div>
                                 @else
-                                    <span style="color:#94a3b8;">—</span>
+                                    <span style="color:#94a3b8; font-weight:500;">—</span>
                                 @endif
                             </td>
                             <td style="text-align:right; font-weight:800; color:#0f172a; white-space:nowrap;">
                                 ₹{{ number_format((float) $inv->total_amount, 2) }}
                             </td>
                             <td style="text-align:right; white-space:nowrap;">
-                                <div style="font-weight:700; color:#16a34a; font-size:13px;">
+                                <div style="font-weight:700; color:#16a34a; font-size:13px; white-space:nowrap;">
                                     ₹{{ number_format((float) $inv->paid_amount, 2) }}
                                 </div>
                                 @if((float) ($inv->total_tds ?? 0) > 0)
-                                    <div style="margin-top:3px;">
-                                        <span style="display:inline-flex; align-items:center; gap:3px; font-size:10.5px; font-weight:800; color:#c2410c; background:#fff7ed; border:1px solid #fed7aa; padding:1px 6px; border-radius:4px;" title="TDS Deducted: ₹{{ number_format((float) $inv->total_tds, 2) }} | Total Settled: ₹{{ number_format((float) $inv->paid_amount + (float) $inv->total_tds, 2) }}">
+                                    <div style="margin-top:3px; white-space:nowrap;">
+                                        <span style="display:inline-flex; align-items:center; gap:3px; font-size:10.5px; font-weight:800; color:#c2410c; background:#fff7ed; border:1px solid #fed7aa; padding:1px 6px; border-radius:4px; white-space:nowrap;" title="TDS Deducted: ₹{{ number_format((float) $inv->total_tds, 2) }} | Total Settled: ₹{{ number_format((float) $inv->paid_amount + (float) $inv->total_tds, 2) }}">
                                             <i class="bi bi-tag-fill" style="font-size:9px;"></i>
                                             <span>TDS: -₹{{ number_format((float) $inv->total_tds, 2) }}</span>
                                         </span>
@@ -396,7 +436,7 @@
                             <td style="text-align:right; font-weight:800; color:{{ $inv->balance_due > 0 ? '#dc2626' : '#16a34a' }}; white-space:nowrap;">
                                 ₹{{ number_format((float) $inv->balance_due, 2) }}
                             </td>
-                            <td>
+                            <td style="text-align:center; white-space:nowrap;">
                                 {!! $inv->status_badge !!}
                             </td>
                             <td style="text-align:right; white-space:nowrap;">

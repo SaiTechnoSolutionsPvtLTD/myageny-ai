@@ -20,6 +20,8 @@ class AdBudgetRequest extends Model
         'requested_by',
         'amount',
         'selected_dates',
+        'number_of_days',
+        'average_per_day_budget',
         'client_name',
         'project_id',
         'remarks',
@@ -36,13 +38,15 @@ class AdBudgetRequest extends Model
     ];
 
     protected $casts = [
-        'selected_dates'  => 'array',
-        'attachments'     => 'array',
-        'amount'          => 'float',
-        'approved_amount' => 'float',
-        'payment_date'    => 'date',
-        'tl_approved_at'  => 'datetime',
-        'approved_at'     => 'datetime',
+        'selected_dates'         => 'array',
+        'number_of_days'         => 'integer',
+        'average_per_day_budget' => 'float',
+        'attachments'            => 'array',
+        'amount'                 => 'float',
+        'approved_amount'        => 'float',
+        'payment_date'           => 'date',
+        'tl_approved_at'         => 'datetime',
+        'approved_at'            => 'datetime',
     ];
 
     public function adAccount()
