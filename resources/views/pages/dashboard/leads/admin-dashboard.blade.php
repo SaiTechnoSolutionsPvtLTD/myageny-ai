@@ -6553,7 +6553,7 @@
 
 
 
-                    @if($hasNonCocoBranch ?? false)
+                    @if(false && ($hasNonCocoBranch ?? false))
 
 
 
@@ -6853,7 +6853,7 @@
 
 
 
-                    @if($hasCocoBranch ?? false)
+                    @if(false && ($hasCocoBranch ?? false))
 
 
 
@@ -7153,7 +7153,7 @@
 
 
 
-                    @if($canViewCst ?? true)
+                    @if(false && ($canViewCst ?? true))
 
 
 
@@ -7518,102 +7518,43 @@
 
 
                     {{-- Branch CST Card --}}
-
+                    @if(false)
                     <div class="da-modal-section-card" id="daModalBranchCstCard" style="margin-top:16px;">
-
-
-
                         <div class="da-modal-section-head">
-
-
-
                             <div class="da-modal-section-heading">
-
-
-
                                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#0d9488" stroke-width="2.2"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-
-
-
                                 <span id="daModalBranchCstHeading">CST</span>
-
-
-
                             </div>
-
-
-
                             <span class="da-badge" style="font-size:10px; font-weight:700; background:rgba(13,148,136,0.08); color:#0d9488; border-color:rgba(13,148,136,0.2);">Renewals &amp; Development</span>
-
-
-
                         </div>
-
-
-
                         <div class="da-modal-kpi-grid">
-
-
-
                             <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal(window.daSelectedBranchId, window.daSelectedBranchName + ' - CST', 'cst')" style="background:linear-gradient(135deg, #e11d48 0%, #f43f5e 50%, #fb7185 100%); cursor:pointer;">
-
                                 <div class="da-modal-metric-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff"><path fill-rule="evenodd" d="M12.963 2.286a.75.75 0 00-1.071-.136 9.742 9.742 0 00-3.539 6.177A7.547 7.547 0 016.648 6.61a.75.75 0 00-1.152-.082A9 9 0 1015.68 4.534a7.46 7.46 0 01-2.717-2.248zM15.75 14.25a3.75 3.75 0 11-7.313-1.172c.628.465 1.35.81 2.133 1a5.99 5.99 0 011.925-3.545 3.75 3.75 0 013.255 3.717z" clip-rule="evenodd" /></svg></div>
-
                                 <div class="da-modal-metric-content">
-
                                     <div class="da-modal-metric-val" id="daModalBranchCstCount">0</div>
-
                                     <div class="da-modal-metric-lbl">Total Prospect count</div>
-
                                     <div class="da-modal-metric-sub">CST Renewals &amp; Development</div>
-
                                 </div>
-
                             </div>
-
-
-
                             <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal(window.daSelectedBranchId, window.daSelectedBranchName + ' - CST', 'cst')" style="background:linear-gradient(135deg, #0d9488 0%, #14b8a6 50%, #2dd4bf 100%); cursor:pointer;">
-
                                 <div class="da-modal-metric-icon"><svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-
                                 <div class="da-modal-metric-content">
-
                                     <div class="da-modal-metric-val" id="daModalBranchCstDeal">₹0.00</div>
-
                                     <div class="da-modal-metric-lbl">Deal Value</div>
-
                                     <div class="da-modal-metric-sub">CST Total Deal value</div>
-
                                 </div>
-
                             </div>
-
-
-
                             <div class="da-modal-metric-card" onclick="openBranchHotLeadsModal(window.daSelectedBranchId, window.daSelectedBranchName + ' - CST', 'cst')" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); cursor:pointer;">
-
                                 <div class="da-modal-metric-icon"><svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-
                                 <div class="da-modal-metric-content">
-
                                     <div class="da-modal-metric-val" id="daModalBranchCstExp">₹0.00</div>
-
                                     <div class="da-modal-metric-lbl">Expected Value</div>
-
                                     <div class="da-modal-metric-sub">Expected closure value</div>
-
                                 </div>
-
                             </div>
-
-
-
                         </div>
-
-
-
                     </div>
+                    @endif
 
 
 
@@ -11941,15 +11882,15 @@ function renderForecasting(d) {
 
 
 
-    var showNonCoco = (fc.show_non_coco !== undefined ? fc.show_non_coco : (fc.has_non_coco_branch !== undefined ? fc.has_non_coco_branch : false));
+    var showNonCoco = false;
 
 
 
-    var showCoco    = (fc.show_coco !== undefined ? fc.show_coco : (fc.has_coco_branch !== undefined ? fc.has_coco_branch : false));
+    var showCoco    = false;
 
 
 
-    var showCst     = (fc.show_cst !== undefined ? fc.show_cst : (fc.can_view_cst !== undefined ? fc.can_view_cst : true));
+    var showCst     = false;
 
 
 
@@ -12145,7 +12086,7 @@ function renderForecasting(d) {
 
 
 
-    var subText = hotValue > 0 ? (fmtL(hotValue) + ' deal value • NST & CST Prospects') : 'Current month NST & CST prospects';
+    var subText = hotValue > 0 ? (fmtL(hotValue) + ' deal value • NST Prospects') : 'Current month NST prospects';
 
 
 
@@ -12265,7 +12206,7 @@ function renderForecasting(d) {
 
 
 
-    gridEl.innerHTML = cardHtml + daySalesCardHtml + trendAnalysisCardHtml;
+    gridEl.innerHTML = cardHtml + daySalesCardHtml;
 
 
 
@@ -12546,7 +12487,7 @@ window.openTotalProspectsModal = function() {
 
 
 
-    var visibleCardsSum = nstHoVal + nonCocoVal + cocoVal + cstVal;
+    var visibleCardsSum = nstHoVal;
 
 
 
@@ -12562,19 +12503,7 @@ window.openTotalProspectsModal = function() {
 
 
 
-        var totalModalSum = CAN_VIEW_ACTIVE_BRANCHES
-
-
-
-            ? (m.count !== undefined && m.count > 0 ? m.count : (visibleCardsSum > 0 ? visibleCardsSum : 0))
-
-
-
-            : (visibleCardsSum > 0 ? visibleCardsSum : (m.count !== undefined ? m.count : 0));
-
-
-
-        totalBadgeEl.textContent = totalModalSum;
+        totalBadgeEl.textContent = visibleCardsSum;
 
 
 
@@ -12747,6 +12676,8 @@ window.onKeyMetricsBranchChange = function(branchId) {
     if (!branchId) {
         resetSectionViews();
         setTopCardsDisplay('');
+        var totalBadgeEl = document.getElementById('daModalTotalProspectsCount');
+        if (totalBadgeEl) totalBadgeEl.textContent = Number(window.currentProspectsMetrics?.nstHo?.count || 0);
         return;
     }
 
@@ -12768,16 +12699,21 @@ window.onKeyMetricsBranchChange = function(branchId) {
     var branch = list.find(function(b) { return String(b.id) === bid; });
     if (!branch) return;
 
-    // 3. If HO/default branch selected → same 4-card view as "All Branches (HO View)"
+    // 3. If HO/default branch selected → same card view as "All Branches (HO View)"
     if (branch.is_default) {
         resetSectionViews();
         setTopCardsDisplay('');
+        var totalBadgeEl = document.getElementById('daModalTotalProspectsCount');
+        if (totalBadgeEl) totalBadgeEl.textContent = Number(window.currentProspectsMetrics?.nstHo?.count || 0);
         return;
     }
 
-    // 4. Non-HO branch selected → show branch-specific NST & CST cards
+    // 4. Non-HO branch selected → show branch-specific NST card
     resetSectionViews();
     setTopCardsDisplay('none');
+
+    var totalBadgeEl = document.getElementById('daModalTotalProspectsCount');
+    if (totalBadgeEl) totalBadgeEl.textContent = branch.nst_count !== undefined ? branch.nst_count : (branch.prospect_count || 0);
 
     window.daSelectedBranchId = branch.id;
     window.daSelectedBranchName = branch.name || 'Branch';

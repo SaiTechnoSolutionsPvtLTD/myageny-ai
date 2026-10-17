@@ -1325,7 +1325,7 @@ table td:last-child,
         $notificationItems = collect();
         $notificationUnreadCount = 0;
 
-        if ($notificationUser && \Illuminate\Support\Facades\Schema::hasTable('notifications')) {
+        if (false && $notificationUser && \Illuminate\Support\Facades\Schema::hasTable('notifications')) {
             $branchNotifData = \App\Services\NotificationService::getBranchFilteredNotifications($notificationUser, 8);
             $notificationItems = $branchNotifData['items'];
             $notificationUnreadCount = $branchNotifData['unread_count'];
@@ -1339,7 +1339,7 @@ table td:last-child,
         @yield('content')
     </main>
 
-    @if($notificationUser && \Illuminate\Support\Facades\Schema::hasTable('notifications'))
+    @if(false && $notificationUser && \Illuminate\Support\Facades\Schema::hasTable('notifications'))
         <div class="app-notify-fab" id="appNotifyFab">
             <button type="button" class="app-notify-toggle" id="appNotifyToggle" aria-label="Open notifications" aria-expanded="false">
                 <i class="bi bi-bell-fill"></i>

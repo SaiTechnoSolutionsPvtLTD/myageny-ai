@@ -162,7 +162,12 @@ class SuperAdminDashboardController extends ApiController
         // ── 3. Source counts (grouped by distinct source name) ──────
         $sourceCounts = [];
         $sourceTotal  = 0;
-        $uniqueSources = LeadSource::withoutGlobalScope('company')
+        $companyId = $this->visibility->companyIdFor($request->user()) ?? $request->user()?->company_id;
+        $sourceQuery = LeadSource::query();
+        if ($companyId) {
+            $sourceQuery->withoutGlobalScope('company')->where('company_id', $companyId);
+        }
+        $uniqueSources = $sourceQuery
             ->orderBy('id')
             ->get(['id', 'name'])
             ->unique(fn($s) => strtolower(trim($s->name)))
@@ -170,7 +175,11 @@ class SuperAdminDashboardController extends ApiController
 
         foreach ($uniqueSources as $src) {
             $sName = strtolower(trim($src->name));
-            $sameNameIds = LeadSource::withoutGlobalScope('company')->whereRaw('LOWER(name) = ?', [$sName])->pluck('id')->toArray();
+            $sameNameQuery = LeadSource::withoutGlobalScope('company')->whereRaw('LOWER(name) = ?', [$sName]);
+            if ($companyId) {
+                $sameNameQuery->where('company_id', $companyId);
+            }
+            $sameNameIds = $sameNameQuery->pluck('id')->toArray();
 
             $count = (clone $base())
                 ->where(function ($q) use ($sameNameIds, $src) {
@@ -1349,7 +1358,12 @@ class SuperAdminDashboardController extends ApiController
         // ── 3. Source counts (grouped by distinct source name) ──────
         $sourceCounts = [];
         $sourceTotal  = 0;
-        $uniqueSources = LeadSource::withoutGlobalScope('company')
+        $companyId = $this->visibility->companyIdFor($request->user()) ?? $request->user()?->company_id;
+        $sourceQuery = LeadSource::query();
+        if ($companyId) {
+            $sourceQuery->withoutGlobalScope('company')->where('company_id', $companyId);
+        }
+        $uniqueSources = $sourceQuery
             ->orderBy('id')
             ->get(['id', 'name'])
             ->unique(fn($s) => strtolower(trim($s->name)))
@@ -1357,7 +1371,11 @@ class SuperAdminDashboardController extends ApiController
 
         foreach ($uniqueSources as $src) {
             $sName = strtolower(trim($src->name));
-            $sameNameIds = LeadSource::withoutGlobalScope('company')->whereRaw('LOWER(name) = ?', [$sName])->pluck('id')->toArray();
+            $sameNameQuery = LeadSource::withoutGlobalScope('company')->whereRaw('LOWER(name) = ?', [$sName]);
+            if ($companyId) {
+                $sameNameQuery->where('company_id', $companyId);
+            }
+            $sameNameIds = $sameNameQuery->pluck('id')->toArray();
 
             $count = (clone $base())
                 ->where(function ($q) use ($sameNameIds, $src) {
@@ -1868,21 +1886,6 @@ class SuperAdminDashboardController extends ApiController
             $userTotalDealValue += (float) ($cpMetrics['nst_ho']['deal_value'] ?? 0);
             $userTotalExpectedCollection += (float) ($cpMetrics['nst_ho']['expected_value'] ?? 0);
         }
-        if ($hasNonCocoBranch) {
-            $userTotalProspects += (int) ($cpMetrics['non_coco']['count'] ?? 0);
-            $userTotalDealValue += (float) ($cpMetrics['non_coco']['deal_value'] ?? 0);
-            $userTotalExpectedCollection += (float) ($cpMetrics['non_coco']['expected_value'] ?? 0);
-        }
-        if ($hasCocoBranch) {
-            $userTotalProspects += (int) ($cpMetrics['coco']['count'] ?? 0);
-            $userTotalDealValue += (float) ($cpMetrics['coco']['deal_value'] ?? 0);
-            $userTotalExpectedCollection += (float) ($cpMetrics['coco']['expected_value'] ?? 0);
-        }
-        if ($canViewCst) {
-            $userTotalProspects += (int) ($cstMetrics['count'] ?? 0);
-            $userTotalDealValue += (float) ($cstMetrics['deal_value'] ?? 0);
-            $userTotalExpectedCollection += (float) ($cstMetrics['expected_value'] ?? 0);
-        }
 
         $totalProspectsCount = $canViewActiveBranches
             ? (int) collect($activeBranchesMetrics)->sum('prospect_count')
@@ -2001,9 +2004,9 @@ class SuperAdminDashboardController extends ApiController
                 'month_name'                 => now()->format('F Y'),
                 'user_role_type'             => $userRoleType,
                 'show_nst_ho'                => (bool) $hasDefaultBranch,
-                'show_coco'                  => (bool) $hasCocoBranch,
-                'show_non_coco'              => (bool) $hasNonCocoBranch,
-                'show_cst'                   => (bool) $canViewCst,
+                'show_coco'                  => false,
+                'show_non_coco'              => false,
+                'show_cst'                   => false,
                 'show_active_branches'       => (bool) $canViewActiveBranches,
                 'has_default_branch'         => (bool) $hasDefaultBranch,
                 'has_coco_branch'            => (bool) $hasCocoBranch,
@@ -2656,9 +2659,9 @@ class SuperAdminDashboardController extends ApiController
                 'code'           => $branch->code,
                 'is_default'     => (bool) $branch->is_default,
                 'branch_type'    => $branch->branch_type,
-                'prospect_count' => $nstCount + $cstCount,
-                'deal_value'     => $nstDeal + $cstDeal,
-                'expected_value' => $nstExp + $cstExp,
+                'prospect_count' => $nstCount,
+                'deal_value'     => $nstDeal,
+                'expected_value' => $nstExp,
                 'nst_count'      => $nstCount,
                 'cst_count'      => $cstCount,
                 'nst_deal'       => $nstDeal,

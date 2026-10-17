@@ -1143,16 +1143,7 @@
 
     <div class="sidebar-footer">
         {{-- Support Option --}}
-        @can('support.menuview')
-        <a href="{{ route('support.index') }}" class="support-card {{ request()->routeIs('support.*') ? 'active' : '' }}">
-            <div class="support-icon-wrapper">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                </svg>
-            </div>
-            <span>Support Portal</span>
-        </a>
-        @endcan
+
 
         {{-- User Profile Card --}}
         <div class="user-profile-card">
