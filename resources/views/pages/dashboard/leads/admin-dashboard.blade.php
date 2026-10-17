@@ -7572,10 +7572,6 @@
                             {{-- Filter Tabs --}}
                             <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                                 <button type="button" class="da-branch-tab-btn active" id="daBranchTabAll" onclick="switchBranchTab('all')">All Branches</button>
-                                <button type="button" class="da-branch-tab-btn" id="daBranchTabHo" onclick="switchBranchTab('ho')">HO</button>
-                                <button type="button" class="da-branch-tab-btn" id="daBranchTabCoco" onclick="switchBranchTab('coco')">COCO</button>
-                                <button type="button" class="da-branch-tab-btn" id="daBranchTabNonCoco" onclick="switchBranchTab('non_coco')">NON COCO</button>
-                                <button type="button" class="da-branch-tab-btn" id="daBranchTabCompare" onclick="switchBranchTab('compare')">📊 Compare</button>
                             </div>
                         </div>
 
@@ -7587,14 +7583,11 @@
                                         <tr style="background:#f8fafc; font-size:11px; color:#64748b;">
                                             <th rowspan="2" style="padding:10px 12px; text-align:left; vertical-align:middle; border-bottom:2px solid #e2e8f0; background:#f8fafc;">BRANCH NAME</th>
                                             <th colspan="2" style="padding:7px 10px; text-align:center; background:#e0e7ff; color:#3730a3; font-weight:800; border-right:1px solid #cbd5e1; border-top-left-radius:6px; border-top-right-radius:6px;">NST HOT PROSPECTS</th>
-                                            <th colspan="2" style="padding:7px 10px; text-align:center; background:#ccfbf1; color:#115e59; font-weight:800; border-right:1px solid #cbd5e1; border-top-left-radius:6px; border-top-right-radius:6px;">CST HOT PROSPECTS</th>
                                             <th colspan="3" style="padding:7px 10px; text-align:center; background:#f1f5f9; color:#334155; font-weight:800; border-top-left-radius:6px; border-top-right-radius:6px;">OVERALL TOTALS</th>
                                         </tr>
                                         <tr style="background:#f8fafc; font-size:10.5px; color:#64748b; border-bottom:2px solid #e2e8f0;">
                                             <th style="padding:6px 10px; text-align:center; background:#eef2ff; color:#4338ca;">Count</th>
                                             <th style="padding:6px 10px; text-align:right; background:#eef2ff; color:#4338ca; border-right:1px solid #cbd5e1;">EXPECTED VALUE</th>
-                                            <th style="padding:6px 10px; text-align:center; background:#f0fdf4; color:#047857;">Count</th>
-                                            <th style="padding:6px 10px; text-align:right; background:#f0fdf4; color:#047857; border-right:1px solid #cbd5e1;">EXPECTED VALUE</th>
                                             <th style="padding:6px 10px; text-align:center;">Prospects</th>
                                             <th style="padding:6px 10px; text-align:right;">Deal Value</th>
                                             <th style="padding:6px 10px; text-align:right; color:#059669;">Expected Value</th>
@@ -7741,15 +7734,7 @@
 
 
 
-                <button type="button" class="btn btn-sm" onclick="openAddCategoryModal()" style="background:#f0f9ff; color:#0284c7; border:1px solid #bae6fd; font-size:12px; height:34px; padding:0 12px; border-radius:8px; display:inline-flex; align-items:center; gap:5px; font-weight:700; cursor:pointer;" title="Add new category to list">
 
-
-
-                    <span style="font-size:16px; line-height:1;">+</span> Category
-
-
-
-                </button>
 
 
 
@@ -7841,14 +7826,6 @@
 
 
 
-                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:180px;">Category</th>
-
-
-
-                            <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:150px;">Sale Type</th>
-
-
-
                             <th style="padding:12px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Account name</th>
 
 
@@ -7869,7 +7846,7 @@
 
 
 
-                        <tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">Loading converted product details...</td></tr>
+                        <tr><td colspan="9" style="text-align:center; padding:32px; color:#94a3b8;">Loading converted product details...</td></tr>
 
 
 
@@ -8137,11 +8114,11 @@
 
 
 
-                    <h5 style="margin:0; font-size:16px; font-weight:800; color:#1e293b;">Category Wise Day Sales Report</h5>
+                    <h5 style="margin:0; font-size:16px; font-weight:800; color:#1e293b;">Lead Source Wise Day Sales Report</h5>
 
 
 
-                    <div id="daDstReportSubtitle" style="font-size:11px; color:#64748b; margin-top:2px;">Converted products category pivot count &amp; collection summary</div>
+                    <div id="daDstReportSubtitle" style="font-size:11px; color:#64748b; margin-top:2px;">Converted products lead source breakdown &amp; collection summary</div>
 
 
 
@@ -8209,7 +8186,7 @@
 
 
 
-                <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Categories</div>
+                <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Lead Sources</div>
 
 
 
@@ -8293,7 +8270,7 @@
 
 
 
-                        <th style="padding:10px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Category Name</th>
+                        <th style="padding:10px 14px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase;">Lead Source</th>
 
 
 
@@ -8557,10 +8534,6 @@
 
 
 
-                        <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; width:90px;">Sale Type</th>
-
-
-
                         <th style="padding:10px 12px; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; text-align:right; width:120px;">Collection (₹)</th>
 
 
@@ -8585,7 +8558,7 @@
 
 
 
-                    <tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">No records found.</td></tr>
+                    <tr><td colspan="10" style="text-align:center; padding:32px; color:#94a3b8;">No records found.</td></tr>
 
 
 
@@ -13316,7 +13289,7 @@ window.renderDaySalesTrackerTable = function(items, categories) {
 
 
 
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:36px; color:#64748b; font-size:13px;">No converted products found for this date.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:36px; color:#64748b; font-size:13px;">No converted products found for this date.</td></tr>';
 
 
 
@@ -13370,154 +13343,6 @@ window.renderDaySalesTrackerTable = function(items, categories) {
 
 
 
-        // ── Category cell ─────────────────────────────────────────
-
-
-
-        var catHtml;
-
-
-
-        if (canEdit) {
-
-
-
-            var catOptions = (categories || []).map(function(c) {
-
-
-
-                var selected = (item.category && item.category.trim().toLowerCase() === c.trim().toLowerCase()) ? 'selected' : '';
-
-
-
-                return '<option value="' + escapeHtml(c) + '" ' + selected + '>' + escapeHtml(c) + '</option>';
-
-
-
-            }).join('');
-
-
-
-            catHtml = '<div style="display:inline-flex; align-items:center; gap:5px;">' +
-
-
-
-                '<select class="da-dst-cat-select" data-id="' + item.id + '" onchange="saveDstCategory(' + item.id + ', this.value)">' +
-
-
-
-                    '<option value="">Select Category</option>' +
-
-
-
-                    catOptions +
-
-
-
-                '</select>' +
-
-
-
-                '<span id="daDstSaved_' + item.id + '" style="display:none; font-size:12px; color:#16a34a; font-weight:800; margin-left:2px;">✓</span>' +
-
-
-
-            '</div>';
-
-
-
-        } else {
-
-
-
-            var catLabel = item.category ? escapeHtml(item.category) : '—';
-
-
-
-            catHtml = '<span style="font-size:12px; font-weight:600; color:#334155;">' + catLabel + '</span>';
-
-
-
-        }
-
-
-
-        // ── Sale Type cell ────────────────────────────────────────
-
-
-
-        var saleTypeVal = (item.sale_type || '').toUpperCase();
-
-
-
-        var saleTypeHtml;
-
-
-
-        if (canEdit) {
-
-
-
-            saleTypeHtml = '<div style="display:inline-flex; align-items:center; gap:5px;">' +
-
-
-
-                '<select class="da-dst-cat-select" data-id="' + item.id + '" onchange="saveDstSaleType(' + item.id + ', this.value)" style="min-width:130px;">' +
-
-
-
-                    '<option value="">Select Sale Type</option>' +
-
-
-
-                    '<option value="NST" ' + (saleTypeVal === 'NST' ? 'selected' : '') + '>NST</option>' +
-
-
-
-                    '<option value="CST" ' + (saleTypeVal === 'CST' ? 'selected' : '') + '>CST</option>' +
-
-
-
-                '</select>' +
-
-
-
-                '<span id="daDstSaleTypeSaved_' + item.id + '" style="display:none; font-size:12px; color:#16a34a; font-weight:800; margin-left:2px;">✓</span>' +
-
-
-
-            '</div>';
-
-
-
-        } else {
-
-
-
-            var stColor = saleTypeVal === 'NST' ? 'background:#ede9fe; color:#6d28d9; border-color:#ddd6fe;'
-
-
-
-                        : saleTypeVal === 'CST' ? 'background:#dcfce7; color:#15803d; border-color:#bbf7d0;'
-
-
-
-                        : 'background:#f1f5f9; color:#64748b; border-color:#e2e8f0;';
-
-
-
-            var stLabel = saleTypeVal || '—';
-
-
-
-            saleTypeHtml = '<span class="da-badge" style="font-size:11px; font-weight:700; ' + stColor + '">' + escapeHtml(stLabel) + '</span>';
-
-
-
-        }
-
-
-
         return '<tr style="border-bottom:1px solid #f1f5f9; transition:background 0.1s ease;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#ffffff\'">' +
 
 
@@ -13547,14 +13372,6 @@ window.renderDaySalesTrackerTable = function(items, categories) {
 
 
             '<td style="padding:10px 14px; font-size:12px; color:#0f172a; font-weight:600;">' + escapeHtml(item.team_member) + '</td>' +
-
-
-
-            '<td style="padding:10px 14px;">' + catHtml + '</td>' +
-
-
-
-            '<td style="padding:10px 14px;">' + saleTypeHtml + '</td>' +
 
 
 
@@ -13598,7 +13415,7 @@ window.renderDaySalesTrackerTable = function(items, categories) {
 
 
 
-            '<td colspan="10" style="padding:12px 14px; text-align:right; font-size:12px; color:#1e293b; text-transform:uppercase;">Total Converted Collection (' + items.length + ' Products):</td>' +
+            '<td colspan="8" style="padding:12px 14px; text-align:right; font-size:12px; color:#1e293b; text-transform:uppercase;">Total Converted Collection (' + items.length + ' Products):</td>' +
 
 
 
@@ -15284,7 +15101,7 @@ window.loadDaySalesPivotReportData = function(selectedMonth, dateFrom, dateTo) {
 
 
 
-                subtitleEl.textContent = 'Converted products category pivot (' + (data.date_label || data.formatted_month) + ')';
+                subtitleEl.textContent = 'Converted products lead source breakdown (' + (data.date_label || data.formatted_month) + ')';
 
 
 
@@ -15328,7 +15145,7 @@ window.loadDaySalesPivotReportData = function(selectedMonth, dateFrom, dateTo) {
 
 
 
-            if (catCountEl) catCountEl.textContent = data.total_categories || 0;
+            if (catCountEl) catCountEl.textContent = (data.total_sources !== undefined ? data.total_sources : (data.total_categories || 0));
 
 
 
@@ -15366,9 +15183,11 @@ window.loadDaySalesPivotReportData = function(selectedMonth, dateFrom, dateTo) {
 
             items.forEach(function(item, idx) {
 
+                var sourceLabel = item.source || item.category || 'Direct / Unknown';
 
 
-                rowsHtml += '<tr onclick="openDaySalesCategoryDetailsModal(' + idx + ')" style="cursor:pointer;" title="Click to view detailed prospects for ' + (item.category || 'Unassigned') + '">' +
+
+                rowsHtml += '<tr onclick="openDaySalesCategoryDetailsModal(' + idx + ')" style="cursor:pointer;" title="Click to view detailed prospects for ' + sourceLabel + '">' +
 
 
 
@@ -15384,7 +15203,7 @@ window.loadDaySalesPivotReportData = function(selectedMonth, dateFrom, dateTo) {
 
 
 
-                            '<span>' + (item.category || 'Unassigned') + '</span>' +
+                            '<span>' + sourceLabel + '</span>' +
 
 
 
@@ -15426,13 +15245,15 @@ window.loadDaySalesPivotReportData = function(selectedMonth, dateFrom, dateTo) {
 
             if (tfoot) {
 
+                var totalSourcesCount = data.total_sources !== undefined ? data.total_sources : (data.total_categories !== undefined ? data.total_categories : items.length);
+
 
 
                 tfoot.innerHTML = '<tr>' +
 
 
 
-                    '<td colspan="2">Total (' + data.total_categories + ' Categories)</td>' +
+                    '<td colspan="2">Total (' + totalSourcesCount + ' Lead Sources)</td>' +
 
 
 
@@ -15532,7 +15353,9 @@ window.openDaySalesCategoryDetailsModal = function(catIndex) {
 
 
 
-    if (titleEl) titleEl.textContent = (catData.category || 'Unassigned') + ' - Prospect Details';
+    var sourceName = catData.source || catData.category || 'Lead Source';
+
+    if (titleEl) titleEl.textContent = sourceName + ' - Prospect Details';
 
 
 
@@ -15640,10 +15463,6 @@ window.filterCategoryDetailsTable = function(q) {
 
 
 
-            || (item.sale_type || '').toLowerCase().includes(q)
-
-
-
             || (item.date || '').toLowerCase().includes(q);
 
 
@@ -15680,7 +15499,7 @@ function renderCategoryDetailsTable(items) {
 
 
 
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">No prospects found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:32px; color:#94a3b8;">No prospects found.</td></tr>';
 
 
 
@@ -15748,10 +15567,6 @@ function renderCategoryDetailsTable(items) {
 
 
 
-            '<td><span class="da-pill" style="background:#f1f5f9; color:#475569;">' + (item.sale_type || '—') + '</span></td>' +
-
-
-
             '<td style="text-align:right; font-weight:800; color:#166534;">' + fmt(item.current_month_collection) + '</td>' +
 
 
@@ -15784,7 +15599,7 @@ function renderCategoryDetailsTable(items) {
 
 
 
-            '<td colspan="8">Total (' + items.length + ' Prospects)</td>' +
+            '<td colspan="7">Total (' + items.length + ' Prospects)</td>' +
 
 
 
@@ -16411,8 +16226,7 @@ function renderActiveBranchesTable(filterType) {
     }
 
     if (filtered.length === 0) {
-        var catLabel = filterType === 'ho' ? 'HO (Head Office)' : (filterType === 'coco' ? 'COCO' : (filterType === 'non_coco' ? 'NON COCO' : 'selected category'));
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:#94a3b8;">No branches found for ' + catLabel + '.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#94a3b8;">No branches found.</td></tr>';
         if (tfoot) tfoot.innerHTML = '';
         return;
     }
@@ -16423,24 +16237,17 @@ function renderActiveBranchesTable(filterType) {
     var totalExpSum = 0;
     var totalNstCountSum = 0;
     var totalNstExpSum = 0;
-    var totalCstCountSum = 0;
-    var totalCstExpSum = 0;
 
     filtered.forEach(function(b) {
         var nstCount = parseInt(b.nst_count) || 0;
         var nstExp   = parseFloat(b.nst_exp) || 0;
-        var cstCount = parseInt(b.cst_count) || 0;
-        var cstExp   = parseFloat(b.cst_exp) || 0;
         var nstDeal  = parseFloat(b.nst_deal) || 0;
-        var cstDeal  = parseFloat(b.cst_deal) || 0;
-        var pCount   = parseInt(b.prospect_count) || (nstCount + cstCount);
-        var dVal     = parseFloat(b.deal_value) || (nstDeal + cstDeal);
-        var eVal     = parseFloat(b.expected_value) || (nstExp + cstExp);
+        var pCount   = nstCount;
+        var dVal     = nstDeal;
+        var eVal     = nstExp;
 
         totalNstCountSum += nstCount;
         totalNstExpSum   += nstExp;
-        totalCstCountSum += cstCount;
-        totalCstExpSum   += cstExp;
         totalProspectsSum += pCount;
         totalDealSum     += dVal;
         totalExpSum      += eVal;
@@ -16474,14 +16281,6 @@ function renderActiveBranchesTable(filterType) {
             '<td style="text-align:right; font-weight:700; color:' + (nstExp > 0 ? '#4338ca' : '#94a3b8') + '; background:#f8fafc; border-right:1px solid #e2e8f0;">' +
                 fmt(nstExp) +
             '</td>' +
-            '<td style="text-align:center; background:#f0fdf4;">' +
-                '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (cstCount > 0 ? '#ccfbf1; color:#115e59;' : '#f1f5f9; color:#94a3b8;') + '">' +
-                    cstCount +
-                '</span>' +
-            '</td>' +
-            '<td style="text-align:right; font-weight:700; color:' + (cstExp > 0 ? '#047857' : '#94a3b8') + '; background:#f0fdf4; border-right:1px solid #e2e8f0;">' +
-                fmt(cstExp) +
-            '</td>' +
             '<td style="text-align:center; font-weight:800;">' +
                 '<span style="display:inline-block; min-width:24px; padding:2px 8px; border-radius:12px; font-weight:800; font-size:12px; background:' + (pCount > 0 ? '#fee2e2; color:#b91c1c;' : '#f1f5f9; color:#64748b;') + '">' +
                     pCount +
@@ -16499,13 +16298,10 @@ function renderActiveBranchesTable(filterType) {
     tbody.innerHTML = rowsHtml;
 
     if (tfoot) {
-        var label = filterType === 'ho' ? 'HO (Head Office)' : (filterType === 'coco' ? 'COCO Branches' : (filterType === 'non_coco' ? 'NON COCO Branches' : 'All Branches'));
         tfoot.innerHTML = '<tr style="font-weight:800; background:#f1f5f9; border-top:2px solid #cbd5e1;">' +
-            '<td style="padding:10px 12px;">Total (' + filtered.length + ' ' + label + ')</td>' +
+            '<td style="padding:10px 12px;">Total (' + filtered.length + ' All Branches)</td>' +
             '<td style="padding:10px; text-align:center; color:#3730a3; background:#eef2ff;">' + totalNstCountSum + '</td>' +
             '<td style="padding:10px; text-align:right; color:#3730a3; background:#eef2ff; border-right:1px solid #cbd5e1;">' + fmt(totalNstExpSum) + '</td>' +
-            '<td style="padding:10px; text-align:center; color:#115e59; background:#f0fdf4;">' + totalCstCountSum + '</td>' +
-            '<td style="padding:10px; text-align:right; color:#115e59; background:#f0fdf4; border-right:1px solid #cbd5e1;">' + fmt(totalCstExpSum) + '</td>' +
             '<td style="padding:10px; text-align:center; color:#0f172a;">' + totalProspectsSum + '</td>' +
             '<td style="padding:10px; text-align:right; color:#0f172a;">' + fmt(totalDealSum) + '</td>' +
             '<td style="padding:10px; text-align:right; color:#059669;">' + fmt(totalExpSum) + '</td>' +

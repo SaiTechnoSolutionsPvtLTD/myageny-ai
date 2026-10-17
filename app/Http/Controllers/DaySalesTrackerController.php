@@ -463,6 +463,7 @@ class DaySalesTrackerController extends Controller
             $convertedProducts = LeadProduct::query()
                 ->with([
                     'lead.branch',
+                    'lead.leadSource',
                     'lead.assignedTo.roles.department',
                     'lead.assignedTo.employeeOnboarding.department',
                     'lead.assignedTo.mappedManagers',
@@ -499,20 +500,20 @@ class DaySalesTrackerController extends Controller
                 })
                 ->get();
 
-            $categoriesMap = [];
+            $leadSourcesMap = [];
             foreach ($convertedProducts as $lp) {
-                $catName = trim((string) ($lp->day_sales_category ?: 'Unassigned'));
-                if (!isset($categoriesMap[$catName])) {
-                    $categoriesMap[$catName] = [
-                        'category'         => $catName,
+                $lead = $lp->lead;
+                $sourceName = trim((string) ($lead?->leadSource?->name ?: ($lead?->lead_source ?: 'Direct / Unknown')));
+                if (!isset($leadSourcesMap[$sourceName])) {
+                    $leadSourcesMap[$sourceName] = [
+                        'source'           => $sourceName,
+                        'category'         => $sourceName, // keep for frontend compatibility
                         'count'            => 0,
                         'total_value'      => 0.0,
                         'total_collection' => 0.0,
                         'items'            => [],
                     ];
                 }
-
-                $lead = $lp->lead;
 
                 // Determine payment received date & collection amount in selected range (identically to data method)
                 $paymentDate = null;
@@ -613,11 +614,11 @@ class DaySalesTrackerController extends Controller
                     $accountName = $compName ?: ($contactName ?: 'N/A');
                 }
 
-                $categoriesMap[$catName]['count'] += 1;
-                $categoriesMap[$catName]['total_value'] += (float) $lp->total_price;
-                $categoriesMap[$catName]['total_collection'] += $receivedAmount;
+                $leadSourcesMap[$sourceName]['count'] += 1;
+                $leadSourcesMap[$sourceName]['total_value'] += (float) $lp->total_price;
+                $leadSourcesMap[$sourceName]['total_collection'] += $receivedAmount;
 
-                $categoriesMap[$catName]['items'][] = [
+                $leadSourcesMap[$sourceName]['items'][] = [
                     'id'                       => $lp->id,
                     'lead_id'                  => $lp->lead_id,
                     'product_name'             => $lp->product_name ?: 'Product',
@@ -627,8 +628,7 @@ class DaySalesTrackerController extends Controller
                     'branch_type'              => $branchType,
                     'team_leader'              => $tlName ?: '—',
                     'team_member'              => $teamMemberDisplay,
-                    'category'                 => $catName,
-                    'sale_type'                => $lp->sale_type ?: '',
+                    'lead_source'              => $sourceName,
                     'account_name'             => $accountName,
                     'current_month_collection' => $receivedAmount,
                     'total_price'              => (float) $lp->total_price,
@@ -636,7 +636,7 @@ class DaySalesTrackerController extends Controller
                 ];
             }
 
-            $reportItems = collect(array_values($categoriesMap))->sortByDesc('total_collection')->values()->all();
+            $reportItems = collect(array_values($leadSourcesMap))->sortByDesc('total_collection')->values()->all();
 
             $monthsList = [];
             for ($i = 0; $i < 12; $i++) {
@@ -657,6 +657,7 @@ class DaySalesTrackerController extends Controller
                     'formatted_month'  => $carbonMonth->format('F Y'),
                     'months_list'      => $monthsList,
                     'items'            => $reportItems,
+                    'total_sources'    => count($reportItems),
                     'total_categories' => count($reportItems),
                     'total_count'      => collect($reportItems)->sum('count'),
                     'total_collection' => round(collect($reportItems)->sum('total_collection'), 2),

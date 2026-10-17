@@ -1154,7 +1154,7 @@
                 </div>
                 <div class="user-info">
                     <span class="user-name" title="{{ Auth::user()->name }}">{{ Auth::user()->name }}</span>
-                    <span class="user-role-badge" title="{{ ucwords(str_replace('_', ' ', Auth::user()->role_name)) }}">{{ ucwords(str_replace('_', ' ', Auth::user()->role_name)) }}</span>
+
                 </div>
             </div>
             <div class="user-profile-actions">
