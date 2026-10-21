@@ -344,6 +344,7 @@ return [
             ['key' => 'accounts.expenses', 'label' => 'Expense List', 'section' => 'EXPENSE', 'order' => 65],
             ['key' => 'accounts.add_expense', 'label' => 'Add Expense', 'section' => 'EXPENSE', 'order' => 66],
             ['key' => 'accounts.expense_pivot', 'label' => 'Expense Pivot', 'section' => 'EXPENSE', 'order' => 67],
+            ['key' => 'accounts.reports', 'label' => 'Reports', 'section' => 'REPORTS', 'order' => 68],
             ['key' => 'accounts.ad_accounts_master', 'label' => 'Ad Accounts Master', 'section' => 'ACCOUNTS', 'order' => 70],
             ['key' => 'accounts.profile', 'label' => 'Profile', 'section' => 'ACCOUNT', 'order' => 80],
         ],

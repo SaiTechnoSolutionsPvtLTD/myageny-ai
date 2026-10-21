@@ -822,14 +822,26 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     // Domains & Hosting
     Route::get('/domains', [AccountsApiController::class, 'domains'])->name('domains.index');
     Route::post('/domains', [AccountsApiController::class, 'storeDomain'])->name('domains.store');
+    Route::get('/domains/{domain}', [AccountsApiController::class, 'showDomain'])->name('domains.show');
     Route::put('/domains/{domain}', [AccountsApiController::class, 'updateDomain'])->name('domains.update');
     Route::delete('/domains/{domain}', [AccountsApiController::class, 'destroyDomain'])->name('domains.destroy');
     Route::post('/domains/sync-godaddy', [AccountsApiController::class, 'syncGodaddy'])->name('domains.sync-godaddy');
+    Route::post('/domains/{domain}/renewals', [AccountsApiController::class, 'storeDomainRenewal'])->name('domains.renewals.store');
+    Route::delete('/domains/{domain}/renewals/{renewal}', [AccountsApiController::class, 'destroyDomainRenewal'])->name('domains.renewals.destroy');
+    Route::post('/domains/{domain}/migrate-lead', [AccountsApiController::class, 'migrateDomainLead'])->name('domains.migrate-lead');
+    Route::post('/domains/{domain}/unlink-lead', [AccountsApiController::class, 'unlinkDomainLead'])->name('domains.unlink-lead');
 
     Route::get('/hostings', [AccountsApiController::class, 'hostings'])->name('hostings.index');
     Route::post('/hostings', [AccountsApiController::class, 'storeHosting'])->name('hostings.store');
+    Route::get('/hostings/{hosting}', [AccountsApiController::class, 'showHosting'])->name('hostings.show');
     Route::put('/hostings/{hosting}', [AccountsApiController::class, 'updateHosting'])->name('hostings.update');
     Route::delete('/hostings/{hosting}', [AccountsApiController::class, 'destroyHosting'])->name('hostings.destroy');
+    Route::post('/hostings/{hosting}/renewals', [AccountsApiController::class, 'storeHostingRenewal'])->name('hostings.renewals.store');
+    Route::delete('/hostings/{hosting}/renewals/{renewal}', [AccountsApiController::class, 'destroyHostingRenewal'])->name('hostings.renewals.destroy');
+    Route::post('/hostings/{hosting}/migrate-lead', [AccountsApiController::class, 'migrateHostingLead'])->name('hostings.migrate-lead');
+    Route::post('/hostings/{hosting}/unlink-lead', [AccountsApiController::class, 'unlinkHostingLead'])->name('hostings.unlink-lead');
+
+    Route::get('/domains-hosting/leads', [AccountsApiController::class, 'domainsHostingLeads'])->name('domains-hosting.leads');
 
     // Ad Accounts Master
     Route::get('/ad-accounts-master', [AccountsApiController::class, 'adAccounts'])->name('ad-accounts-master.index');
@@ -855,9 +867,15 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::get('/sales/invoices/meta', [AccountsApiController::class, 'salesInvoiceMeta'])->name('sales.invoices.meta');
     Route::post('/sales/invoices', [AccountsApiController::class, 'storeSalesInvoice'])->name('sales.invoices.store');
     Route::get('/sales/invoices/{id}', [AccountsApiController::class, 'showSalesInvoice'])->name('sales.invoices.show');
+    Route::get('/sales/invoices/{id}/pdf', [AccountsApiController::class, 'salesInvoicePdf'])->name('sales.invoices.pdf');
     Route::put('/sales/invoices/{id}', [AccountsApiController::class, 'updateSalesInvoice'])->name('sales.invoices.update');
     Route::patch('/sales/invoices/{id}/sales-person', [AccountsApiController::class, 'updateInvoiceSalesPerson'])->name('sales.invoices.sales-person');
     Route::delete('/sales/invoices/{id}', [AccountsApiController::class, 'destroySalesInvoice'])->name('sales.invoices.destroy');
+
+    // Accounts Sales Customers (Creation & Converted Leads)
+    Route::post('/sales/customers', [AccountsApiController::class, 'storeSalesCustomer'])->name('sales.customers.store');
+    Route::get('/sales/customers/converted-leads', [AccountsApiController::class, 'searchSalesConvertedLeads'])->name('sales.customers.converted-leads');
+    Route::get('/sales/customers/converted-leads/{lead}', [AccountsApiController::class, 'getSalesConvertedLeadDetails'])->name('sales.customers.converted-lead-details');
 
     Route::post('/sales/invoices/{id}/payments', [AccountsApiController::class, 'storeInvoicePayment'])->name('sales.invoices.payments.store');
     Route::delete('/sales/invoices/{id}/payments/{paymentId}', [AccountsApiController::class, 'destroyInvoicePayment'])->name('sales.invoices.payments.destroy');
@@ -870,6 +888,14 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::get('/sales/credit-notes/meta', [AccountsApiController::class, 'salesCreditNoteMeta'])->name('sales.credit-notes.meta');
     Route::post('/sales/credit-notes', [AccountsApiController::class, 'storeSalesCreditNote'])->name('sales.credit-notes.store');
     Route::get('/sales/credit-notes/{id}', [AccountsApiController::class, 'showSalesCreditNote'])->name('sales.credit-notes.show');
+    Route::get('/sales/credit-notes/{id}/pdf', [AccountsApiController::class, 'salesCreditNotePdf'])->name('sales.credit-notes.pdf');
     Route::post('/sales/credit-notes/{id}/void', [AccountsApiController::class, 'toggleVoidSalesCreditNote'])->name('sales.credit-notes.void');
     Route::delete('/sales/credit-notes/{id}', [AccountsApiController::class, 'destroySalesCreditNote'])->name('sales.credit-notes.destroy');
+
+    // Accounts Reports Group
+    Route::get('/reports/hub', [AccountsApiController::class, 'reportsHub'])->name('reports.hub');
+    Route::get('/reports/expense-category-wise', [AccountsApiController::class, 'reportExpenseCategoryWise'])->name('reports.expense-category-wise');
+    Route::get('/reports/expense-subcategory-wise', [AccountsApiController::class, 'reportExpenseSubcategoryWise'])->name('reports.expense-subcategory-wise');
+    Route::get('/reports/customer-balance-sheet', [AccountsApiController::class, 'reportCustomerBalanceSheet'])->name('reports.customer-balance-sheet');
+    Route::get('/reports/profit-and-loss', [AccountsApiController::class, 'reportProfitAndLoss'])->name('reports.profit-and-loss');
 });
