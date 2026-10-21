@@ -17,6 +17,8 @@ use App\Models\AccountExpenseCategory;
 use App\Models\AccountExpenseSubcategory;
 use App\Models\VendorMaster;
 use App\Models\CustomerMaster;
+use App\Models\CreditNote;
+use App\Models\CreditNoteItem;
 use App\Models\Department;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
@@ -28,6 +30,7 @@ use App\Console\Commands\GenerateRecurringAccountExpensesCommand;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -2641,7 +2644,7 @@ class AccountsApiController extends Controller
     {
         try {
             $companyId = auth()->user()?->company_id;
-            $invoice = Invoice::with(['items.itemMaster', 'customer', 'salesPerson', 'creator', 'payments.recordedBy'])
+            $invoice = Invoice::with(['items.itemMaster', 'customer', 'salesPerson', 'creator', 'payments.recordedBy', 'creditNotes.creator'])
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->findOrFail($id);
 
@@ -3183,6 +3186,477 @@ class AccountsApiController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' => 'Failed to delete payment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 14. ACCOUNTS SALES - CREDIT NOTES
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function salesCreditNotes(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $perPage   = (int) $request->query('per_page', 15);
+
+            $query = CreditNote::with(['invoice', 'customer', 'creator'])
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId));
+
+            if ($search = trim((string) $request->query('search'))) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('credit_note_number', 'LIKE', "%{$search}%")
+                      ->orWhere('reason', 'LIKE', "%{$search}%")
+                      ->orWhereHas('invoice', function ($iq) use ($search) {
+                          $iq->where('invoice_number', 'LIKE', "%{$search}%");
+                      })
+                      ->orWhereHas('customer', function ($cq) use ($search) {
+                          $cq->where('customer_name', 'LIKE', "%{$search}%")
+                             ->orWhere('company_name', 'LIKE', "%{$search}%");
+                      });
+                });
+            }
+
+            if ($reason = $request->query('reason')) {
+                if ($reason !== 'all' && $reason !== '') {
+                    $query->where('reason', $reason);
+                }
+            }
+
+            if ($status = $request->query('status')) {
+                if ($status !== 'all' && $status !== '') {
+                    $query->where('status', $status);
+                }
+            }
+
+            if ($dateFrom = $request->query('date_from')) {
+                $query->whereDate('credit_note_date', '>=', $dateFrom);
+            }
+            if ($dateTo = $request->query('date_to')) {
+                $query->whereDate('credit_note_date', '<=', $dateTo);
+            }
+
+            // Summary stats matching Screenshot 1
+            $allForCompany = CreditNote::query()->when($companyId, fn($q) => $q->where('company_id', $companyId));
+            $totalCredited = (float) (clone $allForCompany)->where('status', '!=', 'void')->sum('total_amount');
+            $totalCnsIssued = (clone $allForCompany)->count();
+            $activeApplied = (clone $allForCompany)->where('status', 'issued')->count();
+            $voidedCns = (clone $allForCompany)->where('status', 'void')->count();
+
+            $stats = [
+                'total_credited'   => $totalCredited,
+                'total_cns_issued' => $totalCnsIssued,
+                'active_applied'   => $activeApplied,
+                'voided_cns'       => $voidedCns,
+            ];
+
+            $paginated = $query->orderBy('credit_note_date', 'desc')
+                               ->orderBy('id', 'desc')
+                               ->paginate($perPage);
+
+            $data = collect($paginated->items())->map(function ($cn) {
+                return [
+                    'id'                 => $cn->id,
+                    'credit_note_number' => $cn->credit_note_number,
+                    'credit_note_date'   => $cn->credit_note_date?->format('Y-m-d'),
+                    'invoice_id'         => $cn->invoice_id,
+                    'invoice_number'     => $cn->invoice?->invoice_number,
+                    'invoice_total'      => (float) ($cn->invoice?->total_amount ?? 0),
+                    'customer_id'        => $cn->customer_id,
+                    'customer_name'      => $cn->customer?->customer_name ?: ($cn->invoice?->customer_name ?: 'Valued Customer'),
+                    'company_name'       => $cn->customer?->company_name ?: $cn->invoice?->company_name,
+                    'reason'             => $cn->reason,
+                    'reason_label'       => CreditNote::REASONS[$cn->reason] ?? $cn->reason,
+                    'subtotal'           => (float) $cn->subtotal,
+                    'cgst_amount'        => (float) $cn->cgst_amount,
+                    'sgst_amount'        => (float) $cn->sgst_amount,
+                    'igst_amount'        => (float) $cn->igst_amount,
+                    'total_tax'          => (float) $cn->total_tax,
+                    'total_amount'       => (float) $cn->total_amount,
+                    'status'             => $cn->status, // 'issued' | 'void'
+                    'notes'              => $cn->notes,
+                    'attachment_path'    => $cn->attachment_path,
+                    'attachment_url'     => $cn->attachment_url,
+                    'attachment_name'    => $cn->attachment_name,
+                    'created_by'         => $cn->created_by,
+                    'creator_name'       => $cn->creator?->name,
+                    'created_at'         => $cn->created_at?->toIso8601String(),
+                    'created_at_human'   => $cn->created_at?->diffForHumans(),
+                ];
+            });
+
+            return response()->json([
+                'status'  => true,
+                'stats'   => $stats,
+                'reasons' => CreditNote::REASONS,
+                'data'    => $data,
+                'meta'    => [
+                    'current_page' => $paginated->currentPage(),
+                    'last_page'    => $paginated->lastPage(),
+                    'per_page'     => $paginated->perPage(),
+                    'total'        => $paginated->total(),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts salesCreditNotes error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load credit notes: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function salesCreditNoteMeta(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $nextCnNumber = CreditNote::generateNextNumber($companyId);
+
+            $invoices = Invoice::query()
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->whereNotIn('status', ['cancelled'])
+                ->orderBy('invoice_date', 'desc')
+                ->get()
+                ->map(function ($inv) {
+                    $existingCredits = (float) $inv->creditNotes()->where('status', '!=', 'void')->sum('total_amount');
+                    $maxCreditable   = max(0, round((float) $inv->total_amount - $existingCredits, 2));
+                    return [
+                        'id'                   => $inv->id,
+                        'invoice_number'       => $inv->invoice_number,
+                        'customer_id'          => $inv->customer_id,
+                        'customer_name'        => $inv->customer_name,
+                        'company_name'         => $inv->company_name,
+                        'total_amount'         => (float) $inv->total_amount,
+                        'balance_due'          => (float) $inv->balance_due,
+                        'invoice_date'         => $inv->invoice_date?->format('Y-m-d'),
+                        'existing_credit'      => $existingCredits,
+                        'max_allowable_credit' => $maxCreditable,
+                    ];
+                });
+
+            $selectedInvoice = null;
+            if ($invoiceId = $request->query('invoice_id')) {
+                $inv = Invoice::with(['items', 'customer'])
+                    ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->find($invoiceId);
+
+                if ($inv) {
+                    $existingCredits = (float) $inv->creditNotes()->where('status', '!=', 'void')->sum('total_amount');
+                    $maxCreditable   = max(0, round((float) $inv->total_amount - $existingCredits, 2));
+                    $selectedInvoice = [
+                        'id'                   => $inv->id,
+                        'invoice_number'       => $inv->invoice_number,
+                        'customer_id'          => $inv->customer_id,
+                        'customer_name'        => $inv->customer_name,
+                        'company_name'         => $inv->company_name,
+                        'total_amount'         => (float) $inv->total_amount,
+                        'balance_due'          => (float) $inv->balance_due,
+                        'invoice_date'         => $inv->invoice_date?->format('Y-m-d'),
+                        'existing_credit'      => $existingCredits,
+                        'max_allowable_credit' => $maxCreditable,
+                        'items'                => $inv->items->map(fn($item) => [
+                            'id'           => $item->id,
+                            'item_name'    => $item->item_name,
+                            'description'  => $item->description,
+                            'hsn_sac_code' => $item->hsn_sac_code,
+                            'qty'          => (float) $item->qty,
+                            'rate'         => (float) $item->rate,
+                            'amount'       => (float) $item->amount,
+                            'cgst_percent' => (float) $item->cgst_percent,
+                            'sgst_percent' => (float) $item->sgst_percent,
+                            'igst_percent' => (float) $item->igst_percent,
+                            'total_amount' => (float) $item->total_amount,
+                        ]),
+                    ];
+                }
+            }
+
+            return response()->json([
+                'status'           => true,
+                'next_cn_number'   => $nextCnNumber,
+                'reasons'          => CreditNote::REASONS,
+                'invoices'         => $invoices,
+                'selected_invoice' => $selectedInvoice,
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts salesCreditNoteMeta error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load credit note meta: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function storeSalesCreditNote(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $userId    = $request->user()?->id;
+
+            $request->validate([
+                'invoice_id'       => 'required|integer|exists:invoices,id',
+                'credit_note_date' => 'required|date',
+                'reason'           => 'required|string|max:100',
+                'total_amount'     => 'required|numeric|min:0.01',
+                'notes'            => 'nullable|string',
+                'attachment'       => 'nullable|file|max:10240',
+                'items'            => 'nullable|array',
+            ]);
+
+            $invoice = Invoice::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($request->input('invoice_id'));
+
+            $creditAmount = round((float) $request->input('total_amount'), 2);
+
+            // Calculate maximum allowable credit
+            $existingCredits = (float) $invoice->creditNotes()->where('status', '!=', 'void')->sum('total_amount');
+            $maxAllowable    = max(0, round((float) $invoice->total_amount - $existingCredits, 2));
+
+            if ($creditAmount > ($maxAllowable + 0.05)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => "Credit amount (₹" . number_format($creditAmount, 2) . ") exceeds maximum allowable creditable balance of ₹" . number_format($maxAllowable, 2) . " for Invoice #{$invoice->invoice_number}.",
+                ], 422);
+            }
+
+            // Handle attachment
+            $attachmentPath = null;
+            $attachmentName = null;
+            if ($request->hasFile('attachment')) {
+                $file = $request->file('attachment');
+                $filename = time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
+                $destination = public_path('uploads/credit_notes');
+                if (!file_exists($destination)) {
+                    mkdir($destination, 0755, true);
+                }
+                $file->move($destination, $filename);
+                $attachmentPath = 'uploads/credit_notes/' . $filename;
+                $attachmentName = $file->getClientOriginalName();
+            }
+
+            DB::beginTransaction();
+
+            $cnNumber = CreditNote::generateNextNumber($companyId);
+
+            // Compute proportionate tax breakdown
+            $invTotal = (float) $invoice->total_amount;
+            $ratio    = $invTotal > 0 ? ($creditAmount / $invTotal) : 1;
+
+            $subtotal   = round((float) $invoice->subtotal * $ratio, 2);
+            $cgstAmount = round((float) $invoice->total_cgst * $ratio, 2);
+            $sgstAmount = round((float) $invoice->total_sgst * $ratio, 2);
+            $igstAmount = round((float) $invoice->total_igst * $ratio, 2);
+            $totalTax   = $cgstAmount + $sgstAmount + $igstAmount;
+
+            $creditNote = CreditNote::create([
+                'company_id'         => $companyId,
+                'invoice_id'         => $invoice->id,
+                'customer_id'        => $invoice->customer_id,
+                'credit_note_number' => $cnNumber,
+                'credit_note_date'   => $request->input('credit_note_date'),
+                'reason'             => $request->input('reason'),
+                'subtotal'           => $subtotal,
+                'cgst_amount'        => $cgstAmount,
+                'sgst_amount'        => $sgstAmount,
+                'igst_amount'        => $igstAmount,
+                'total_tax'          => $totalTax,
+                'total_amount'       => $creditAmount,
+                'status'             => 'issued',
+                'notes'              => $request->input('notes'),
+                'attachment_path'    => $attachmentPath,
+                'attachment_name'    => $attachmentName,
+                'created_by'         => $userId,
+            ]);
+
+            // Save items if passed
+            $items = $request->input('items', []);
+            if (is_array($items) && !empty($items)) {
+                foreach ($items as $it) {
+                    if (empty($it['item_name']) && empty($it['amount'])) {
+                        continue;
+                    }
+                    $invItem = !empty($it['item_id']) ? $invoice->items()->find($it['item_id']) : null;
+                    CreditNoteItem::create([
+                        'credit_note_id'  => $creditNote->id,
+                        'invoice_item_id' => $invItem?->id,
+                        'item_name'       => $it['item_name'] ?? ($invItem?->item_name ?: 'Credit Item'),
+                        'description'     => $invItem?->description,
+                        'hsn_sac_code'    => $invItem?->hsn_sac_code,
+                        'qty'             => (float) ($it['qty'] ?? 1),
+                        'rate'            => (float) ($it['rate'] ?? $it['amount'] ?? 0),
+                        'amount'          => (float) ($it['amount'] ?? 0),
+                        'cgst_percent'    => (float) ($invItem?->cgst_percent ?? 0),
+                        'cgst_amount'     => (float) ($invItem?->cgst_amount ?? 0),
+                        'sgst_percent'    => (float) ($invItem?->sgst_percent ?? 0),
+                        'sgst_amount'     => (float) ($invItem?->sgst_amount ?? 0),
+                        'igst_percent'    => (float) ($invItem?->igst_percent ?? 0),
+                        'igst_amount'     => (float) ($invItem?->igst_amount ?? 0),
+                        'total_amount'    => (float) ($it['amount'] ?? 0),
+                    ]);
+                }
+            }
+
+            // Sync invoice status and balance due
+            $invoice->recalculatePaymentStatus();
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Credit Note #{$creditNote->credit_note_number} of ₹" . number_format($creditAmount, 2) . " applied successfully to Invoice #{$invoice->invoice_number}!",
+                'data'    => $creditNote,
+            ]);
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Mobile Accounts storeSalesCreditNote error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Error creating Credit Note: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function showSalesCreditNote(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $creditNote = CreditNote::with(['invoice.items', 'customer', 'creator', 'items'])
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($id);
+
+            $setting = InvoiceSetting::forCompany($companyId);
+
+            return response()->json([
+                'status'  => true,
+                'data'    => [
+                    'credit_note' => [
+                        'id'                 => $creditNote->id,
+                        'credit_note_number' => $creditNote->credit_note_number,
+                        'credit_note_date'   => $creditNote->credit_note_date?->format('Y-m-d'),
+                        'invoice_id'         => $creditNote->invoice_id,
+                        'customer_id'        => $creditNote->customer_id,
+                        'reason'             => $creditNote->reason,
+                        'reason_label'       => CreditNote::REASONS[$creditNote->reason] ?? $creditNote->reason,
+                        'subtotal'           => (float) $creditNote->subtotal,
+                        'cgst_amount'        => (float) $creditNote->cgst_amount,
+                        'sgst_amount'        => (float) $creditNote->sgst_amount,
+                        'igst_amount'        => (float) $creditNote->igst_amount,
+                        'total_tax'          => (float) $creditNote->total_tax,
+                        'total_amount'       => (float) $creditNote->total_amount,
+                        'status'             => $creditNote->status,
+                        'notes'              => $creditNote->notes,
+                        'attachment_path'    => $creditNote->attachment_path,
+                        'attachment_url'     => $creditNote->attachment_url,
+                        'attachment_name'    => $creditNote->attachment_name,
+                        'created_by'         => $creditNote->created_by,
+                        'creator_name'       => $creditNote->creator?->name,
+                        'created_at'         => $creditNote->created_at?->toIso8601String(),
+                        'items'              => $creditNote->items->map(fn($it) => [
+                            'id'           => $it->id,
+                            'item_name'    => $it->item_name,
+                            'description'  => $it->description,
+                            'hsn_sac_code' => $it->hsn_sac_code,
+                            'qty'          => (float) $it->qty,
+                            'rate'         => (float) $it->rate,
+                            'amount'       => (float) $it->amount,
+                            'total_amount' => (float) $it->total_amount,
+                        ]),
+                    ],
+                    'invoice' => $creditNote->invoice ? [
+                        'id'              => $creditNote->invoice->id,
+                        'invoice_number'  => $creditNote->invoice->invoice_number,
+                        'invoice_date'    => $creditNote->invoice->invoice_date?->format('Y-m-d'),
+                        'total_amount'    => (float) $creditNote->invoice->total_amount,
+                        'balance_due'     => (float) $creditNote->invoice->balance_due,
+                        'status'          => $creditNote->invoice->status,
+                        'billing_address' => $creditNote->invoice->billing_address,
+                        'billing_gstin'   => $creditNote->invoice->billing_gstin,
+                    ] : null,
+                    'customer' => [
+                        'customer_name' => $creditNote->customer?->customer_name ?: ($creditNote->invoice?->customer_name ?: 'Valued Customer'),
+                        'company_name'  => $creditNote->customer?->company_name ?: $creditNote->invoice?->company_name,
+                        'address'       => $creditNote->invoice?->billing_address,
+                        'gstin'         => $creditNote->invoice?->billing_gstin ?: $creditNote->customer?->gst_number,
+                    ],
+                    'company_setting' => [
+                        'company_name'   => $setting?->company_name ?: 'Sai Techno Solutions Private Limited',
+                        'full_address'   => $setting?->full_address ?: 'Plot No 8, Sai Nagar, Thoraipakkam, Chennai - 600097',
+                        'company_gstin'  => $setting?->company_gstin ?: '33ABPCS7671C1Z3',
+                        'logo_url'       => $setting?->logo_url,
+                        'signature_url'  => $setting?->signature_url,
+                        'signatory_name' => $setting?->signatory_name ?: ('FOR ' . strtoupper($setting?->company_name ?: 'Sai Techno Solutions Private Limited')),
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts showSalesCreditNote error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Credit note not found: ' . $e->getMessage(),
+            ], 404);
+        }
+    }
+
+    public function toggleVoidSalesCreditNote(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $creditNote = CreditNote::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($id);
+
+            $newStatus = $creditNote->status === 'void' ? 'issued' : 'void';
+            $creditNote->update(['status' => $newStatus]);
+
+            // Recalculate invoice
+            $creditNote->invoice?->recalculatePaymentStatus();
+
+            $action = $newStatus === 'void' ? 'voided (cancelled)' : 'restored to active';
+
+            return response()->json([
+                'status'       => true,
+                'new_status'   => $newStatus,
+                'message'      => "Credit Note #{$creditNote->credit_note_number} has been {$action}. Invoice balance has been updated.",
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts toggleVoidSalesCreditNote error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to update credit note status: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function destroySalesCreditNote(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $creditNote = CreditNote::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($id);
+
+            $invoice = $creditNote->invoice;
+            $cnNum   = $creditNote->credit_note_number;
+
+            if ($creditNote->attachment_path && file_exists(public_path($creditNote->attachment_path))) {
+                @unlink(public_path($creditNote->attachment_path));
+            }
+
+            $creditNote->delete();
+
+            // Recalculate invoice
+            $invoice?->recalculatePaymentStatus();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Credit Note #{$cnNum} deleted successfully. Invoice balance has been adjusted.",
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts destroySalesCreditNote error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete credit note: ' . $e->getMessage(),
             ], 500);
         }
     }

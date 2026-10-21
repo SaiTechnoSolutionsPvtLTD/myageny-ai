@@ -864,4 +864,12 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
 
     Route::get('/sales/payments', [AccountsApiController::class, 'salesPayments'])->name('sales.payments.index');
     Route::delete('/sales/payments/{paymentId}', [AccountsApiController::class, 'destroySalesPaymentStandalone'])->name('sales.payments.destroy');
+
+    // Accounts Sales (Credit Notes)
+    Route::get('/sales/credit-notes', [AccountsApiController::class, 'salesCreditNotes'])->name('sales.credit-notes.index');
+    Route::get('/sales/credit-notes/meta', [AccountsApiController::class, 'salesCreditNoteMeta'])->name('sales.credit-notes.meta');
+    Route::post('/sales/credit-notes', [AccountsApiController::class, 'storeSalesCreditNote'])->name('sales.credit-notes.store');
+    Route::get('/sales/credit-notes/{id}', [AccountsApiController::class, 'showSalesCreditNote'])->name('sales.credit-notes.show');
+    Route::post('/sales/credit-notes/{id}/void', [AccountsApiController::class, 'toggleVoidSalesCreditNote'])->name('sales.credit-notes.void');
+    Route::delete('/sales/credit-notes/{id}', [AccountsApiController::class, 'destroySalesCreditNote'])->name('sales.credit-notes.destroy');
 });
