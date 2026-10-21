@@ -7,6 +7,7 @@ use App\Models\DomainRenewal;
 use App\Models\HostingRecord;
 use App\Models\HostingRenewal;
 use App\Models\Lead;
+use App\Models\ServerMaster;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -70,7 +71,7 @@ class DomainsHostingController extends Controller
 
         // Fetch Hostings
         $hostingQuery = HostingRecord::query()
-            ->with(['lead', 'renewals'])
+            ->with(['lead', 'renewals', 'server'])
             ->withCount('renewals')
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->when($request->filled('search') && $activeTab === 'hostings', function ($q) use ($request) {
@@ -108,12 +109,16 @@ class DomainsHostingController extends Controller
             'total_amount'  => $allHostings->sum('renewal_amount'),
         ];
 
+        // Fetch Active Servers from Server Master
+        $servers = ServerMaster::forCompany($companyId)->active()->orderBy('server_name')->get();
+
         return view('pages.accounts.domains_hosting.index', compact(
             'activeTab',
             'domains',
             'domainStats',
             'hostings',
             'hostingStats',
+            'servers',
             'isGodaddyConfigured'
         ));
     }
@@ -459,15 +464,17 @@ class DomainsHostingController extends Controller
     public function storeHosting(Request $request)
     {
         $validated = $request->validate([
-            'hosting_name'   => 'required|string|max:255',
-            'provider'       => 'required|string|max:100',
-            'ip_address'     => 'nullable|string|max:100',
-            'plan_type'      => 'required|string|max:100',
-            'status'         => 'required|string|in:ACTIVE,EXPIRED,PENDING_RENEWAL',
-            'renewal_date'   => 'nullable|date',
-            'renewal_amount' => 'nullable|numeric|min:0',
-            'client_name'    => 'nullable|string|max:255',
-            'notes'          => 'nullable|string',
+            'server_id'         => 'nullable|integer',
+            'hosting_name'      => 'required|string|max:255',
+            'provider'          => 'required|string|max:100',
+            'ip_address'        => 'nullable|string|max:100',
+            'plan_type'         => 'required|string|max:100',
+            'allocated_storage' => 'nullable|string|max:100',
+            'status'            => 'required|string|in:ACTIVE,EXPIRED,PENDING_RENEWAL',
+            'renewal_date'      => 'nullable|date',
+            'renewal_amount'    => 'nullable|numeric|min:0',
+            'client_name'       => 'nullable|string|max:255',
+            'notes'             => 'nullable|string',
         ]);
 
         $user = auth()->user();
@@ -486,15 +493,17 @@ class DomainsHostingController extends Controller
     public function updateHosting(Request $request, HostingRecord $hosting)
     {
         $validated = $request->validate([
-            'hosting_name'   => 'required|string|max:255',
-            'provider'       => 'required|string|max:100',
-            'ip_address'     => 'nullable|string|max:100',
-            'plan_type'      => 'required|string|max:100',
-            'status'         => 'required|string|in:ACTIVE,EXPIRED,PENDING_RENEWAL',
-            'renewal_date'   => 'nullable|date',
-            'renewal_amount' => 'nullable|numeric|min:0',
-            'client_name'    => 'nullable|string|max:255',
-            'notes'          => 'nullable|string',
+            'server_id'         => 'nullable|integer',
+            'hosting_name'      => 'required|string|max:255',
+            'provider'          => 'required|string|max:100',
+            'ip_address'        => 'nullable|string|max:100',
+            'plan_type'         => 'required|string|max:100',
+            'allocated_storage' => 'nullable|string|max:100',
+            'status'            => 'required|string|in:ACTIVE,EXPIRED,PENDING_RENEWAL',
+            'renewal_date'      => 'nullable|date',
+            'renewal_amount'    => 'nullable|numeric|min:0',
+            'client_name'       => 'nullable|string|max:255',
+            'notes'             => 'nullable|string',
         ]);
 
         $hosting->update($validated);
@@ -513,14 +522,16 @@ class DomainsHostingController extends Controller
      */
     public function showHosting(HostingRecord $hosting)
     {
-        $hosting->load(['lead', 'creator', 'renewals.creator']);
+        $hosting->load(['lead', 'creator', 'renewals.creator', 'server']);
         $renewalsCount = $hosting->renewals->count();
         $totalRenewalSpend = $hosting->renewals->sum('amount');
+        $servers = ServerMaster::forCompany($hosting->company_id)->active()->orderBy('server_name')->get();
 
         return view('pages.accounts.domains_hosting.show_hosting', compact(
             'hosting',
             'renewalsCount',
-            'totalRenewalSpend'
+            'totalRenewalSpend',
+            'servers'
         ));
     }
 

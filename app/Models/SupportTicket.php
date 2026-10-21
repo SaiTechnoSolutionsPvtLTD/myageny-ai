@@ -12,18 +12,41 @@ class SupportTicket extends Model
 
     protected $fillable = [
         'company_id',
+        'account_support_category_id',
+        'account_support_subcategory_id',
         'subject',
         'message',
         'attachment_path',
+        'attachments',
         'created_by',
         'to_user_id',
         'status',
         'remark',
     ];
 
+    protected $casts = [
+        'attachments' => 'array',
+    ];
+
     protected $appends = [
         'attachment_url',
     ];
+
+    /**
+     * Get the support category.
+     */
+    public function category()
+    {
+        return $this->belongsTo(AccountSupportCategory::class, 'account_support_category_id');
+    }
+
+    /**
+     * Get the support subcategory.
+     */
+    public function subcategory()
+    {
+        return $this->belongsTo(AccountSupportSubcategory::class, 'account_support_subcategory_id');
+    }
 
     /**
      * Get the user who created the support ticket.

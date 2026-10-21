@@ -380,6 +380,34 @@ Route::middleware(['auth'])->group(function () {
                 Route::delete('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'destroy'])->name('destroy');
             });
 
+            // Bank Master CRUD
+            Route::prefix('banks')->name('banks.')->group(function () {
+                Route::get('/', [App\Http\Controllers\BankMasterController::class, 'index'])->name('index');
+                Route::post('/', [App\Http\Controllers\BankMasterController::class, 'store'])->name('store');
+                Route::put('/{bank}', [App\Http\Controllers\BankMasterController::class, 'update'])->name('update');
+                Route::patch('/{bank}/set-primary', [App\Http\Controllers\BankMasterController::class, 'setPrimary'])->name('set-primary');
+                Route::patch('/{bank}/toggle-status', [App\Http\Controllers\BankMasterController::class, 'toggleStatus'])->name('toggle-status');
+                Route::delete('/{bank}', [App\Http\Controllers\BankMasterController::class, 'destroy'])->name('destroy');
+            });
+
+            // Server Master CRUD
+            Route::prefix('servers')->name('servers.')->group(function () {
+                Route::get('/', [App\Http\Controllers\ServerMasterController::class, 'index'])->name('index');
+                Route::post('/', [App\Http\Controllers\ServerMasterController::class, 'store'])->name('store');
+                Route::put('/{server}', [App\Http\Controllers\ServerMasterController::class, 'update'])->name('update');
+                Route::patch('/{server}/toggle-status', [App\Http\Controllers\ServerMasterController::class, 'toggleStatus'])->name('toggle-status');
+                Route::delete('/{server}', [App\Http\Controllers\ServerMasterController::class, 'destroy'])->name('destroy');
+            });
+
+            // Supplier Master CRUD
+            Route::prefix('suppliers')->name('suppliers.')->group(function () {
+                Route::get('/', [App\Http\Controllers\SupplierMasterController::class, 'index'])->name('index');
+                Route::post('/', [App\Http\Controllers\SupplierMasterController::class, 'store'])->name('store');
+                Route::put('/{supplier}', [App\Http\Controllers\SupplierMasterController::class, 'update'])->name('update');
+                Route::patch('/{supplier}/toggle-status', [App\Http\Controllers\SupplierMasterController::class, 'toggleStatus'])->name('toggle-status');
+                Route::delete('/{supplier}', [App\Http\Controllers\SupplierMasterController::class, 'destroy'])->name('destroy');
+            });
+
             // Invoice Settings
             Route::prefix('invoice-settings')->name('invoice-settings.')->group(function () {
                 Route::get('/', [App\Http\Controllers\InvoiceSettingController::class, 'index'])->name('index');
@@ -425,6 +453,19 @@ Route::middleware(['auth'])->group(function () {
                 Route::post('/{creditNote}/void', [App\Http\Controllers\CreditNoteController::class, 'toggleVoid'])->name('void');
                 Route::delete('/{creditNote}', [App\Http\Controllers\CreditNoteController::class, 'destroy'])->name('destroy');
             });
+        });
+
+        // Purchase Orders (PO Orders)
+        Route::prefix('purchase-orders')->name('purchase-orders.')->group(function () {
+            Route::get('/', [App\Http\Controllers\PurchaseOrderController::class, 'index'])->name('index');
+            Route::get('/create', [App\Http\Controllers\PurchaseOrderController::class, 'create'])->name('create');
+            Route::post('/', [App\Http\Controllers\PurchaseOrderController::class, 'store'])->name('store');
+            Route::get('/{purchaseOrder}', [App\Http\Controllers\PurchaseOrderController::class, 'show'])->name('show');
+            Route::get('/{purchaseOrder}/edit', [App\Http\Controllers\PurchaseOrderController::class, 'edit'])->name('edit');
+            Route::put('/{purchaseOrder}', [App\Http\Controllers\PurchaseOrderController::class, 'update'])->name('update');
+            Route::delete('/{purchaseOrder}', [App\Http\Controllers\PurchaseOrderController::class, 'destroy'])->name('destroy');
+            Route::get('/{purchaseOrder}/print', [App\Http\Controllers\PurchaseOrderController::class, 'print'])->name('print');
+            Route::patch('/{purchaseOrder}/update-status', [App\Http\Controllers\PurchaseOrderController::class, 'updateStatus'])->name('update-status');
         });
 
         // Accounts Expenses CRUD
@@ -1167,6 +1208,7 @@ Route::post('/facebook-integration/sync-all', [FacebookIntegrationController::cl
 
     // Support Ticket Routes
     Route::get('/support', [\App\Http\Controllers\SupportController::class, 'index'])->middleware('can:support.menuview')->name('support.index');
+    Route::get('/support/create', [\App\Http\Controllers\SupportController::class, 'create'])->middleware('can:support.create')->name('support.create');
     Route::post('/support', [\App\Http\Controllers\SupportController::class, 'store'])->middleware('can:support.create')->name('support.store');
     Route::post('/support/{ticket}/update-status', [\App\Http\Controllers\SupportController::class, 'updateStatus'])->middleware('can:support.update')->name('support.update-status');
 

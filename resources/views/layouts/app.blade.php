@@ -679,7 +679,13 @@
     color: #9e9e9e;
     font-size: 16px;
     font-weight: bold;
-    margin-right: 18px;
+    position: absolute !important;
+    right: 26px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    float: none !important;
+    margin: 0 !important;
+    z-index: 2;
 }
 .select2-container--default .select2-selection--single .select2-selection__clear:hover {
     color: #fe5f04;
@@ -1428,9 +1434,14 @@ table td:last-child,
                 placeholder = $select.find('option[value=""]').first().text() || 'Select an option';
             }
 
+            var allowClear = Boolean($select.find('option[value=""]').length > 0 || $select.prop('multiple'));
+            if ($select.data('allow-clear') !== undefined) {
+                allowClear = Boolean($select.data('allow-clear') === true || $select.data('allow-clear') === 'true');
+            }
+
             var config = {
                 width: '100%',
-                allowClear: Boolean($select.find('option[value=""]').length > 0 || $select.prop('multiple'))
+                allowClear: allowClear
             };
 
             if (placeholder) {

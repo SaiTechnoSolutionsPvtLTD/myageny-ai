@@ -470,10 +470,7 @@
                                 <input type="hidden" name="total_amount" id="inputTotalAmount" value="{{ $invoice->total_amount }}">
                             </div>
 
-                            <div class="summary-row" style="align-items:center; background:#fff; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0;">
-                                <span style="font-weight:700; color:#15803d;">Payment Made (₹)</span>
-                                <input type="number" step="0.01" min="0" name="paid_amount" id="inputPaidAmount" class="form-input" style="width:130px; text-align:right; font-weight:800; color:#15803d;" value="{{ $invoice->paid_amount }}" oninput="calculateInvoiceTotals()">
-                            </div>
+                            <input type="hidden" name="paid_amount" id="inputPaidAmount" value="{{ $invoice->paid_amount }}">
 
                             <div class="summary-row balance-row">
                                 <span>Balance Due</span>

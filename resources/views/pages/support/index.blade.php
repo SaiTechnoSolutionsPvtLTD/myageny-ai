@@ -603,9 +603,9 @@
             </p>
         </div>
 
-        <button type="button" class="btn-create-ticket" onclick="openCreateModal()">
-            <i class="bi bi-plus-lg"></i> Create Ticket
-        </button>
+        <a href="{{ route('support.create') }}" class="btn-create-ticket" style="text-decoration: none;">
+            <i class="bi bi-plus-lg"></i> Create Support Ticket
+        </a>
     </div>
 
     {{-- Active Tab Resolution --}}
@@ -736,11 +736,27 @@
                                            data-status="{{ $ticket->status }}"
                                            data-remark="{{ $ticket->remark ?? '' }}"
                                            data-attachment="{{ $ticket->attachment_url ?? '' }}"
+                                           data-category="{{ $ticket->category?->name ?? '' }}"
+                                           data-subcategory="{{ $ticket->subcategory?->name ?? '' }}"
                                            style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                             {{ $ticket->subject }}
                                         </a>
                                     </div>
                                     <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
+                                    @if($ticket->category || $ticket->subcategory)
+                                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap;">
+                                            @if($ticket->category)
+                                                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                                                    <i class="bi bi-folder2-open" style="font-size: 10px;"></i> {{ $ticket->category->name }}
+                                                </span>
+                                            @endif
+                                            @if($ticket->subcategory)
+                                                <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #fff1e8; color: #c2410c; border: 1px solid #fed7aa;">
+                                                    <i class="bi bi-tag-fill" style="font-size: 10px;"></i> {{ $ticket->subcategory->name }}
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endif
                                     <div id="ticket-msg-{{ $ticket->id }}" style="display:none;">{!! $ticket->message !!}</div>
                                 </td>
                                 <td>
@@ -871,11 +887,27 @@
                                        data-status="{{ $ticket->status }}"
                                        data-remark="{{ $ticket->remark ?? '' }}"
                                        data-attachment="{{ $ticket->attachment_url ?? '' }}"
+                                       data-category="{{ $ticket->category?->name ?? '' }}"
+                                       data-subcategory="{{ $ticket->subcategory?->name ?? '' }}"
                                        style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                         {{ $ticket->subject }}
                                     </a>
                                 </div>
                                 <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
+                                @if($ticket->category || $ticket->subcategory)
+                                    <div style="display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap;">
+                                        @if($ticket->category)
+                                            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                                                <i class="bi bi-folder2-open" style="font-size: 10px;"></i> {{ $ticket->category->name }}
+                                            </span>
+                                        @endif
+                                        @if($ticket->subcategory)
+                                            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #fff1e8; color: #c2410c; border: 1px solid #fed7aa;">
+                                                <i class="bi bi-tag-fill" style="font-size: 10px;"></i> {{ $ticket->subcategory->name }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                @endif
                                 <div id="ticket-msg-{{ $ticket->id }}" style="display:none;">{!! $ticket->message !!}</div>
                             </td>
                             <td>
@@ -1004,11 +1036,27 @@
                                        data-status="{{ $ticket->status }}"
                                        data-remark="{{ $ticket->remark ?? '' }}"
                                        data-attachment="{{ $ticket->attachment_url ?? '' }}"
+                                       data-category="{{ $ticket->category?->name ?? '' }}"
+                                       data-subcategory="{{ $ticket->subcategory?->name ?? '' }}"
                                        style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                         {{ $ticket->subject }}
                                     </a>
                                 </div>
                                 <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
+                                @if($ticket->category || $ticket->subcategory)
+                                    <div style="display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap;">
+                                        @if($ticket->category)
+                                            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                                                <i class="bi bi-folder2-open" style="font-size: 10px;"></i> {{ $ticket->category->name }}
+                                            </span>
+                                        @endif
+                                        @if($ticket->subcategory)
+                                            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #fff1e8; color: #c2410c; border: 1px solid #fed7aa;">
+                                                <i class="bi bi-tag-fill" style="font-size: 10px;"></i> {{ $ticket->subcategory->name }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                @endif
                                 <div id="ticket-msg-{{ $ticket->id }}" style="display:none;">{!! $ticket->message !!}</div>
                             </td>
                             <td>
@@ -1194,7 +1242,7 @@
             <button type="button" class="support-modal-close" onclick="closeViewModal()">&times;</button>
         </div>
         <div class="support-modal-body" style="padding: 28px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; border-bottom: 1px dashed #e5e7eb; padding-bottom: 16px;">
                 <div>
                     <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px;">Ticket ID</div>
                     <div id="vt_id" style="font-size: 16px; font-weight: 800; color: #fe5f04; margin-top: 4px;">#123</div>
@@ -1205,6 +1253,15 @@
                         <span class="status-badge" id="vt_status">Pending</span>
                     </div>
                 </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;" id="vt_category_container">
+                <span id="vt_category_badge" style="display: none; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                    <i class="bi bi-folder2-open"></i> <span id="vt_category_text"></span>
+                </span>
+                <span id="vt_subcategory_badge" style="display: none; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; background: #fff1e8; color: #c2410c; border: 1px solid #fed7aa;">
+                    <i class="bi bi-tag-fill"></i> <span id="vt_subcategory_text"></span>
+                </span>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
@@ -1482,6 +1539,22 @@
         statusBadge.innerText = ticket.status === 'onprocess' ? 'On Process' : (ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1));
         statusBadge.className = 'status-badge ' + ticket.status;
 
+        // Category & Subcategory Badges
+        const catBadge = document.getElementById('vt_category_badge');
+        const subBadge = document.getElementById('vt_subcategory_badge');
+        if (ticket.category) {
+            document.getElementById('vt_category_text').innerText = ticket.category;
+            catBadge.style.display = 'inline-flex';
+        } else {
+            catBadge.style.display = 'none';
+        }
+        if (ticket.subcategory) {
+            document.getElementById('vt_subcategory_text').innerText = ticket.subcategory;
+            subBadge.style.display = 'inline-flex';
+        } else {
+            subBadge.style.display = 'none';
+        }
+
         // Attachment section
         const attachmentLink = document.getElementById('vt_attachment_link');
         const noAttachment = document.getElementById('vt_no_attachment');
@@ -1625,6 +1698,8 @@
                 const status = this.getAttribute('data-status');
                 const remark = this.getAttribute('data-remark');
                 const attachment = this.getAttribute('data-attachment');
+                const category = this.getAttribute('data-category');
+                const subcategory = this.getAttribute('data-subcategory');
                 const messageHtml = document.getElementById('ticket-msg-' + ticketId).innerHTML;
 
                 openViewModal({
@@ -1636,6 +1711,8 @@
                     status: status,
                     remark: remark,
                     attachment_path: attachment,
+                    category: category,
+                    subcategory: subcategory,
                     message: messageHtml
                 });
             });

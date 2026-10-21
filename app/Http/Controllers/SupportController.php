@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AccountSupportCategory;
+use App\Models\AccountSupportSubcategory;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -72,7 +74,7 @@ class SupportController extends Controller
 
         // If Company Admin or Super Admin, fetch all tickets in the company scope (Paginated)
         if ($isCompanyAdmin) {
-            $allTicketsQuery = SupportTicket::with(['creator', 'assignedTo']);
+            $allTicketsQuery = SupportTicket::with(['creator', 'assignedTo', 'category', 'subcategory']);
             if ($companyId) {
                 $allTicketsQuery->where(function ($q) use ($companyId) {
                     $q->where('company_id', $companyId)
@@ -86,14 +88,14 @@ class SupportController extends Controller
         }
 
         // Get received tickets (where current user is the target) (Paginated)
-        $receivedTickets = SupportTicket::with(['creator', 'assignedTo'])
+        $receivedTickets = SupportTicket::with(['creator', 'assignedTo', 'category', 'subcategory'])
             ->where('to_user_id', $userId)
             ->latest()
             ->paginate(15, ['*'], 'received_page')
             ->withQueryString();
 
         // Get created tickets (where current user is the creator) (Paginated)
-        $createdTickets = SupportTicket::with(['creator', 'assignedTo'])
+        $createdTickets = SupportTicket::with(['creator', 'assignedTo', 'category', 'subcategory'])
             ->where('created_by', $userId)
             ->latest()
             ->paginate(15, ['*'], 'created_page')
@@ -128,19 +130,111 @@ class SupportController extends Controller
     }
 
     /**
+     * Show the dedicated form for creating a new support ticket.
+     */
+    public function create()
+    {
+        $user = Auth::user();
+        $companyId = $user->company_id;
+
+        if (!$companyId) {
+            $companyId = \App\Models\EmployeeOnboarding::withoutGlobalScopes()
+                ->where(function ($q) use ($user) {
+                    $q->where('portal_user_id', $user->id)
+                      ->orWhere('email', $user->email);
+                })
+                ->whereNotNull('company_id')
+                ->value('company_id');
+
+            if ($companyId) {
+                $user->update(['company_id' => $companyId]);
+            }
+        }
+
+        // Fetch active Categories with active subcategories
+        $categories = AccountSupportCategory::when($companyId, function ($q) use ($companyId) {
+                $q->where(function ($sq) use ($companyId) {
+                    $sq->where('company_id', $companyId)->orWhereNull('company_id');
+                });
+            })
+            ->active()
+            ->with(['activeSubcategories'])
+            ->orderBy('name')
+            ->get();
+
+        // Get users for fallback or explicit assignee
+        $usersQuery = User::withoutGlobalScope('branch')
+            ->where('id', '!=', $user->id)
+            ->where(function ($query) {
+                $query->where('is_active', true)
+                    ->orWhere('user_status', 'active');
+            });
+
+        if ($companyId) {
+            $usersQuery->where('company_id', $companyId);
+        }
+
+        $users = $usersQuery->orderBy('name')->get(['id', 'name', 'email']);
+
+        return view('pages.support.create', compact('categories', 'users'));
+    }
+
+    /**
      * Store a newly created support ticket in storage.
      */
     public function store(Request $request)
     {
         $request->validate([
-            'subject' => ['required', 'string', 'max:255'],
-            'to_user_id' => ['required', 'exists:users,id'],
-            'message' => ['required', 'string'],
-            'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,zip,txt', 'max:10240'],
+            'subject'                        => ['required', 'string', 'max:255'],
+            'message'                        => ['required', 'string'],
+            'account_support_category_id'    => ['nullable', 'integer'],
+            'account_support_subcategory_id' => ['nullable', 'integer'],
+            'to_user_id'                     => ['nullable', 'exists:users,id'],
+            'attachment'                     => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,zip,txt', 'max:10240'],
+            'attachments.*'                  => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,zip,txt', 'max:10240'],
         ]);
 
         $user = Auth::user();
-        $toUser = User::find($request->to_user_id);
+
+        // Auto-resolve to_user_id if not explicitly provided
+        $toUserId = $request->to_user_id;
+
+        if (!$toUserId && $request->filled('account_support_subcategory_id')) {
+            $subcat = AccountSupportSubcategory::find($request->account_support_subcategory_id);
+            if ($subcat && is_array($subcat->hierarchy)) {
+                foreach ($subcat->hierarchy as $lvl) {
+                    if (!empty($lvl['user_ids']) && is_array($lvl['user_ids'])) {
+                        foreach ($lvl['user_ids'] as $uid) {
+                            if ($uid && User::where('id', $uid)->exists()) {
+                                $toUserId = (int) $uid;
+                                break 2;
+                            }
+                        }
+                    } elseif (!empty($lvl['user_id'])) {
+                        if (User::where('id', $lvl['user_id'])->exists()) {
+                            $toUserId = (int) $lvl['user_id'];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // If still not resolved, fallback to first available active user in company
+        if (!$toUserId) {
+            $toUserId = User::where('id', '!=', $user->id)
+                ->when($user->company_id, fn($q) => $q->where('company_id', $user->company_id))
+                ->where(function ($query) {
+                    $query->where('is_active', true)->orWhere('user_status', 'active');
+                })
+                ->value('id');
+        }
+
+        if (!$toUserId) {
+            $toUserId = User::where('id', '!=', $user->id)->value('id') ?? $user->id;
+        }
+
+        $toUser = User::find($toUserId);
 
         // Resolve company_id with fallbacks
         $companyId = $user?->company_id;
@@ -159,16 +253,6 @@ class SupportController extends Controller
             $companyId = $toUser->company_id;
         }
 
-        if (!$companyId && $toUser) {
-            $companyId = \App\Models\EmployeeOnboarding::withoutGlobalScopes()
-                ->where(function ($q) use ($toUser) {
-                    $q->where('portal_user_id', $toUser->id)
-                      ->orWhere('email', $toUser->email);
-                })
-                ->whereNotNull('company_id')
-                ->value('company_id');
-        }
-
         if (!$companyId) {
             $companyId = \App\Models\Company::orderBy('id')->value('id');
         }
@@ -178,26 +262,47 @@ class SupportController extends Controller
             $user->update(['company_id' => $companyId]);
         }
 
+        // Process file attachments (single or multiple)
         $attachmentPath = null;
+        $attachmentList = [];
+        $targetDir = public_path('uploads/support-tickets');
+        if (!file_exists($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
             $filename = time() . '_' . \Illuminate\Support\Str::random(8) . '.' . $file->getClientOriginalExtension();
-            $targetDir = public_path('uploads/support-tickets');
-            if (!file_exists($targetDir)) {
-                mkdir($targetDir, 0755, true);
-            }
             $file->move($targetDir, $filename);
             $attachmentPath = 'uploads/support-tickets/' . $filename;
+            $attachmentList[] = $attachmentPath;
+        }
+
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                if ($file && $file->isValid()) {
+                    $filename = time() . '_' . \Illuminate\Support\Str::random(8) . '.' . $file->getClientOriginalExtension();
+                    $file->move($targetDir, $filename);
+                    $path = 'uploads/support-tickets/' . $filename;
+                    $attachmentList[] = $path;
+                    if (!$attachmentPath) {
+                        $attachmentPath = $path;
+                    }
+                }
+            }
         }
 
         $ticket = SupportTicket::create([
-            'company_id' => $companyId,
-            'subject' => $request->subject,
-            'message' => $request->message,
-            'attachment_path' => $attachmentPath,
-            'created_by' => $user->id,
-            'to_user_id' => $request->to_user_id,
-            'status' => 'pending',
+            'company_id'                     => $companyId,
+            'account_support_category_id'    => $request->account_support_category_id,
+            'account_support_subcategory_id' => $request->account_support_subcategory_id,
+            'subject'                        => $request->subject,
+            'message'                        => $request->message,
+            'attachment_path'                => $attachmentPath,
+            'attachments'                    => !empty($attachmentList) ? $attachmentList : null,
+            'created_by'                     => $user->id,
+            'to_user_id'                     => $toUserId,
+            'status'                         => 'pending',
         ]);
 
         // Send email to the assigned user
