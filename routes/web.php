@@ -402,6 +402,7 @@ Route::middleware(['auth'])->group(function () {
                 Route::patch('/{invoice}/update-sales-person', [App\Http\Controllers\InvoiceController::class, 'updateSalesPerson'])->name('update-sales-person');
                 Route::delete('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'destroy'])->name('destroy');
                 Route::get('/{invoice}/print', [App\Http\Controllers\InvoiceController::class, 'print'])->name('print');
+                Route::get('/{invoice}/pdf', [App\Http\Controllers\InvoiceController::class, 'downloadPdf'])->name('pdf');
                 Route::post('/{invoice}/send-email', [App\Http\Controllers\InvoiceController::class, 'sendEmail'])->name('send-email');
                 Route::post('/{invoice}/payments', [App\Http\Controllers\InvoicePaymentController::class, 'store'])->name('payments.store');
                 Route::delete('/{invoice}/payments/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroy'])->name('payments.destroy');

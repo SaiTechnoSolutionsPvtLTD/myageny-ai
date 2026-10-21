@@ -774,6 +774,34 @@ class InvoiceController extends Controller
     }
 
     /**
+     * Download Invoice as PDF file (2 pages with dedicated Terms & Conditions).
+     */
+    public function downloadPdf(Invoice $invoice)
+    {
+        $invoice->loadMissing(['items.itemMaster', 'customer', 'salesPerson', 'creator']);
+        $companyId   = $invoice->company_id ?: auth()->user()?->company_id;
+        $setting     = InvoiceSetting::forCompany($companyId);
+        $companyName = $setting->company_name ?: config('app.name');
+
+        $pdf = Pdf::loadView('pages.accounts.sales.invoices.pdf', [
+            'invoice'     => $invoice,
+            'setting'     => $setting,
+            'companyName' => $companyName,
+        ])
+        ->setPaper('a4', 'portrait')
+        ->setOptions([
+            'defaultFont'          => 'DejaVu Sans',
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled'      => true,
+            'isPhpEnabled'         => true,
+        ]);
+
+        $filename = 'Invoice_' . str_replace(['/', '\\'], '_', $invoice->invoice_number) . '.pdf';
+
+        return $pdf->download($filename);
+    }
+
+    /**
      * Update only the sales person for the invoice (quick inline/modal update).
      */
     public function updateSalesPerson(Request $request, Invoice $invoice)

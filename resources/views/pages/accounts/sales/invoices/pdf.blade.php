@@ -250,6 +250,13 @@
             color: #64748b;
             padding-top: 5px;
         }
+
+        .terms-page-content p { margin: 0 0 8px 0; }
+        .terms-page-content ol, .terms-page-content ul { margin: 0 0 10px 0; padding-left: 20px; }
+        .terms-page-content li { margin-bottom: 6px; line-height: 1.55; }
+        .terms-page-content h1, .terms-page-content h2, .terms-page-content h3, .terms-page-content h4 { margin: 10px 0 4px 0; color: #000000; }
+        .terms-page-content table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        .terms-page-content th, .terms-page-content td { border: 1px solid #000000; padding: 4px 6px; }
     </style>
 <body>
     <script type="text/php">
@@ -257,7 +264,7 @@
         $font = $fontMetrics->get_font("DejaVu Sans", "normal");
         $size = 8.5;
         $color = array(0.39, 0.45, 0.55);
-        $pdf->page_text($pdf->get_width() - 55, $pdf->get_height() - 25, "{PAGE_NUM}", $font, $size, $color);
+        $pdf->page_text($pdf->get_width() - 85, $pdf->get_height() - 25, "Page {PAGE_NUM} of {PAGE_COUNT}", $font, $size, $color);
     }
     </script>
 
@@ -520,18 +527,6 @@
                         @endif
                     </div>
                 </div>
-
-                @php
-                    $termsText = $setting?->terms_conditions ?: ($invoice->terms_conditions ?: '100% Advance Payment');
-                @endphp
-                @if($termsText)
-                    <div style="margin-top:10px;">
-                        <div class="sec-head">Terms & Conditions</div>
-                        <div class="sec-body" style="font-size:9.5px; line-height:1.4;">
-                            {!! nl2br(e($termsText)) !!}
-                        </div>
-                    </div>
-                @endif
             </td>
 
             <td colspan="3" class="bottom-right-cell" style="width: 40%;">
@@ -606,6 +601,33 @@
             </td>
         </tr>
     </table>
+
+</div>
+
+{{-- PAGE BREAK FOR DEFAULT DEDICATED 2ND PAGE --}}
+<div style="page-break-before: always;"></div>
+
+{{-- DEDICATED PAGE 2: TERMS & CONDITIONS ONLY --}}
+<div class="invoice-sheet" style="margin-top: 0; padding: 24px 28px;">
+
+    <div style="font-size: 16px; font-weight: bold; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 10px; border-bottom: 1px solid #000000; margin-bottom: 18px;">
+        Terms &amp; Conditions
+    </div>
+
+    @php
+        $termsBody = !empty(trim((string) ($setting?->terms_conditions ?? '')))
+            ? $setting->terms_conditions
+            : (!empty(trim((string) ($invoice->terms_conditions ?? ''))) ? $invoice->terms_conditions : \App\Models\InvoiceSetting::defaultTerms());
+        $isHtmlBody = strip_tags($termsBody) !== $termsBody;
+    @endphp
+
+    <div class="terms-page-content" style="font-size: 11px; line-height: 1.7; color: #000000;">
+        @if($isHtmlBody)
+            {!! $termsBody !!}
+        @else
+            {!! nl2br(e($termsBody)) !!}
+        @endif
+    </div>
 
 </div>
 
