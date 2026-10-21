@@ -545,6 +545,13 @@
     transition: transform 0.15s ease-out;
 }
 
+.terms-page-content p { margin: 0 0 10px 0; }
+.terms-page-content ol, .terms-page-content ul { margin: 0 0 12px 0; padding-left: 22px; }
+.terms-page-content li { margin-bottom: 7px; line-height: 1.6; }
+.terms-page-content h1, .terms-page-content h2, .terms-page-content h3, .terms-page-content h4 { margin: 12px 0 6px 0; color: #000; }
+.terms-page-content table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+.terms-page-content th, .terms-page-content td { border: 1px solid #000; padding: 6px 8px; }
+
 /* Top Header */
 .inv-header {
     display: flex;
@@ -964,6 +971,11 @@
                             <span>Print / PDF</span>
                         </a>
 
+                        <a href="{{ route('accounts.sales.invoices.pdf', $invoice->id) }}" class="inv-action-item" style="color:#ef4444;">
+                            <i class="bi bi-file-earmark-arrow-down-fill" style="color:#ef4444;"></i>
+                            <span>Download PDF</span>
+                        </a>
+
                         @if($balDue > 0)
                             <button type="button" class="inv-action-item payment" onclick="openRecordPaymentModal()">
                                 <i class="bi bi-cash-stack" style="color:#16a34a;"></i>
@@ -1092,7 +1104,7 @@
         <div class="inv-doc-toolbar">
             <div class="inv-doc-tool-left">
                 <span class="inv-pill"><i class="bi bi-file-earmark-pdf-fill" style="color:#ef4444;"></i> Tax Invoice (A4)</span>
-                <span class="inv-pill-light"><i class="bi bi-file-text"></i> Page 1 of 1</span>
+                <span class="inv-pill-light"><i class="bi bi-file-text"></i> 2 Pages</span>
             </div>
             <div class="inv-doc-tool-center">
                 <button type="button" class="inv-tool-btn" onclick="zoomInvoice(-0.1)" title="Zoom Out">
@@ -1113,6 +1125,9 @@
                 <button type="button" class="inv-tool-btn" onclick="copyInvoiceLink()" title="Copy Link to Clipboard">
                     <i class="bi bi-link-45deg"></i> Share Link
                 </button>
+                <a href="{{ route('accounts.sales.invoices.pdf', $invoice->id) }}" class="inv-tool-btn" title="Download 2-Page PDF Document">
+                    <i class="bi bi-file-earmark-arrow-down-fill" style="color:#ef4444;"></i> Download PDF
+                </a>
                 <a href="{{ route('accounts.sales.invoices.print', $invoice->id) }}" target="_blank" class="inv-tool-btn primary" title="Open Print Dialog">
                     <i class="bi bi-printer-fill"></i> Print
                 </a>
@@ -1353,18 +1368,6 @@
                                     @endif
                                 </div>
                             </div>
-
-                            @php
-                                $termsText = $setting?->terms_conditions ?: ($invoice->terms_conditions ?: '100% Advance Payment');
-                            @endphp
-                            @if($termsText)
-                                <div style="margin-top:12px;">
-                                    <div class="sec-head">Terms & Conditions</div>
-                                    <div class="sec-body" style="font-size:10.5px; line-height:1.45;">
-                                        {!! nl2br(e($termsText)) !!}
-                                    </div>
-                                </div>
-                            @endif
                         </td>
 
                         {{-- Right Side: colspan="3" (8% + 16% + 16% = 40% width -> Qty, Rate, Amount) --}}
@@ -1450,7 +1453,31 @@
 
             </div>
 
-            <div class="page-num">1</div>
+            <div class="page-num" style="text-align:right; font-size:11px; color:#64748b; padding-top:6px; max-width:820px; margin:0 auto 24px auto;">Page 1 of 2</div>
+
+            {{-- DEDICATED PAGE 2: TERMS & CONDITIONS ONLY --}}
+            <div class="invoice-sheet" id="invoiceSheetPage2" style="margin:0 auto; padding:32px 36px; box-sizing:border-box;">
+                <div style="font-size: 18px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 12px; border-bottom: 1px solid #000000; margin-bottom: 22px;">
+                    Terms &amp; Conditions
+                </div>
+
+                @php
+                    $termsBody = !empty(trim((string) ($setting?->terms_conditions ?? '')))
+                        ? $setting->terms_conditions
+                        : (!empty(trim((string) ($invoice->terms_conditions ?? ''))) ? $invoice->terms_conditions : \App\Models\InvoiceSetting::defaultTerms());
+                    $isHtmlBody = strip_tags($termsBody) !== $termsBody;
+                @endphp
+
+                <div class="terms-page-content" style="font-size: 11px; line-height: 1.7; color: #0f172a;">
+                    @if($isHtmlBody)
+                        {!! $termsBody !!}
+                    @else
+                        {!! nl2br(e($termsBody)) !!}
+                    @endif
+                </div>
+            </div>
+
+            <div class="page-num" style="text-align:right; font-size:11px; color:#64748b; padding-top:6px; max-width:820px; margin:0 auto 10px auto;">Page 2 of 2</div>
         </div>
     </div>
 
@@ -2189,11 +2216,11 @@ let isFitWidth = false;
 
 function applyZoom(zoom) {
     currentZoom = Math.min(1.4, Math.max(0.6, Math.round(zoom * 100) / 100));
-    const sheet = document.getElementById('invoiceSheet');
+    const sheets = document.querySelectorAll('.invoice-sheet');
     const display = document.getElementById('zoomLevelDisplay');
-    if (sheet) {
+    sheets.forEach(sheet => {
         sheet.style.transform = `scale(${currentZoom})`;
-    }
+    });
     if (display) {
         display.textContent = `${Math.round(currentZoom * 100)}%`;
     }

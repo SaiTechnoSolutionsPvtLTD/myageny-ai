@@ -353,23 +353,31 @@
             margin: 0 auto;
         }
 
+        .invoice-sheet.terms-sheet {
+            margin-top: 24px;
+        }
+
+        .terms-page-content p { margin: 0 0 10px 0; }
+        .terms-page-content ol, .terms-page-content ul { margin: 0 0 12px 0; padding-left: 22px; }
+        .terms-page-content li { margin-bottom: 7px; line-height: 1.6; }
+        .terms-page-content h1, .terms-page-content h2, .terms-page-content h3, .terms-page-content h4 { margin: 12px 0 6px 0; color: #000; }
+        .terms-page-content table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        .terms-page-content th, .terms-page-content td { border: 1px solid #000; padding: 6px 8px; }
+
         @page {
             size: A4 portrait;
-            margin: 16mm 16mm 16mm 16mm;
-            @bottom-right {
-                content: counter(page);
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                font-size: 10px;
-                color: #64748b;
-                font-weight: 500;
-            }
+            margin: 12mm 14mm 12mm 14mm;
         }
         @media print {
             body {
                 background: #ffffff !important;
                 padding: 0 !important;
+                margin: 0 !important;
             }
             .print-btn-bar {
+                display: none !important;
+            }
+            .page-num {
                 display: none !important;
             }
             .invoice-sheet {
@@ -378,8 +386,17 @@
                 width: 100% !important;
                 border: 1px solid #000000 !important;
                 page-break-after: avoid;
+                break-after: avoid;
                 -webkit-box-decoration-break: clone !important;
                 box-decoration-break: clone !important;
+                margin: 0 auto !important;
+            }
+            .invoice-sheet.terms-sheet {
+                page-break-before: always !important;
+                break-before: page !important;
+                page-break-after: auto !important;
+                break-after: auto !important;
+                margin: 0 auto !important;
             }
             .party-head.party-right, .party-body.party-right {
                 border-right: none !important;
@@ -390,9 +407,6 @@
             .inv-main-tbl tr {
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
-            }
-            .page-num {
-                display: none !important;
             }
             * {
                 -webkit-print-color-adjust: exact !important;
@@ -663,18 +677,6 @@
                                 @endif
                             </div>
                         </div>
-
-                        @php
-                            $termsText = $setting?->terms_conditions ?: ($invoice->terms_conditions ?: '100% Advance Payment');
-                        @endphp
-                        @if($termsText)
-                            <div style="margin-top:12px;">
-                                <div class="sec-head">Terms & Conditions</div>
-                                <div class="sec-body" style="font-size:10.5px; line-height:1.45;">
-                                    {!! nl2br(e($termsText)) !!}
-                                </div>
-                            </div>
-                        @endif
                     </td>
 
                     {{-- Right Side: colspan="3" (8% + 16% + 16% = 40% width -> Qty, Rate, Amount) --}}
@@ -760,7 +762,31 @@
 
     </div>
 
-    <div class="page-num">1</div>
+    <div class="page-num">Page 1 of 2</div>
+
+    {{-- DEDICATED PAGE 2: TERMS & CONDITIONS ONLY --}}
+    <div class="invoice-sheet terms-sheet" style="padding: 32px 36px;">
+        <div style="font-size: 18px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 12px; border-bottom: 1px solid #000000; margin-bottom: 22px;">
+            Terms &amp; Conditions
+        </div>
+
+        @php
+            $termsBody = !empty(trim((string) ($setting?->terms_conditions ?? '')))
+                ? $setting->terms_conditions
+                : (!empty(trim((string) ($invoice->terms_conditions ?? ''))) ? $invoice->terms_conditions : \App\Models\InvoiceSetting::defaultTerms());
+            $isHtmlBody = strip_tags($termsBody) !== $termsBody;
+        @endphp
+
+        <div class="terms-page-content" style="font-size: 11px; line-height: 1.7; color: #0f172a;">
+            @if($isHtmlBody)
+                {!! $termsBody !!}
+            @else
+                {!! nl2br(e($termsBody)) !!}
+            @endif
+        </div>
+    </div>
+
+    <div class="page-num">Page 2 of 2</div>
 
     <script>
     // Automatically open browser print preview on page load

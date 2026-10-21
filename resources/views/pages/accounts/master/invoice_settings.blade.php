@@ -69,6 +69,7 @@
 .preview-image-wrap img { max-height:100px; max-width:100%; object-fit:contain; }
 
 .section-divider { border-bottom:1px solid #f1f5f9; margin:4px 0; }
+.tox-tinymce { border-radius:12px !important; border-color:#cbd5e1 !important; box-shadow:0 1px 3px rgba(0,0,0,.02) !important; }
 </style>
 @endpush
 
@@ -425,26 +426,31 @@
                 <div class="inv-card-header">
                     <div>
                         <div class="inv-card-title">
-                            <i class="bi bi-file-text" style="color:#7c3aed; font-size:18px;"></i>
+                            <i class="bi bi-file-earmark-text" style="color:#7c3aed; font-size:18px;"></i>
                             <span>Terms & Conditions and Notes</span>
                         </div>
-                        <div class="inv-card-sub">Standard terms, conditions, payment rules, and declarations printed at the bottom of invoices.</div>
+                        <div class="inv-card-sub">Standard terms, conditions, payment rules, and declarations printed on invoices. Terms & Conditions automatically generate as the default dedicated Page 2.</div>
                     </div>
                 </div>
                 <div class="inv-card-body">
-                    <div class="grid-2">
+                    <div style="display:flex; flex-direction:column; gap:20px;">
                         <div class="form-group">
-                            <label class="form-label">Terms & Conditions (One per line or formatted clauses)</label>
-                            <textarea name="terms_conditions" class="form-input" rows="6" style="font-size:12px; line-height:1.6;"
+                            <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+                                <span>Terms & Conditions (One per line or formatted clauses)</span>
+                                <span style="font-size:11px; font-weight:700; color:#7c3aed; background:#f5f3ff; border:1px solid #ddd6fe; padding:2px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;">
+                                    <i class="bi bi-pencil-square"></i> Rich Text Editor
+                                </span>
+                            </label>
+                            <textarea id="termsConditionsEditor" name="terms_conditions" class="form-input" rows="8" style="font-size:13px; line-height:1.6;"
                                       placeholder="1. Payment is due within agreed terms&#10;2. Make all payments via NEFT/RTGS/UPI&#10;3. Interest charged on overdue invoices">{{ old('terms_conditions', $setting->terms_conditions ?? \App\Models\InvoiceSetting::defaultTerms()) }}</textarea>
-                            <span class="form-hint">These terms appear at the bottom-left of the invoice PDF / printout.</span>
+                            <span class="form-hint">These Terms & Conditions appear automatically on the default <strong>dedicated 2nd Page</strong> of every invoice PDF and printout. Use lists, bold styling, headings, and formatting as needed.</span>
                         </div>
 
                         <div class="form-group">
                             <label class="form-label">Declaration / Customer Notes (Optional)</label>
-                            <textarea name="notes" class="form-input" rows="6" style="font-size:12px; line-height:1.6;"
+                            <textarea name="notes" class="form-input" rows="3" style="font-size:12px; line-height:1.6;"
                                       placeholder="Certified that the particulars given above are true and correct. Thank you for your business!">{{ old('notes', $setting->notes) }}</textarea>
-                            <span class="form-hint">Optional closing declaration or thank-you note.</span>
+                            <span class="form-hint">Closing declaration or thank-you note printed on Page 1 below totals.</span>
                         </div>
                     </div>
                 </div>
@@ -528,10 +534,14 @@
 </div>
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.5/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
 let isInvoiceSettingsSubmitting = false;
 
 function triggerSaveSettings() {
+    if (window.tinymce) {
+        window.tinymce.triggerSave();
+    }
     const form = document.getElementById('invoiceSettingsForm');
     if (form) {
         form.requestSubmit ? form.requestSubmit() : form.submit();
@@ -612,9 +622,32 @@ function confirmRemoveFile(type) {
 
 // Form Submit Handler with Loading State and Double-Click Prevention
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize TinyMCE for Terms & Conditions Editor
+    if (window.tinymce && document.getElementById('termsConditionsEditor')) {
+        window.tinymce.remove('#termsConditionsEditor');
+        window.tinymce.init({
+            selector: 'textarea#termsConditionsEditor',
+            base_url: 'https://cdn.jsdelivr.net/npm/tinymce@6.8.5',
+            menubar: 'edit view insert format tools table',
+            height: 360,
+            plugins: 'lists link table code preview wordcount',
+            toolbar: 'undo redo | blocks | bold italic underline strikethrough | forecolor backcolor | bullist numlist | alignleft aligncenter alignright alignjustify | link table | removeformat code',
+            content_style: 'body { font-family: Inter, sans-serif; font-size: 13px; line-height: 1.6; color: #1e293b; padding: 12px; } ol, ul { padding-left: 20px; } p { margin: 0 0 8px 0; }',
+            setup: function (editor) {
+                editor.on('change keyup NodeChange', function () {
+                    window.tinymce.triggerSave();
+                });
+            },
+        });
+    }
+
     const form = document.getElementById('invoiceSettingsForm');
     if (form) {
         form.addEventListener('submit', function(e) {
+            if (window.tinymce) {
+                window.tinymce.triggerSave();
+            }
+
             if (isInvoiceSettingsSubmitting) {
                 e.preventDefault();
                 return false;

@@ -495,14 +495,20 @@
                     </div>
                 </div>
                 <div class="inv-card-body">
-                    <div class="form-grid-2">
+                    <div style="display:flex; flex-direction:column; gap:16px;">
                         <div class="form-group">
-                            <label class="form-label">Terms & Conditions</label>
-                            <textarea name="terms_conditions" class="form-input" rows="5" style="font-size:12px; line-height:1.6;">{{ old('terms_conditions', $invoice->terms_conditions) }}</textarea>
+                            <label class="form-label" style="display:flex; justify-content:space-between; align-items:center;">
+                                <span>Terms &amp; Conditions (Printed on Dedicated Page 2)</span>
+                                <span style="font-size:11px; font-weight:700; color:#7c3aed; background:#f5f3ff; border:1px solid #ddd6fe; padding:2px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;">
+                                    <i class="bi bi-pencil-square"></i> Rich Text Editor
+                                </span>
+                            </label>
+                            <textarea id="invoiceTermsEditor" name="terms_conditions" class="form-input" rows="6" style="font-size:13px; line-height:1.6;">{{ old('terms_conditions', $invoice->terms_conditions) }}</textarea>
+                            <span style="font-size:11px; color:#94a3b8; margin-top:2px;">Appears automatically on the dedicated 2nd page of the invoice.</span>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Customer Notes</label>
-                            <textarea name="customer_notes" class="form-input" rows="5" style="font-size:12px; line-height:1.6;">{{ old('customer_notes', $invoice->customer_notes) }}</textarea>
+                            <label class="form-label">Customer Notes (Page 1)</label>
+                            <textarea name="customer_notes" class="form-input" rows="3" style="font-size:12px; line-height:1.6;">{{ old('customer_notes', $invoice->customer_notes) }}</textarea>
                         </div>
                     </div>
                 </div>
@@ -525,6 +531,7 @@
 </div>{{-- /inv-page --}}
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.5/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
 const catalogItems = @json($items);
 const initialItems = @json($invoice->items);
@@ -908,6 +915,24 @@ function escapeHtml(text) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize TinyMCE on Invoice Terms Editor
+    if (window.tinymce && document.getElementById('invoiceTermsEditor')) {
+        window.tinymce.init({
+            selector: 'textarea#invoiceTermsEditor',
+            base_url: 'https://cdn.jsdelivr.net/npm/tinymce@6.8.5',
+            menubar: 'edit view insert format tools table',
+            height: 280,
+            plugins: 'lists link table code preview wordcount',
+            toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link table | removeformat code',
+            content_style: 'body { font-family: Inter, sans-serif; font-size: 13px; line-height: 1.6; color: #1e293b; padding: 10px; } ol, ul { padding-left: 20px; } p { margin: 0 0 8px 0; }',
+            setup: function (editor) {
+                editor.on('change keyup NodeChange', function () {
+                    window.tinymce.triggerSave();
+                });
+            },
+        });
+    }
+
     if (initialItems && initialItems.length) {
         initialItems.forEach(it => addInvoiceItemRow(it));
     } else {
@@ -917,6 +942,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('invoiceForm');
     if (form) {
         form.addEventListener('submit', function(e) {
+            if (window.tinymce) {
+                window.tinymce.triggerSave();
+            }
+
             if (isInvoiceSubmitting) {
                 e.preventDefault();
                 return false;
