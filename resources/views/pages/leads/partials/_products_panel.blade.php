@@ -33,13 +33,18 @@
 ══════════════════════════════════════════════════════ --}}
 <style>
 /* ── Summary bar ─────────────────────────────────────── */
-.pp-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.pp-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
+@media (max-width: 1400px){.pp-summary{grid-template-columns:repeat(3,1fr)}}
+@media (max-width: 900px){.pp-summary{grid-template-columns:repeat(2,1fr)}}
+@media (max-width: 580px){.pp-summary{grid-template-columns:1fr}}
 .pp-sum-card{background:#fff;border:1px solid #e1dee3;border-radius:12px;padding:14px 16px;position:relative;overflow:hidden}
 .pp-sum-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
 .pp-sum-card.pp-total::before{background:#fe5f04}
 .pp-sum-card.pp-paid::before{background:#16a34a}
 .pp-sum-card.pp-pending::before{background:#dc2626}
 .pp-sum-card.pp-count::before{background:#7c3aed}
+.pp-sum-card.pp-domains-hosting::before{background:#0284c7}
+.pp-sum-card.pp-domains-hosting:hover{border-color:#38bdf8;box-shadow:0 4px 14px rgba(2,132,199,.15);transform:translateY(-1px);transition:all .18s ease}
 .pp-sum-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#9e9e9e;margin-bottom:6px}
 
 /* Progress Bar & Processing Overlay for Price Requests */
@@ -410,6 +415,16 @@
         <div class="pp-sum-label">Converted</div>
         <div class="pp-sum-value" id="pp-sum-converted" style="color:#7c3aed">{{ $converted }}</div>
         <div class="pp-sum-sub">of {{ $prodCount }} total (Click to view)</div>
+    </div>
+    @php
+        $leadDomains = $lead->domainRecords ?? \App\Models\DomainRecord::where('lead_id', $lead->id)->with('renewals')->latest()->get();
+        $leadHostings = $lead->hostingRecords ?? \App\Models\HostingRecord::where('lead_id', $lead->id)->with('renewals')->latest()->get();
+        $totalDHCount = $leadDomains->count() + $leadHostings->count();
+    @endphp
+    <div class="pp-sum-card pp-domains-hosting" style="cursor:pointer" onclick="openLeadDomainsHostingModal()">
+        <div class="pp-sum-label">Domains &amp; Hosting</div>
+        <div class="pp-sum-value" id="pp-sum-domains-hosting" style="color:#0284c7">{{ $totalDHCount }}</div>
+        <div class="pp-sum-sub" style="color:#0284c7;">{{ $leadDomains->count() }} Domain(s) • {{ $leadHostings->count() }} Hosting (Click to view)</div>
     </div>
 </div>
 
@@ -1029,6 +1044,293 @@
     </div>
 </div>
 
+{{-- ══════════════════════════════════════════════════════
+     MODAL — DOMAINS & HOSTING (FULL PAGE MODAL)
+══════════════════════════════════════════════════════ --}}
+<div class="pp-overlay" id="pp-modal-domains-hosting" style="z-index: 10005;">
+    <div class="pp-modal-box pp-modal-box--fullscreen" style="width: 95vw; max-width: 1320px; height: 90vh; max-height: 92vh; border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; background: #fff; box-shadow: 0 25px 80px rgba(15, 23, 42, 0.35);">
+        
+        {{-- Modal Header --}}
+        <div class="pp-mhd" style="display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; border-bottom: 1px solid #e2e8f0; background: #ffffff; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <div style="width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);">
+                    <i class="bi bi-globe2"></i>
+                </div>
+                <div>
+                    <div style="font-size: 17px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                        <span>Domains &amp; Hosting</span>
+                        <span style="font-size: 12px; font-weight: 700; background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 6px;">Lead #{{ $lead->id }}</span>
+                    </div>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                        Associated Domain names, DNS, Hosting servers, and Renewal timelines for <strong>{{ $lead->name ?? $lead->company_name ?? 'Lead Client' }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="display: flex; gap: 8px;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 5px 12px; border-radius: 8px; border: 1px solid #bae6fd;">
+                        <i class="bi bi-globe"></i> {{ $leadDomains->count() }} Domains
+                    </span>
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; background: #ede9fe; color: #6d28d9; padding: 5px 12px; border-radius: 8px; border: 1px solid #ddd6fe;">
+                        <i class="bi bi-hdd-network"></i> {{ $leadHostings->count() }} Hostings
+                    </span>
+                </div>
+                <a href="{{ route('accounts.domains-hosting.index') }}" target="_blank" class="ppf-btn ppf-btn-sec" style="font-size: 12px; padding: 7px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; border: 1px solid #cbd5e1; color: #334155; font-weight: 600;">
+                    <i class="bi bi-box-arrow-up-right"></i> Open Module
+                </a>
+                <button type="button" class="pp-mclose" onclick="closeLeadDomainsHostingModal()" style="font-size: 20px; color: #94a3b8; background: none; border: none; cursor: pointer; padding: 4px; line-height: 1;">✕</button>
+            </div>
+        </div>
+
+        {{-- Sub-bar: Tabs & Filter --}}
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; gap: 6px;">
+                <button type="button" class="dh-tab-btn" id="dh-btn-all" onclick="switchDHTab('all')" style="padding: 6px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 700; cursor: pointer; border: 1px solid #0284c7; background: #0284c7; color: #fff;">
+                    All Items ({{ $totalDHCount }})
+                </button>
+                <button type="button" class="dh-tab-btn" id="dh-btn-domains" onclick="switchDHTab('domains')" style="padding: 6px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 700; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; color: #334155;">
+                    Domains ({{ $leadDomains->count() }})
+                </button>
+                <button type="button" class="dh-tab-btn" id="dh-btn-hostings" onclick="switchDHTab('hostings')" style="padding: 6px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 700; cursor: pointer; border: 1px solid #cbd5e1; background: #fff; color: #334155;">
+                    Hosting Plans ({{ $leadHostings->count() }})
+                </button>
+            </div>
+
+            <div style="position: relative; min-width: 260px;">
+                <i class="bi bi-search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 12px;"></i>
+                <input type="text" id="dhSearchInput" oninput="filterDHTable(this.value)" placeholder="Search domain, registrar, server, IP..." style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px 6px 30px; font-size: 12px; outline: none; background: #fff;">
+            </div>
+        </div>
+
+        {{-- Modal Body (Scrollable) --}}
+        <div class="pp-mbody" style="padding: 24px; overflow-y: auto; flex: 1; background: #f8fafc; display: flex; flex-direction: column; gap: 24px;">
+
+            {{-- 1. DOMAINS SECTION --}}
+            <div id="dh-sec-domains" class="dh-content-section">
+                <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                    <div style="padding: 14px 20px; background: #ffffff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+                        <div style="font-size: 14px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                            <i class="bi bi-globe" style="color: #0284c7;"></i>
+                            <span>Registered Domains</span>
+                            <span style="font-size: 11px; font-weight: 800; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 999px;">{{ $leadDomains->count() }}</span>
+                        </div>
+                    </div>
+
+                    @if($leadDomains->count() > 0)
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 13px;" class="dh-tbl">
+                                <thead>
+                                    <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 800; text-align: left;">
+                                        <th style="padding: 10px 16px; width: 40px;">#</th>
+                                        <th style="padding: 10px 16px;">Domain Name</th>
+                                        <th style="padding: 10px 16px;">Registrar</th>
+                                        <th style="padding: 10px 16px;">Status</th>
+                                        <th style="padding: 10px 16px;">Expiry Date</th>
+                                        <th style="padding: 10px 16px;">Auto Renew</th>
+                                        <th style="padding: 10px 16px;">Privacy</th>
+                                        <th style="padding: 10px 16px;">Renewals</th>
+                                        <th style="padding: 10px 16px; text-align: right;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($leadDomains as $idx => $d)
+                                    @php
+                                        $exp = $d->expires_at ? \Carbon\Carbon::parse($d->expires_at) : null;
+                                        $isExp = $exp && $exp->isPast();
+                                        $daysLeft = $exp ? (int) now()->diffInDays($exp, false) : null;
+                                    @endphp
+                                    <tr class="dh-row" data-search="{{ strtolower($d->domain_name . ' ' . $d->registrar . ' ' . $d->status) }}" style="border-bottom: 1px solid #f1f5f9;">
+                                        <td style="padding: 12px 16px; color: #94a3b8; font-weight: 700;">{{ $idx + 1 }}</td>
+                                        <td style="padding: 12px 16px;">
+                                            <div style="font-weight: 800; color: #0f172a; font-size: 13.5px; display: flex; align-items: center; gap: 6px;">
+                                                <span>{{ $d->domain_name }}</span>
+                                                <a href="http://{{ $d->domain_name }}" target="_blank" style="color: #94a3b8; font-size: 11px;" title="Visit Website"><i class="bi bi-box-arrow-up-right"></i></a>
+                                            </div>
+                                            @if($d->notes)
+                                                <div style="font-size: 11.5px; color: #64748b; margin-top: 2px;">{{ \Illuminate\Support\Str::limit($d->notes, 40) }}</div>
+                                            @endif
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            <span style="font-weight: 700; color: #334155; font-size: 12px; background: #f1f5f9; padding: 3px 8px; border-radius: 6px;">{{ $d->registrar ?: '—' }}</span>
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            @php
+                                                $st = strtoupper($d->status ?? 'ACTIVE');
+                                                $badgeStyle = 'background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;';
+                                                if(in_array($st, ['EXPIRED', 'CANCELLED'])) $badgeStyle = 'background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;';
+                                                elseif(in_array($st, ['PENDING', 'TRANSFERRED_OUT'])) $badgeStyle = 'background:#fef3c7; color:#b45309; border:1px solid #fde68a;';
+                                            @endphp
+                                            <span style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; {{ $badgeStyle }}">{{ $st }}</span>
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            @if($exp)
+                                                <div style="font-weight: 700; color: {{ $isExp ? '#dc2626' : '#0f172a' }}; font-size: 12.5px;">{{ $exp->format('d M, Y') }}</div>
+                                                <div style="font-size: 11px; font-weight: 600; color: {{ $isExp ? '#b91c1c' : ($daysLeft <= 30 ? '#d97706' : '#16a34a') }};">
+                                                    {{ $isExp ? 'Expired ' . abs($daysLeft) . ' days ago' : ($daysLeft === 0 ? 'Expires today' : 'In ' . $daysLeft . ' days') }}
+                                                </div>
+                                            @else
+                                                <span style="color: #94a3b8;">—</span>
+                                            @endif
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            @if($d->auto_renew)
+                                                <span style="color: #16a34a; font-weight: 700; font-size: 12px;"><i class="bi bi-check-circle-fill"></i> Enabled</span>
+                                            @else
+                                                <span style="color: #94a3b8; font-size: 12px;"><i class="bi bi-x-circle"></i> Off</span>
+                                            @endif
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            @if($d->privacy)
+                                                <span style="color: #0284c7; font-weight: 700; font-size: 12px;"><i class="bi bi-shield-fill-check"></i> Protected</span>
+                                            @else
+                                                <span style="color: #94a3b8; font-size: 12px;">Standard</span>
+                                            @endif
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            @php $rc = $d->renewals->count(); @endphp
+                                            @if($rc > 0)
+                                                <div style="font-size: 12px; font-weight: 700; color: #0f172a;">{{ $rc }} renewal(s)</div>
+                                                @if($lastRen = $d->renewals->first())
+                                                    <div style="font-size: 11px; color: #16a34a; font-weight: 600;">Last: ₹{{ number_format((float)$lastRen->renewal_amount, 2) }}</div>
+                                                @endif
+                                            @else
+                                                <span style="font-size: 11px; color: #94a3b8;">None recorded</span>
+                                            @endif
+                                        </td>
+                                        <td style="padding: 12px 16px; text-align: right;">
+                                            <a href="{{ route('accounts.domains-hosting.domains.show', $d->id) }}" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; background: #f1f5f9; color: #0284c7; font-size: 11.5px; font-weight: 700; text-decoration: none; border: 1px solid #e2e8f0;">
+                                                Details <i class="bi bi-arrow-right"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div style="text-align: center; padding: 36px 20px; color: #64748b;">
+                            <i class="bi bi-globe" style="font-size: 34px; color: #cbd5e1; display: block; margin-bottom: 8px;"></i>
+                            <div style="font-size: 14px; font-weight: 700; color: #0f172a;">No domains linked to this lead</div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Link an existing domain or create a new one from the Domains &amp; Hosting module.</div>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            {{-- 2. HOSTINGS SECTION --}}
+            <div id="dh-sec-hostings" class="dh-content-section">
+                <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                    <div style="padding: 14px 20px; background: #ffffff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+                        <div style="font-size: 14px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                            <i class="bi bi-hdd-network" style="color: #6d28d9;"></i>
+                            <span>Hosting Plans &amp; Servers</span>
+                            <span style="font-size: 11px; font-weight: 800; background: #ede9fe; color: #6d28d9; padding: 2px 8px; border-radius: 999px;">{{ $leadHostings->count() }}</span>
+                        </div>
+                    </div>
+
+                    @if($leadHostings->count() > 0)
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 13px;" class="dh-tbl">
+                                <thead>
+                                    <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 800; text-align: left;">
+                                        <th style="padding: 10px 16px; width: 40px;">#</th>
+                                        <th style="padding: 10px 16px;">Hosting Name</th>
+                                        <th style="padding: 10px 16px;">Provider</th>
+                                        <th style="padding: 10px 16px;">Plan Type</th>
+                                        <th style="padding: 10px 16px;">IP Address</th>
+                                        <th style="padding: 10px 16px;">Renewal Date &amp; Cost</th>
+                                        <th style="padding: 10px 16px;">Status</th>
+                                        <th style="padding: 10px 16px; text-align: right;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($leadHostings as $idx => $h)
+                                    @php
+                                        $hExp = $h->renewal_date ? \Carbon\Carbon::parse($h->renewal_date) : null;
+                                        $hIsExp = $hExp && $hExp->isPast();
+                                        $hDaysLeft = $hExp ? (int) now()->diffInDays($hExp, false) : null;
+                                    @endphp
+                                    <tr class="dh-row" data-search="{{ strtolower($h->hosting_name . ' ' . $h->provider . ' ' . $h->plan_type . ' ' . $h->ip_address) }}" style="border-bottom: 1px solid #f1f5f9;">
+                                        <td style="padding: 12px 16px; color: #94a3b8; font-weight: 700;">{{ $idx + 1 }}</td>
+                                        <td style="padding: 12px 16px;">
+                                            <div style="font-weight: 800; color: #0f172a; font-size: 13.5px;">{{ $h->hosting_name }}</div>
+                                            @if($h->notes)
+                                                <div style="font-size: 11.5px; color: #64748b; margin-top: 2px;">{{ \Illuminate\Support\Str::limit($h->notes, 40) }}</div>
+                                            @endif
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            <span style="font-weight: 700; color: #334155; font-size: 12px; background: #f1f5f9; padding: 3px 8px; border-radius: 6px;">{{ $h->provider ?: '—' }}</span>
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            <span style="font-size: 12px; color: #475569; font-weight: 600;">{{ $h->plan_type ?: 'Standard' }}</span>
+                                            @if($h->allocated_storage)
+                                                <div style="margin-top:3px;">
+                                                    <span style="font-size: 11px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 1px 6px; border-radius: 4px;" title="Allocated Storage">
+                                                        <i class="bi bi-hdd"></i> {{ $h->allocated_storage }}
+                                                    </span>
+                                                </div>
+                                            @endif
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            @if($h->ip_address)
+                                                <code style="font-size: 12px; font-weight: 700; color: #0f172a; background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">{{ $h->ip_address }}</code>
+                                            @else
+                                                <span style="color: #94a3b8;">—</span>
+                                            @endif
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            @if($hExp)
+                                                <div style="font-weight: 700; color: #0f172a; font-size: 12.5px;">{{ $hExp->format('d M, Y') }}</div>
+                                                <div style="font-size: 11px; font-weight: 600; color: #16a34a;">
+                                                    ₹{{ number_format((float)$h->renewal_amount, 2) }}
+                                                    <span style="color: #64748b; font-weight: 500;">({{ $hIsExp ? 'Expired' : 'In ' . $hDaysLeft . ' days' }})</span>
+                                                </div>
+                                            @else
+                                                <span style="color: #94a3b8;">—</span>
+                                            @endif
+                                        </td>
+                                        <td style="padding: 12px 16px;">
+                                            @php
+                                                $hst = strtoupper($h->status ?? 'ACTIVE');
+                                                $hBadgeStyle = 'background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;';
+                                                if(in_array($hst, ['EXPIRED', 'SUSPENDED'])) $hBadgeStyle = 'background:#fee2e2; color:#b91c1c; border:1px solid #fecaca;';
+                                            @endphp
+                                            <span style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; {{ $hBadgeStyle }}">{{ $hst }}</span>
+                                        </td>
+                                        <td style="padding: 12px 16px; text-align: right;">
+                                            <a href="{{ route('accounts.domains-hosting.hostings.show', $h->id) }}" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; background: #f1f5f9; color: #6d28d9; font-size: 11.5px; font-weight: 700; text-decoration: none; border: 1px solid #e2e8f0;">
+                                                Details <i class="bi bi-arrow-right"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div style="text-align: center; padding: 36px 20px; color: #64748b;">
+                            <i class="bi bi-hdd-network" style="font-size: 34px; color: #cbd5e1; display: block; margin-bottom: 8px;"></i>
+                            <div style="font-size: 14px; font-weight: 700; color: #0f172a;">No hosting plans linked to this lead</div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Link an existing hosting or server from the Domains &amp; Hosting module.</div>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+        </div>
+
+        {{-- Modal Footer --}}
+        <div style="padding: 14px 24px; border-top: 1px solid #e2e8f0; background: #ffffff; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+            <div style="font-size: 12px; color: #64748b;">
+                Showing <strong>{{ $totalDHCount }}</strong> total item(s) mapped to Lead #{{ $lead->id }}
+            </div>
+            <button type="button" class="ppf-btn ppf-btn-sec" onclick="closeLeadDomainsHostingModal()" style="padding: 7px 20px; font-size: 13px; font-weight: 700;">Close</button>
+        </div>
+
+    </div>
+</div>
+
 @push('scripts')
 <script>
 /* Inject server-side config for products-panel.js */
@@ -1042,6 +1344,68 @@ window.PP_CONFIG = {
     statusOptions: @json($leadProductStatuses->map(fn ($status) => ['id' => $status->id, 'name' => $status->name])->values()),
 };
 window.PP = window.PP || {};
+
+// Domains & Hosting Modal Handlers
+window.openLeadDomainsHostingModal = function() {
+    const modal = document.getElementById('pp-modal-domains-hosting');
+    if (modal) {
+        modal.classList.add('pp-show');
+    }
+};
+window.closeLeadDomainsHostingModal = function() {
+    const modal = document.getElementById('pp-modal-domains-hosting');
+    if (modal) {
+        modal.classList.remove('pp-show');
+    }
+};
+
+window.switchDHTab = function(tab) {
+    const btnAll = document.getElementById('dh-btn-all');
+    const btnDom = document.getElementById('dh-btn-domains');
+    const btnHost = document.getElementById('dh-btn-hostings');
+    const secDom = document.getElementById('dh-sec-domains');
+    const secHost = document.getElementById('dh-sec-hostings');
+
+    [btnAll, btnDom, btnHost].forEach(b => {
+        if (!b) return;
+        b.style.background = '#fff';
+        b.style.color = '#334155';
+        b.style.borderColor = '#cbd5e1';
+    });
+
+    if (tab === 'all') {
+        if (btnAll) { btnAll.style.background = '#0284c7'; btnAll.style.color = '#fff'; btnAll.style.borderColor = '#0284c7'; }
+        if (secDom) secDom.style.display = 'block';
+        if (secHost) secHost.style.display = 'block';
+    } else if (tab === 'domains') {
+        if (btnDom) { btnDom.style.background = '#0284c7'; btnDom.style.color = '#fff'; btnDom.style.borderColor = '#0284c7'; }
+        if (secDom) secDom.style.display = 'block';
+        if (secHost) secHost.style.display = 'none';
+    } else if (tab === 'hostings') {
+        if (btnHost) { btnHost.style.background = '#0284c7'; btnHost.style.color = '#fff'; btnHost.style.borderColor = '#0284c7'; }
+        if (secDom) secDom.style.display = 'none';
+        if (secHost) secHost.style.display = 'block';
+    }
+};
+
+window.filterDHTable = function(query) {
+    const q = (query || '').toLowerCase().trim();
+    document.querySelectorAll('.dh-row').forEach(row => {
+        const text = row.getAttribute('data-search') || '';
+        if (!q || text.includes(q)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+};
+
+document.addEventListener('click', function(e) {
+    const modal = document.getElementById('pp-modal-domains-hosting');
+    if (modal && e.target === modal) {
+        window.closeLeadDomainsHostingModal();
+    }
+});
 </script>
 <script src="{{ asset('js/products-panel.js') }}?v={{ filemtime(public_path('js/products-panel.js')) }}"></script>
 

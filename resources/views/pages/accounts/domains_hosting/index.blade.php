@@ -466,6 +466,7 @@
                                 <th>Provider</th>
                                 <th>IP Address</th>
                                 <th>Plan Type</th>
+                                <th>Storage</th>
                                 <th>Status</th>
                                 <th>Renewal Date</th>
                                 <th>Renewal Amount</th>
@@ -490,6 +491,15 @@
                                 <td><span style="font-weight:600; color:#475569;">{{ $item->provider }}</span></td>
                                 <td><code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-size:12px;">{{ $item->ip_address ?: '—' }}</code></td>
                                 <td><span style="font-size:11px; padding:2px 8px; background:#eff6ff; color:#2563eb; border-radius:4px; font-weight:700;">{{ $item->plan_type }}</span></td>
+                                <td>
+                                    @if($item->allocated_storage)
+                                        <code style="background:#f8fafc; border:1px solid #e2e8f0; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:700; color:#0f172a;" title="Allocated Storage">
+                                            <i class="bi bi-hdd" style="color:#0284c7;"></i> {{ $item->allocated_storage }}
+                                        </code>
+                                    @else
+                                        <span style="color:#94a3b8; font-size:12px;">—</span>
+                                    @endif
+                                </td>
                                 <td>
                                     @if($isExpired)
                                         <span class="dh-badge status-expired">EXPIRED</span>
@@ -542,10 +552,12 @@
                                         <button type="button" class="dh-btn dh-btn-secondary" style="padding:4px 10px; font-size:11px;"
                                                 data-item="{{ json_encode([
                                                     'id' => $item->id,
+                                                    'server_id' => $item->server_id,
                                                     'hosting_name' => $item->hosting_name,
                                                     'provider' => $item->provider,
                                                     'ip_address' => $item->ip_address ?: '',
                                                     'plan_type' => $item->plan_type,
+                                                    'allocated_storage' => $item->allocated_storage ?: '',
                                                     'status' => $item->status,
                                                     'renewal_date' => $item->renewal_date ? $item->renewal_date->format('Y-m-d') : '',
                                                     'renewal_amount' => $item->renewal_amount,
@@ -609,15 +621,9 @@
                         </select>
                     </div>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                    <div class="form-group">
-                        <label class="form-label">Expiration Date</label>
-                        <input type="date" name="expires_at" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Client / Project Name</label>
-                        <input type="text" name="client_name" class="form-input" placeholder="e.g. Acme Corp">
-                    </div>
+                <div class="form-group">
+                    <label class="form-label">Expiration Date</label>
+                    <input type="date" name="expires_at" class="form-input">
                 </div>
                 <div style="display:flex; gap:20px; margin-top:4px;">
                     <label style="font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
@@ -667,15 +673,9 @@
                         </select>
                     </div>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                    <div class="form-group">
-                        <label class="form-label">Expiration Date</label>
-                        <input type="date" id="edit-d-expires_at" name="expires_at" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Client / Project Name</label>
-                        <input type="text" id="edit-d-client_name" name="client_name" class="form-input">
-                    </div>
+                <div class="form-group">
+                    <label class="form-label">Expiration Date</label>
+                    <input type="date" id="edit-d-expires_at" name="expires_at" class="form-input">
                 </div>
                 <div style="display:flex; gap:20px; margin-top:4px;">
                     <label style="font-size:13px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
@@ -705,30 +705,65 @@
         <form method="POST" action="{{ route('accounts.domains-hosting.hostings.store') }}">
             @csrf
             <div class="modal-body">
+                {{-- Server Master Selection Dropdown --}}
+                <div class="form-group" style="background:#f5f3ff; padding:12px 14px; border-radius:10px; border:1px solid #ddd6fe;">
+                    <label class="form-label" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                        <span style="display:flex; align-items:center; gap:6px; color:#5b21b6; font-weight:800;">
+                            <i class="bi bi-hdd-network" style="color:#7c3aed;"></i>
+                            <span>Select Server (From Server Master)</span>
+                        </span>
+                        <span style="font-size:11px; font-weight:700; color:#7c3aed; background:#ede9fe; padding:2px 8px; border-radius:4px; border:1px solid #c4b5fd;">
+                            ⚡ Auto-Fetch
+                        </span>
+                    </label>
+                    <select id="add-h-server_id" name="server_id" class="form-input" onchange="autoFillHostingServer(this)" style="background:#fff;">
+                        <option value="">-- Choose Server to auto-fetch details (or enter manually) --</option>
+                        @foreach($servers as $srv)
+                            <option value="{{ $srv->id }}"
+                                data-name="{{ $srv->server_name }}"
+                                data-provider="{{ $srv->provider_name }}"
+                                data-ip="{{ $srv->ip_address }}"
+                                data-plan="{{ $srv->plan_type }}"
+                                data-disk="{{ $srv->disk_space }}">
+                                {{ $srv->server_name }} @if($srv->ip_address) ({{ $srv->ip_address }}) @endif @if($srv->provider_name) • {{ $srv->provider_name }} @endif @if($srv->disk_space) [{{ $srv->disk_space }}] @endif
+                            </option>
+                        @endforeach
+                    </select>
+                    <div style="font-size:11px; color:#6d28d9; margin-top:4px;">
+                        Selecting a server will automatically auto-fill Hosting Name, Provider, IP, Plan Type & Allocated Storage below.
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">Hosting Name <span style="color:#ef4444;">*</span></label>
-                    <input type="text" name="hosting_name" class="form-input" placeholder="e.g. Cloud VPS Server 01" required>
+                    <input type="text" id="add-h-hosting_name" name="hosting_name" class="form-input" placeholder="e.g. Cloud VPS Server 01" required>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                     <div class="form-group">
                         <label class="form-label">Provider <span style="color:#ef4444;">*</span></label>
-                        <input type="text" name="provider" class="form-input" value="Hostinger" required>
+                        <input type="text" id="add-h-provider" name="provider" class="form-input" value="Hostinger" required>
                     </div>
                     <div class="form-group">
                         <label class="form-label">IP Address</label>
-                        <input type="text" name="ip_address" class="form-input" placeholder="e.g. 192.168.1.1">
+                        <input type="text" id="add-h-ip_address" name="ip_address" class="form-input" placeholder="e.g. 192.168.1.1">
                     </div>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                     <div class="form-group">
                         <label class="form-label">Plan Type <span style="color:#ef4444;">*</span></label>
-                        <select name="plan_type" class="form-input" required>
+                        <select id="add-h-plan_type" name="plan_type" class="form-input" required>
                             <option value="Cloud / VPS">Cloud / VPS</option>
                             <option value="Shared Hosting">Shared Hosting</option>
                             <option value="Dedicated Server">Dedicated Server</option>
                             <option value="cPanel">cPanel</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label class="form-label">Allocated Storage</label>
+                        <input type="text" id="add-h-allocated_storage" name="allocated_storage" class="form-input" placeholder="e.g. 50 GB NVMe SSD / 20 GB">
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                     <div class="form-group">
                         <label class="form-label">Status <span style="color:#ef4444;">*</span></label>
                         <select name="status" class="form-input" required>
@@ -737,20 +772,14 @@
                             <option value="EXPIRED">EXPIRED</option>
                         </select>
                     </div>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                     <div class="form-group">
                         <label class="form-label">Renewal Date</label>
                         <input type="date" name="renewal_date" class="form-input">
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Renewal Amount (₹)</label>
-                        <input type="number" name="renewal_amount" class="form-input" step="0.01" min="0" placeholder="0.00">
-                    </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Client / Project Name</label>
-                    <input type="text" name="client_name" class="form-input" placeholder="e.g. Acme Corp">
+                    <label class="form-label">Renewal Amount (₹)</label>
+                    <input type="number" name="renewal_amount" class="form-input" step="0.01" min="0" placeholder="0.00">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Notes / Remarks</label>
@@ -773,6 +802,32 @@
             @csrf
             @method('PUT')
             <div class="modal-body">
+                {{-- Server Master Selection Dropdown --}}
+                <div class="form-group" style="background:#f5f3ff; padding:12px 14px; border-radius:10px; border:1px solid #ddd6fe;">
+                    <label class="form-label" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                        <span style="display:flex; align-items:center; gap:6px; color:#5b21b6; font-weight:800;">
+                            <i class="bi bi-hdd-network" style="color:#7c3aed;"></i>
+                            <span>Server Master Link</span>
+                        </span>
+                        <span style="font-size:11px; font-weight:700; color:#7c3aed; background:#ede9fe; padding:2px 8px; border-radius:4px; border:1px solid #c4b5fd;">
+                            ⚡ Auto-Fetch
+                        </span>
+                    </label>
+                    <select id="edit-h-server_id" name="server_id" class="form-input" onchange="autoFillEditHostingServer(this)" style="background:#fff;">
+                        <option value="">-- Choose Server or keep manual --</option>
+                        @foreach($servers as $srv)
+                            <option value="{{ $srv->id }}"
+                                data-name="{{ $srv->server_name }}"
+                                data-provider="{{ $srv->provider_name }}"
+                                data-ip="{{ $srv->ip_address }}"
+                                data-plan="{{ $srv->plan_type }}"
+                                data-disk="{{ $srv->disk_space }}">
+                                {{ $srv->server_name }} @if($srv->ip_address) ({{ $srv->ip_address }}) @endif @if($srv->provider_name) • {{ $srv->provider_name }} @endif @if($srv->disk_space) [{{ $srv->disk_space }}] @endif
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">Hosting Name <span style="color:#ef4444;">*</span></label>
                     <input type="text" id="edit-h-hosting_name" name="hosting_name" class="form-input" required>
@@ -798,6 +853,12 @@
                         </select>
                     </div>
                     <div class="form-group">
+                        <label class="form-label">Allocated Storage</label>
+                        <input type="text" id="edit-h-allocated_storage" name="allocated_storage" class="form-input" placeholder="e.g. 50 GB NVMe SSD / 20 GB">
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div class="form-group">
                         <label class="form-label">Status <span style="color:#ef4444;">*</span></label>
                         <select id="edit-h-status" name="status" class="form-input" required>
                             <option value="ACTIVE">ACTIVE</option>
@@ -805,20 +866,14 @@
                             <option value="EXPIRED">EXPIRED</option>
                         </select>
                     </div>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                     <div class="form-group">
                         <label class="form-label">Renewal Date</label>
                         <input type="date" id="edit-h-renewal_date" name="renewal_date" class="form-input">
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Renewal Amount (₹)</label>
-                        <input type="number" id="edit-h-renewal_amount" name="renewal_amount" class="form-input" step="0.01" min="0">
-                    </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Client / Project Name</label>
-                    <input type="text" id="edit-h-client_name" name="client_name" class="form-input">
+                    <label class="form-label">Renewal Amount (₹)</label>
+                    <input type="number" id="edit-h-renewal_amount" name="renewal_amount" class="form-input" step="0.01" min="0">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Notes / Remarks</label>
@@ -842,7 +897,6 @@ function openEditDomainModal(item) {
     document.getElementById('edit-d-registrar').value = item.registrar;
     document.getElementById('edit-d-status').value = item.status;
     document.getElementById('edit-d-expires_at').value = item.expires_at;
-    document.getElementById('edit-d-client_name').value = item.client_name;
     document.getElementById('edit-d-auto_renew').checked = !!item.auto_renew;
     document.getElementById('edit-d-privacy').checked = !!item.privacy;
     document.getElementById('edit-d-notes').value = item.notes;
@@ -859,12 +913,75 @@ function openEditHostingModal(item) {
     document.getElementById('edit-h-provider').value = item.provider;
     document.getElementById('edit-h-ip_address').value = item.ip_address;
     document.getElementById('edit-h-plan_type').value = item.plan_type;
+    document.getElementById('edit-h-allocated_storage').value = item.allocated_storage || '';
     document.getElementById('edit-h-status').value = item.status;
     document.getElementById('edit-h-renewal_date').value = item.renewal_date;
     document.getElementById('edit-h-renewal_amount').value = item.renewal_amount;
-    document.getElementById('edit-h-client_name').value = item.client_name;
     document.getElementById('edit-h-notes').value = item.notes;
+    if (document.getElementById('edit-h-server_id')) {
+        document.getElementById('edit-h-server_id').value = item.server_id || '';
+    }
     document.getElementById('editHostingModal').classList.add('active');
+}
+
+function autoFillHostingServer(selectEl) {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    if (!opt || !opt.value) return;
+
+    const name = opt.getAttribute('data-name');
+    const provider = opt.getAttribute('data-provider');
+    const ip = opt.getAttribute('data-ip');
+    const plan = opt.getAttribute('data-plan');
+    const disk = opt.getAttribute('data-disk');
+
+    if (name) document.getElementById('add-h-hosting_name').value = name;
+    if (provider) document.getElementById('add-h-provider').value = provider;
+    if (ip) document.getElementById('add-h-ip_address').value = ip;
+    if (disk) document.getElementById('add-h-allocated_storage').value = disk;
+    if (plan) {
+        const planEl = document.getElementById('add-h-plan_type');
+        let found = false;
+        for (let i = 0; i < planEl.options.length; i++) {
+            if (planEl.options[i].value.toLowerCase() === plan.toLowerCase()) {
+                planEl.selectedIndex = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            planEl.add(new Option(plan, plan, true, true));
+        }
+    }
+}
+
+function autoFillEditHostingServer(selectEl) {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    if (!opt || !opt.value) return;
+
+    const name = opt.getAttribute('data-name');
+    const provider = opt.getAttribute('data-provider');
+    const ip = opt.getAttribute('data-ip');
+    const plan = opt.getAttribute('data-plan');
+    const disk = opt.getAttribute('data-disk');
+
+    if (name) document.getElementById('edit-h-hosting_name').value = name;
+    if (provider) document.getElementById('edit-h-provider').value = provider;
+    if (ip) document.getElementById('edit-h-ip_address').value = ip;
+    if (disk) document.getElementById('edit-h-allocated_storage').value = disk;
+    if (plan) {
+        const planEl = document.getElementById('edit-h-plan_type');
+        let found = false;
+        for (let i = 0; i < planEl.options.length; i++) {
+            if (planEl.options[i].value.toLowerCase() === plan.toLowerCase()) {
+                planEl.selectedIndex = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            planEl.add(new Option(plan, plan, true, true));
+        }
+    }
 }
 
 function closeModal(id) {

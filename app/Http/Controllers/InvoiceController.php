@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BankMaster;
 use App\Models\CustomerMaster;
 use App\Models\Department;
 use App\Models\Invoice;
@@ -71,7 +72,7 @@ class InvoiceController extends Controller
     {
         $companyId = auth()->user()?->company_id;
 
-        $query = Invoice::query()->with(['customer', 'salesPerson']);
+        $query = Invoice::query()->with(['customer', 'salesPerson'])->withCount(['payments', 'creditNotes']);
 
         if ($companyId) {
             $query->where('company_id', $companyId);
@@ -125,7 +126,14 @@ class InvoiceController extends Controller
                           ->paginate(15)
                           ->withQueryString();
 
-        return view('pages.accounts.sales.invoices.index', compact('invoices', 'stats'));
+        $banks = BankMaster::query()
+            ->forCompany($companyId)
+            ->active()
+            ->orderByDesc('is_primary')
+            ->orderBy('bank_name')
+            ->get();
+
+        return view('pages.accounts.sales.invoices.index', compact('invoices', 'stats', 'banks'));
     }
 
     /**
@@ -545,7 +553,14 @@ class InvoiceController extends Controller
             $salesUsers->push($invoice->salesPerson);
         }
 
-        return view('pages.accounts.sales.invoices.show', compact('invoice', 'setting', 'salesUsers'));
+        $banks = BankMaster::query()
+            ->forCompany($invoice->company_id ?? auth()->user()?->company_id)
+            ->active()
+            ->orderByDesc('is_primary')
+            ->orderBy('bank_name')
+            ->get();
+
+        return view('pages.accounts.sales.invoices.show', compact('invoice', 'setting', 'salesUsers', 'banks'));
     }
 
     /**
@@ -678,9 +693,18 @@ class InvoiceController extends Controller
 
         DB::beginTransaction();
         try {
-            $grandTotal = (float) $validated['total_amount'];
-            $paidAmount = (float) ($validated['paid_amount'] ?? 0);
-            $balanceDue = max(0, $grandTotal - $paidAmount);
+            $grandTotal    = (float) $validated['total_amount'];
+            $totalReceived = (float) $invoice->payments()->sum('amount_received');
+            $totalTds      = (float) $invoice->payments()->sum('tds_amount');
+            $totalCredited = (float) $invoice->creditNotes()->sum('total_amount');
+
+            if ($invoice->payments()->exists() || $invoice->creditNotes()->exists()) {
+                $paidAmount = $totalReceived;
+                $balanceDue = max(0, $grandTotal - ($totalReceived + $totalTds + $totalCredited));
+            } else {
+                $paidAmount = (float) ($invoice->paid_amount ?? 0);
+                $balanceDue = max(0, $grandTotal - $paidAmount);
+            }
 
             $status = $validated['status'] ?? $invoice->status;
             if ($paidAmount >= $grandTotal && $grandTotal > 0) {
@@ -713,30 +737,8 @@ class InvoiceController extends Controller
                 InvoiceItem::create($itemRow);
             }
 
-            // If invoice has no payments yet but paid_amount is provided, record initial payment entry
-            if ($invoice->payments()->doesntExist() && $paidAmount > 0) {
-                $payCount = InvoicePayment::where('company_id', $invoice->company_id)->count() + 1;
-                $paymentNumber = 'RCP-' . date('ym') . '-' . str_pad($payCount, 4, '0', STR_PAD_LEFT);
-
-                InvoicePayment::create([
-                    'company_id'           => $invoice->company_id,
-                    'invoice_id'           => $invoice->id,
-                    'customer_id'          => $invoice->customer_id,
-                    'payment_number'       => $paymentNumber,
-                    'payment_date'         => $invoice->invoice_date?->toDateString() ?: now()->toDateString(),
-                    'amount_received'      => $paidAmount,
-                    'is_tds_deducted'      => false,
-                    'tds_percentage'       => 0,
-                    'tds_amount'           => 0,
-                    'total_settled_amount' => $paidAmount,
-                    'payment_mode'         => 'bank_transfer',
-                    'notes'                => 'Initial payment recorded during invoice update.',
-                    'recorded_by'          => auth()->id(),
-                ]);
-            }
-
             // Sync invoice totals and status based on recorded payments
-            if ($invoice->payments()->exists()) {
+            if ($invoice->payments()->exists() || $invoice->creditNotes()->exists()) {
                 $invoice->recalculatePaymentStatus();
             }
 
@@ -755,7 +757,30 @@ class InvoiceController extends Controller
      */
     public function destroy(Invoice $invoice)
     {
+        $paymentsCount    = $invoice->payments()->count();
+        $creditNotesCount = $invoice->creditNotes()->count();
+
+        if ($paymentsCount > 0 || $creditNotesCount > 0) {
+            $details = [];
+            if ($creditNotesCount > 0) {
+                $details[] = "{$creditNotesCount} Credit Note" . ($creditNotesCount > 1 ? 's' : '');
+            }
+            if ($paymentsCount > 0) {
+                $details[] = "{$paymentsCount} Payment History record" . ($paymentsCount > 1 ? 's' : '');
+            }
+            $detailsStr = implode(' and ', $details);
+
+            $msg = "Cannot delete Invoice #{$invoice->invoice_number}. Please delete the associated {$detailsStr} first before deleting this invoice.";
+
+            if (request()->ajax() || request()->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 422);
+            }
+
+            return redirect()->back()->with('error', $msg);
+        }
+
         $num = $invoice->invoice_number;
+        $invoice->items()->delete();
         $invoice->delete();
 
         return redirect()->route('accounts.sales.invoices.index')

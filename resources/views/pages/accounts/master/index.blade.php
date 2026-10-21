@@ -233,6 +233,18 @@
     border: 1px solid #fecdd3;
 }
 
+.icon-cyan {
+    background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+    color: #0891b2;
+    border: 1px solid #a5f3fc;
+}
+
+.icon-violet {
+    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+    color: #6d28d9;
+    border: 1px solid #ddd6fe;
+}
+
 .master-card-badge {
     font-size: 11px;
     font-weight: 800;
@@ -369,12 +381,24 @@
                 <span><strong>{{ $customerStats['total'] }}</strong> Customers</span>
             </div>
             <div class="master-glance-item">
+                <i class="bi bi-bank" style="color:#0891b2;"></i>
+                <span><strong>{{ $bankStats['total'] }}</strong> Bank Accounts</span>
+            </div>
+            <div class="master-glance-item">
+                <i class="bi bi-server" style="color:#6d28d9;"></i>
+                <span><strong>{{ $serverStats['total'] }}</strong> Servers</span>
+            </div>
+            <div class="master-glance-item">
+                <i class="bi bi-truck" style="color:#2563eb;"></i>
+                <span><strong>{{ $supplierStats['total'] }}</strong> Suppliers</span>
+            </div>
+            <div class="master-glance-item">
                 <i class="bi bi-receipt-cutoff" style="color:#e11d48;"></i>
                 <span>Invoice: <strong>{{ $invoiceSetting ? ($invoiceSetting->invoice_prefix ?: 'INV-') : 'Setup' }}</strong></span>
             </div>
             <div class="master-glance-item">
                 <i class="bi bi-check-circle-fill" style="color:#16a34a;"></i>
-                <span><strong>{{ $categoryStats['active'] + $subcategoryStats['active'] + $supportCategoryStats['active'] + $supportSubcategoryStats['active'] + $adAccountStats['active'] + $vendorStats['active'] + $itemStats['active'] + $customerStats['active'] }}</strong> Active Entries</span>
+                <span><strong>{{ $categoryStats['active'] + $subcategoryStats['active'] + $supportCategoryStats['active'] + $supportSubcategoryStats['active'] + $adAccountStats['active'] + $vendorStats['active'] + $itemStats['active'] + $customerStats['active'] + $bankStats['active'] + $serverStats['active'] + $supplierStats['active'] }}</strong> Active Entries</span>
             </div>
         </div>
     </div>
@@ -605,7 +629,88 @@
             </div>
         </a>
 
-        {{-- Card 9: Invoice Settings --}}
+        {{-- Card 9: Bank Master --}}
+        <a href="{{ route('accounts.master.banks.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-cyan">
+                        <i class="bi bi-bank"></i>
+                    </div>
+                    <span class="master-card-badge">Settlement Master</span>
+                </div>
+                <div class="master-card-title">Bank Master</div>
+                <div class="master-card-desc">
+                    Register and manage settlement bank accounts, branch names, IFSC & SWIFT codes, UPI IDs, and designate the primary wire account.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $bankStats['total'] }}</strong>
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:#16a34a; font-weight:700;">{{ $bankStats['active'] }} Active</span>
+                </div>
+                <div class="master-card-action">
+                    Manage <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 10: Server Master --}}
+        <a href="{{ route('accounts.master.servers.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-violet">
+                        <i class="bi bi-hdd-network"></i>
+                    </div>
+                    <span class="master-card-badge">Infra Master</span>
+                </div>
+                <div class="master-card-title">Server Master</div>
+                <div class="master-card-desc">
+                    Register and manage server infrastructure, CPU configurations, disk space, IP addresses, hosting providers, plan types, and server health.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $serverStats['total'] }}</strong>
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:#16a34a; font-weight:700;">{{ $serverStats['active'] }} Active</span>
+                </div>
+                <div class="master-card-action">
+                    Manage <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 11: Supplier Master --}}
+        <a href="{{ route('accounts.master.suppliers.index') }}" class="master-card">
+            <div>
+                <div class="master-card-top">
+                    <div class="master-card-icon icon-blue">
+                        <i class="bi bi-truck"></i>
+                    </div>
+                    <span class="master-card-badge">Procurement</span>
+                </div>
+                <div class="master-card-title">Supplier Master</div>
+                <div class="master-card-desc">
+                    Register and manage supplier profiles, procurement partners, GST numbers, contact info, and bank settlement credentials.
+                </div>
+            </div>
+
+            <div class="master-card-footer">
+                <div class="master-card-stats">
+                    <strong>{{ $supplierStats['total'] }}</strong>
+                    <span style="color:#94a3b8;">•</span>
+                    <span style="color:#16a34a; font-weight:700;">{{ $supplierStats['active'] }} Active</span>
+                </div>
+                <div class="master-card-action">
+                    Manage <i class="bi bi-arrow-right"></i>
+                </div>
+            </div>
+        </a>
+
+        {{-- Card 12: Invoice Settings --}}
         <a href="{{ route('accounts.master.invoice-settings.index') }}" class="master-card">
             <div>
                 <div class="master-card-top">

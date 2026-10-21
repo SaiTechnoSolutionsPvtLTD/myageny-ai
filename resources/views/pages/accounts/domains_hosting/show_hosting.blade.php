@@ -231,6 +231,18 @@
                         <span class="detail-val">{{ $hosting->plan_type }}</span>
                     </div>
                     <div class="detail-item">
+                        <span class="detail-label">Allocated Storage</span>
+                        <span class="detail-val">
+                            @if($hosting->allocated_storage)
+                                <code style="background:#f8fafc; border:1px solid #e2e8f0; padding:2px 8px; border-radius:6px; font-size:13px; font-weight:700; color:#0f172a;">
+                                    <i class="bi bi-hdd" style="color:#0284c7;"></i> {{ $hosting->allocated_storage }}
+                                </code>
+                            @else
+                                <span style="color:#94a3b8;">Not specified</span>
+                            @endif
+                        </span>
+                    </div>
+                    <div class="detail-item">
                         <span class="detail-label">Server IP Address</span>
                         <span class="detail-val">
                             <code style="background:#f1f5f9; padding:3px 8px; border-radius:6px; font-size:13px;">{{ $hosting->ip_address ?: 'Not assigned' }}</code>
@@ -552,24 +564,57 @@
             @method('PUT')
             <input type="hidden" name="from_show" value="1">
             <div class="modal-body">
+                @if(isset($servers) && $servers->count() > 0)
+                <div class="form-group" style="background:#f5f3ff; padding:12px 14px; border-radius:10px; border:1px solid #ddd6fe;">
+                    <label class="form-label" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                        <span style="display:flex; align-items:center; gap:6px; color:#5b21b6; font-weight:800;">
+                            <i class="bi bi-hdd-network" style="color:#7c3aed;"></i>
+                            <span>Server Master Link</span>
+                        </span>
+                        <span style="font-size:11px; font-weight:700; color:#7c3aed; background:#ede9fe; padding:2px 8px; border-radius:4px; border:1px solid #c4b5fd;">
+                            ⚡ Auto-Fetch
+                        </span>
+                    </label>
+                    <select id="show_server_select" name="server_id" class="form-input" onchange="autoFillShowHostingServer(this)" style="background:#fff;">
+                        <option value="">-- Choose Server or keep manual --</option>
+                        @foreach($servers as $srv)
+                            <option value="{{ $srv->id }}"
+                                {{ (old('server_id', $hosting->server_id) == $srv->id) ? 'selected' : '' }}
+                                data-name="{{ $srv->server_name }}"
+                                data-provider="{{ $srv->provider_name }}"
+                                data-ip="{{ $srv->ip_address }}"
+                                data-plan="{{ $srv->plan_type }}"
+                                data-disk="{{ $srv->disk_space }}">
+                                {{ $srv->server_name }} @if($srv->ip_address) ({{ $srv->ip_address }}) @endif @if($srv->provider_name) • {{ $srv->provider_name }} @endif @if($srv->disk_space) [{{ $srv->disk_space }}] @endif
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                @endif
+
                 <div class="form-group">
                     <label class="form-label">Hosting / Server Name <span style="color:#dc2626;">*</span></label>
-                    <input type="text" name="hosting_name" class="form-input" value="{{ $hosting->hosting_name }}" required>
+                    <input type="text" id="show_h_name" name="hosting_name" class="form-input" value="{{ $hosting->hosting_name }}" required>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Provider <span style="color:#dc2626;">*</span></label>
-                    <input type="text" name="provider" class="form-input" value="{{ $hosting->provider }}" required>
+                    <input type="text" id="show_h_provider" name="provider" class="form-input" value="{{ $hosting->provider }}" required>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">IP Address</label>
-                    <input type="text" name="ip_address" class="form-input" value="{{ $hosting->ip_address }}">
+                    <input type="text" id="show_h_ip" name="ip_address" class="form-input" value="{{ $hosting->ip_address }}">
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Plan Type <span style="color:#dc2626;">*</span></label>
-                    <input type="text" name="plan_type" class="form-input" value="{{ $hosting->plan_type }}" required>
+                    <input type="text" id="show_h_plan" name="plan_type" class="form-input" value="{{ $hosting->plan_type }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Allocated Storage</label>
+                    <input type="text" id="show_h_storage" name="allocated_storage" class="form-input" value="{{ $hosting->allocated_storage }}" placeholder="e.g. 50 GB NVMe SSD / 20 GB">
                 </div>
 
                 <div class="form-group">
@@ -589,11 +634,6 @@
                 <div class="form-group">
                     <label class="form-label">Renewal Amount (₹)</label>
                     <input type="number" step="0.01" name="renewal_amount" class="form-input" value="{{ $hosting->renewal_amount }}">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Client / Project Name</label>
-                    <input type="text" name="client_name" class="form-input" value="{{ $hosting->client_name }}">
                 </div>
 
                 <div class="form-group">
@@ -729,6 +769,23 @@ function openEditHostingModal() {
 
 function closeEditHostingModal() {
     $('#editHostingModal').removeClass('active');
+}
+
+function autoFillShowHostingServer(selectEl) {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    if (!opt || !opt.value) return;
+
+    const name = opt.getAttribute('data-name');
+    const provider = opt.getAttribute('data-provider');
+    const ip = opt.getAttribute('data-ip');
+    const plan = opt.getAttribute('data-plan');
+    const disk = opt.getAttribute('data-disk');
+
+    if (name) document.getElementById('show_h_name').value = name;
+    if (provider) document.getElementById('show_h_provider').value = provider;
+    if (ip) document.getElementById('show_h_ip').value = ip;
+    if (plan) document.getElementById('show_h_plan').value = plan;
+    if (disk) document.getElementById('show_h_storage').value = disk;
 }
 
 // Close modals on clicking overlay backdrop

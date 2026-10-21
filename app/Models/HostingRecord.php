@@ -15,10 +15,12 @@ class HostingRecord extends Model
 
     protected $fillable = [
         'company_id',
+        'server_id',
         'hosting_name',
         'provider',
         'ip_address',
         'plan_type',
+        'allocated_storage',
         'status',
         'renewal_date',
         'renewal_amount',
@@ -36,6 +38,11 @@ class HostingRecord extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function server()
+    {
+        return $this->belongsTo(ServerMaster::class, 'server_id');
     }
 
     public function lead()

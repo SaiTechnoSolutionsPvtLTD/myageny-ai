@@ -223,6 +223,34 @@
                     </a>
                 </div>
 
+                <!-- PO Orders Dropdown -->
+                <a href="javascript:void(0)"
+                   class="nav-item has-dropdown {{ request()->routeIs('accounts.purchase-orders.*') ? 'active open' : '' }}"
+                   onclick="toggleDropdown(this)">
+                    @if(request()->routeIs('accounts.purchase-orders.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <path d="M16 10a4 4 0 0 1-8 0"></path>
+                        </svg>
+                        <span>PO Orders</span>
+                        <img src="{{ asset('images/42_3081.svg') }}" alt="Expand" class="chevron">
+                    </div>
+                </a>
+
+                <!-- PO Orders Submenu -->
+                <div class="submenu {{ request()->routeIs('accounts.purchase-orders.*') ? 'show' : '' }}">
+                    <a href="{{ route('accounts.purchase-orders.index') }}" class="submenu-item {{ request()->routeIs('accounts.purchase-orders.index') ? 'active' : '' }}">
+                        PO Orders List
+                    </a>
+                    <a href="{{ route('accounts.purchase-orders.create') }}" class="submenu-item {{ request()->routeIs('accounts.purchase-orders.create') ? 'active' : '' }}">
+                        Create PO
+                    </a>
+                </div>
+
                 <a href="javascript:void(0)"
                    class="nav-item has-dropdown {{ request()->routeIs('accounts.expenses.*') ? 'active open' : '' }}"
                    onclick="toggleDropdown(this)">

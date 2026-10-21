@@ -59,6 +59,7 @@
             letter-spacing: 0.5px;
             text-align: right;
             vertical-align: middle;
+            white-space: nowrap;
         }
 
         /* 2-Column Metadata Table */
@@ -312,15 +313,15 @@
     {{-- 1. Top Header --}}
     <table class="header-tbl">
         <tr>
-            <td style="width: 70%; padding-left:16px;">
+            <td style="width: 64%; padding: 14px 10px 12px 18px; vertical-align: middle;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr>
                         @if($logoBase64)
-                            <td style="width: 115px; vertical-align: top; padding-right: 14px;">
+                            <td style="width: 115px; vertical-align: middle; padding-right: 14px;">
                                 <img src="{{ $logoBase64 }}" alt="Logo" class="inv-logo">
                             </td>
                         @endif
-                        <td style="vertical-align: top;">
+                        <td style="vertical-align: middle;">
                             <div class="inv-comp-title">{{ $setting?->company_name ?: 'Sai Techno Solutions Private Limited' }}</div>
                             <div class="inv-comp-address">
                                 @if($setting?->company_address)
@@ -354,7 +355,7 @@
                     </tr>
                 </table>
             </td>
-            <td style="width: 30%; text-align: right; padding-right:18px;">
+            <td style="width: 36%; text-align: right; padding: 14px 22px 12px 6px; vertical-align: middle;">
                 <div class="inv-tax-title">TAX INVOICE</div>
             </td>
         </tr>

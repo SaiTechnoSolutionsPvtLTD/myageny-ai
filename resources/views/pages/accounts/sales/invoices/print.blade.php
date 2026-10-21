@@ -96,40 +96,43 @@
         .inv-header {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            padding: 16px 20px 14px 20px;
+            align-items: center;
+            padding: 16px 24px 14px 20px;
             border-bottom: 1px solid #000000;
         }
         .inv-header-left {
             display: flex;
-            align-items: flex-start;
-            gap: 14px;
+            align-items: center;
+            gap: 16px;
         }
         .inv-logo {
-            height: 75px;
+            height: 68px;
             width: auto;
             max-width: 140px;
             object-fit: contain;
         }
         .inv-comp-title {
-            font-size: 14.5px;
+            font-size: 15px;
             font-weight: 800;
             color: #000000;
             line-height: 1.25;
-            margin-bottom: 3px;
+            margin-bottom: 4px;
         }
         .inv-comp-address {
             font-size: 11px;
             color: #000000;
-            line-height: 1.35;
+            line-height: 1.4;
         }
         .inv-tax-title {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: 900;
             color: #000000;
             letter-spacing: 0.5px;
-            margin-top: 15px;
             text-align: right;
+            white-space: nowrap;
+            line-height: 1;
+            margin: 0;
+            padding-right: 4px;
         }
 
         /* 2-Column Metadata Box */

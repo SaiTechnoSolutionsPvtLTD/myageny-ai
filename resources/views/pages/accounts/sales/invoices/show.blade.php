@@ -556,40 +556,43 @@
 .inv-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    padding: 16px 20px 14px 20px;
+    align-items: center;
+    padding: 16px 24px 14px 20px;
     border-bottom: 1px solid #000000;
 }
 .inv-header-left {
     display: flex;
-    align-items: flex-start;
-    gap: 14px;
+    align-items: center;
+    gap: 16px;
 }
 .inv-logo {
-    height: 75px;
+    height: 68px;
     width: auto;
     max-width: 140px;
     object-fit: contain;
 }
 .inv-comp-title {
-    font-size: 14.5px;
+    font-size: 15px;
     font-weight: 800;
     color: #000000;
     line-height: 1.25;
-    margin-bottom: 3px;
+    margin-bottom: 4px;
 }
 .inv-comp-address {
     font-size: 11px;
     color: #000000;
-    line-height: 1.35;
+    line-height: 1.4;
 }
 .inv-tax-title {
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 900;
     color: #000000;
     letter-spacing: 0.5px;
-    margin-top: 15px;
     text-align: right;
+    white-space: nowrap;
+    line-height: 1;
+    margin: 0;
+    padding-right: 4px;
 }
 
 /* 2-Column Metadata Box */
@@ -879,7 +882,7 @@
                     <i class="bi bi-share"></i>
                     <span>Share Link</span>
                 </button>
-                <form method="POST" action="{{ route('accounts.sales.invoices.destroy', $invoice->id) }}" onsubmit="return confirm('Are you sure you want to delete invoice #{{ $invoice->invoice_number }}? This action cannot be undone.')" style="margin:0; display:inline-block;">
+                <form method="POST" action="{{ route('accounts.sales.invoices.destroy', $invoice->id) }}" onsubmit="return confirmDeleteInvoice('{{ $invoice->invoice_number }}', {{ (int) $invoice->payments()->count() }}, {{ (int) $invoice->creditNotes()->count() }})" style="margin:0; display:inline-block;">
                     @csrf
                     @method('DELETE')
                     <button type="submit" class="inv-utility-btn danger-btn" title="Delete Invoice">
@@ -995,7 +998,7 @@
 
                         <div class="inv-action-divider"></div>
 
-                        <form method="POST" action="{{ route('accounts.sales.invoices.destroy', $invoice->id) }}" onsubmit="return confirm('Are you sure you want to delete invoice #{{ $invoice->invoice_number }}? This action cannot be undone.')" style="margin:0;">
+                        <form method="POST" action="{{ route('accounts.sales.invoices.destroy', $invoice->id) }}" onsubmit="return confirmDeleteInvoice('{{ $invoice->invoice_number }}', {{ (int) $invoice->payments()->count() }}, {{ (int) $invoice->creditNotes()->count() }})" style="margin:0;">
                             @csrf
                             @method('DELETE')
                             <button type="submit" class="inv-action-item delete">
@@ -1887,19 +1890,41 @@
                 </div>
 
                 {{-- Row 3: Bank Name & Attachment File --}}
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+                @php
+                    $banks = $banks ?? \App\Models\BankMaster::query()->forCompany($invoice->company_id ?? auth()->user()?->company_id)->active()->orderByDesc('is_primary')->orderBy('bank_name')->get();
+                @endphp
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; align-items:start;">
                     <div>
-                        <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:6px;">
-                            Bank Name
-                        </label>
-                        <input type="text" name="bank_name" placeholder="e.g. HDFC Bank, ICICI Bank" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:9px 12px; font-size:13px; color:#0f172a; outline:none; background:#fff;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; min-height:20px; margin-bottom:6px;">
+                            <label style="font-size:12.5px; font-weight:700; color:#334155; margin:0; line-height:1.2;">
+                                Bank Name
+                            </label>
+                            <a href="{{ route('accounts.master.banks.index') }}" target="_blank" style="font-size:11px; font-weight:700; color:#fe5f04; text-decoration:none; display:inline-flex; align-items:center; gap:2px;">
+                                <i class="bi bi-plus-circle" style="font-size:10px;"></i> Bank Master
+                            </a>
+                        </div>
+                        <select name="bank_name" data-allow-clear="false" style="width:100%; height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px; font-size:13px; color:#0f172a; outline:none; background:#fff; cursor:pointer;">
+                            <option value="">-- Select Bank --</option>
+                            @foreach($banks->unique('bank_name') as $b)
+                                <option value="{{ $b->bank_name }}" {{ $b->is_primary ? 'selected' : '' }}>
+                                    {{ $b->bank_name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @if($banks->isEmpty())
+                            <div style="font-size:11px; color:#94a3b8; margin-top:4px;">
+                                No bank accounts configured in Bank Master.
+                            </div>
+                        @endif
                     </div>
 
                     <div>
-                        <label style="display:block; font-size:12.5px; font-weight:700; color:#334155; margin-bottom:6px;">
-                            Attachment (Receipt / TDS Challan)
-                        </label>
-                        <input type="file" name="attachment" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" style="width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:7px 10px; font-size:12px; color:#0f172a; outline:none; background:#fff;">
+                        <div style="display:flex; align-items:center; min-height:20px; margin-bottom:6px;">
+                            <label style="font-size:12.5px; font-weight:700; color:#334155; margin:0; line-height:1.2; white-space:nowrap;">
+                                Attachment (Receipt / Challan)
+                            </label>
+                        </div>
+                        <input type="file" name="attachment" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx" style="width:100%; height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:6px 10px; font-size:12px; color:#334155; outline:none; background:#fff; box-sizing:border-box; display:flex; align-items:center;">
                     </div>
                 </div>
 
@@ -2639,5 +2664,21 @@ document.addEventListener('DOMContentLoaded', function() {
 window.addEventListener('pageshow', function() {
     resetRecordPaymentSubmitBtn();
 });
+
+function confirmDeleteInvoice(invNumber, paymentsCount, creditNotesCount) {
+    if (paymentsCount > 0 || creditNotesCount > 0) {
+        let details = [];
+        if (creditNotesCount > 0) {
+            details.push(`${creditNotesCount} Credit Note` + (creditNotesCount > 1 ? 's' : ''));
+        }
+        if (paymentsCount > 0) {
+            details.push(`${paymentsCount} Payment History record` + (paymentsCount > 1 ? 's' : ''));
+        }
+        const text = details.join(' and ');
+        alert(`Cannot delete Invoice #${invNumber}.\n\nPlease delete the associated ${text} first before deleting this invoice.`);
+        return false;
+    }
+    return confirm(`Are you sure you want to delete invoice #${invNumber}? This action cannot be undone.`);
+}
 </script>
 @endpush

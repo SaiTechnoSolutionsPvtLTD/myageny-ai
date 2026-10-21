@@ -7,7 +7,10 @@ use App\Models\AccountExpenseSubcategory;
 use App\Models\AccountSupportCategory;
 use App\Models\AccountSupportSubcategory;
 use App\Models\AdAccountMaster;
+use App\Models\BankMaster;
 use App\Models\CustomerMaster;
+use App\Models\ServerMaster;
+use App\Models\SupplierMaster;
 use App\Models\InvoiceSetting;
 use App\Models\ItemMaster;
 use App\Models\VendorMaster;
@@ -31,6 +34,9 @@ class AccountExpenseMasterController extends Controller
         $allSupportSubcategories = AccountSupportSubcategory::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
         $allItems = ItemMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
         $allCustomers = CustomerMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
+        $allBanks = BankMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
+        $allServers = ServerMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
+        $allSuppliers = SupplierMaster::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->get();
 
         $categoryStats = [
             'total'    => $allCategories->count(),
@@ -80,6 +86,26 @@ class AccountExpenseMasterController extends Controller
             'inactive' => $allCustomers->where('status', 'inactive')->count(),
         ];
 
+        $bankStats = [
+            'total'    => $allBanks->count(),
+            'active'   => $allBanks->where('status', 'active')->count(),
+            'inactive' => $allBanks->where('status', 'inactive')->count(),
+            'primary'  => $allBanks->firstWhere('is_primary', true),
+        ];
+
+        $serverStats = [
+            'total'       => $allServers->count(),
+            'active'      => $allServers->where('status', 'active')->count(),
+            'maintenance' => $allServers->where('status', 'maintenance')->count(),
+            'inactive'    => $allServers->where('status', 'inactive')->count(),
+        ];
+
+        $supplierStats = [
+            'total'    => $allSuppliers->count(),
+            'active'   => $allSuppliers->where('status', 'active')->count(),
+            'inactive' => $allSuppliers->where('status', 'inactive')->count(),
+        ];
+
         $invoiceSetting = InvoiceSetting::where('company_id', $companyId)->first();
 
         return view('pages.accounts.master.index', compact(
@@ -91,6 +117,9 @@ class AccountExpenseMasterController extends Controller
             'vendorStats',
             'itemStats',
             'customerStats',
+            'bankStats',
+            'serverStats',
+            'supplierStats',
             'invoiceSetting'
         ));
     }

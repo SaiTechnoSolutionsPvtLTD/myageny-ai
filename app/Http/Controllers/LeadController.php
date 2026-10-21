@@ -834,6 +834,8 @@ class LeadController extends Controller
             'quotations',
             'cstUpdates.user',
             'cstUpdates.product.product',
+            'domainRecords.renewals',
+            'hostingRecords.renewals',
             'customFieldValues.field' => function ($query) {
                 $query->where('is_active', true)->orderBy('sort_order')->orderBy('label');
             },

@@ -385,6 +385,16 @@ class Lead extends Model
         return $this->hasMany(LeadFieldValue::class);
     }
 
+    public function domainRecords()
+    {
+        return $this->hasMany(\App\Models\DomainRecord::class, 'lead_id')->latest();
+    }
+
+    public function hostingRecords()
+    {
+        return $this->hasMany(\App\Models\HostingRecord::class, 'lead_id')->latest();
+    }
+
     public function show(Lead $lead)
     {
         $lead->load([
