@@ -799,6 +799,8 @@ Route::middleware('auth:sanctum')->prefix('mobile/day-sales-tracker')->name('mob
 Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accounts.')->group(function () {
     // Dashboard
     Route::get('/dashboard', [AccountsApiController::class, 'dashboard'])->name('dashboard');
+    Route::get('/dashboard/income-expense-chart', [AccountsApiController::class, 'dashboardIncomeExpenseChart'])->name('dashboard.income-expense-chart');
+    Route::get('/dashboard/top-expenses-chart', [AccountsApiController::class, 'dashboardTopExpensesChart'])->name('dashboard.top-expenses-chart');
 
     // Ad Budget - Clients
     Route::get('/ad-budget/clients', [AccountsApiController::class, 'adBudgetClients'])->name('ad-budget.clients');

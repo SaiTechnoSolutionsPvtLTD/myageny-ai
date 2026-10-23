@@ -7,6 +7,7 @@ use App\Models\DailyAttendance;
 use App\Models\EmployeeOnboarding;
 use App\Models\OdApproval;
 use App\Models\OdRequest;
+use App\Models\PayrollSetting;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use App\Services\HrmsApprovalHierarchyService;
@@ -839,34 +840,95 @@ class OdRequestApiController extends Controller
     }
 
     /**
+     * Resolves a sanitized H:i:s check-in time from the OD gate-out time,
+     * falling back safely to the company's grace login time or standard office time (09:30:00)
+     * if gate-out time is missing or invalid.
+     */
+    private function resolveOdCheckInTime(?string $gateOutTime, ?int $companyId = null): string
+    {
+        if (! empty($gateOutTime)) {
+            try {
+                $cleaned = trim((string) $gateOutTime);
+                if (preg_match('/^\d{1,2}:\d{2}(:\d{2})?$/', $cleaned)) {
+                    return Carbon::parse($cleaned)->format('H:i:s');
+                }
+                return Carbon::parse($cleaned)->format('H:i:s');
+            } catch (\Throwable $e) {
+                Log::warning('Invalid OD gate_out_time format; falling back to default check-in time', [
+                    'gate_out_time' => $gateOutTime,
+                    'error'         => $e->getMessage(),
+                ]);
+            }
+        }
+
+        // Safe fallback if gate_out_time is missing, null, or invalid
+        $defaultTime = '09:30:00';
+        try {
+            if ($companyId) {
+                $setting = PayrollSetting::forCompany($companyId);
+                if (! empty($setting?->grace_login_time)) {
+                    return Carbon::parse($setting->grace_login_time)->format('H:i:s');
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore error and fall back to default
+        }
+
+        return $defaultTime;
+    }
+
+    /**
      * Marks Daily Attendance for approved OD requests.
      *
      * BUSINESS RULE:
      * - An employee's actual attendance check-in / check-out times must NEVER be
-     *   overwritten or modified when an OD request is approved.
-     * - If the employee already checked in (e.g. at 09:30 AM), their login_time,
+     *   overwritten or modified when an OD request is approved if a valid login_time
+     *   already exists.
+     * - When the employee has not checked in (or login_time is missing/null), the approved
+     *   OD request's gate-out time is used as the attendance check-in time (login_time).
+     * - If gate-out time is missing or invalid, it gracefully falls back to the company's
+     *   standard grace login time (e.g. 09:30:00) to satisfy database NOT NULL constraints.
+     * - If the employee already checked in (login_time is present), that login_time,
      *   logout_time (if checked out), location, coordinates, and photos are preserved.
-     * - If the employee is only checked in (not yet checked out), logout_time remains
-     *   null so they can check out normally at the end of their shift.
-     * - The approved OD details are noted in remarks and stored in od_requests.
-     * - If no attendance record exists for the date (full-day OD or employee was away
-     *   from office all day), a DailyAttendance record with status 'od' is created
-     *   so the employee is credited with attendance (present) rather than marked absent.
+     * - If the OD request has a gate_in_time and no logout_time exists, logout_time and
+     *   overall_working_hours are updated accordingly.
+     * - If no attendance record exists for the date, a DailyAttendance record with status
+     *   'od' is created with the resolved check-in time so the employee is credited with attendance.
      */
     private function markAttendanceRecords(OdRequest $odRequest): void
     {
         $employee = $odRequest->employee ?: $this->resolveEmployee($odRequest->user);
         if (! $employee) {
+            Log::warning('Cannot mark attendance for OD request: employee record not found', [
+                'od_request_id' => $odRequest->id,
+                'user_id'       => $odRequest->user_id,
+            ]);
             return;
         }
+
+        $companyId = $odRequest->company_id ?? $employee->company_id;
+        $branchId  = $odRequest->branch_id ?? $employee->branch_id ?? $odRequest->user?->branch_id;
 
         $current = Carbon::parse($odRequest->from_date);
         $end     = Carbon::parse($odRequest->to_date);
 
+        // Resolve fallback check-in time from OD gate_out_time
+        $fallbackCheckIn = $this->resolveOdCheckInTime($odRequest->gate_out_time, $companyId);
+
+        // Optional check-out time if gate_in_time is recorded on the OD request
+        $odLogoutTime = null;
+        if (! empty($odRequest->gate_in_time)) {
+            try {
+                $odLogoutTime = Carbon::parse($odRequest->gate_in_time)->format('H:i:s');
+            } catch (\Throwable $e) {
+                // Ignore parse error
+            }
+        }
+
         while ($current->lte($end)) {
             $dateStr = $current->format('Y-m-d');
 
-            $existing = DailyAttendance::query()
+            $existing = DailyAttendance::withoutGlobalScopes()
                 ->where('employee_id', $employee->id)
                 ->whereDate('attendance_date', $dateStr)
                 ->first();
@@ -874,9 +936,7 @@ class OdRequestApiController extends Controller
             $odNote = "OD Approved" . ($odRequest->reason ? " ({$odRequest->reason})" : "");
 
             if ($existing) {
-                // Employee already has an attendance record (e.g. check-in punch or absent entry).
-                // DO NOT overwrite or modify login_time, logout_time, login_location, logout_location,
-                // or working hours.
+                // Employee already has an attendance record.
                 $updateData = [];
 
                 if (empty($existing->remarks)) {
@@ -889,14 +949,62 @@ class OdRequestApiController extends Controller
                     $updateData['attendance_status'] = 'od';
                 }
 
+                // If existing record has missing/null login_time, populate it with OD gate-out time.
+                // If a valid login_time already exists, PRESERVE it and do not overwrite it.
+                if (empty($existing->login_time)) {
+                    $updateData['login_time'] = $fallbackCheckIn;
+                    if (empty($existing->login_location)) {
+                        $updateData['login_location'] = 'On Duty (OD)';
+                    }
+                    Log::info('OD approval: populated missing login_time for existing attendance record', [
+                        'od_request_id'  => $odRequest->id,
+                        'employee_id'    => $employee->id,
+                        'attendance_id'  => $existing->id,
+                        'date'           => $dateStr,
+                        'assigned_login' => $fallbackCheckIn,
+                    ]);
+                }
+
+                // If existing record has NO logout_time and OD has gate_in_time, set logout_time
+                if (empty($existing->logout_time) && $odLogoutTime) {
+                    $updateData['logout_time'] = $odLogoutTime;
+                    if (empty($existing->logout_location)) {
+                        $updateData['logout_location'] = 'On Duty (OD)';
+                    }
+                    if (empty($existing->overall_working_hours)) {
+                        $effectiveLogin = $existing->login_time ?: $fallbackCheckIn;
+                        try {
+                            if ($odLogoutTime > $effectiveLogin) {
+                                $sec = Carbon::parse($effectiveLogin)->diffInSeconds(Carbon::parse($odLogoutTime));
+                                $hours   = floor($sec / 3600);
+                                $minutes = floor(($sec % 3600) / 60);
+                                $seconds = $sec % 60;
+                                $updateData['overall_working_hours'] = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+                }
+
                 if (! empty($updateData)) {
                     $existing->update($updateData);
                 }
             } else {
-                // No attendance record exists for this date (e.g. Full Day OD).
-                // Create a record with status 'od' without setting fake login_time or logout_time.
+                // No attendance record exists for this date.
+                // Create a DailyAttendance record with status 'od' and gate-out time as check-in time.
+                $workingHours = null;
+                if ($odLogoutTime && $odLogoutTime > $fallbackCheckIn) {
+                    try {
+                        $sec = Carbon::parse($fallbackCheckIn)->diffInSeconds(Carbon::parse($odLogoutTime));
+                        $hours   = floor($sec / 3600);
+                        $minutes = floor(($sec % 3600) / 60);
+                        $seconds = $sec % 60;
+                        $workingHours = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
+                    } catch (\Throwable $e) {}
+                }
+
                 DailyAttendance::create([
-                    'company_id'            => $odRequest->company_id ?? $employee->company_id,
+                    'company_id'            => $companyId,
+                    'branch_id'             => $branchId,
                     'employee_id'           => $employee->id,
                     'employee_name'         => $employee->name,
                     'attendee_type'         => 'employee',
@@ -904,15 +1012,22 @@ class OdRequestApiController extends Controller
                     'login_location'        => 'On Duty (OD)',
                     'login_latitude'        => 0,
                     'login_longitude'       => 0,
-                    'login_time'            => null,
-                    'logout_location'       => 'On Duty (OD)',
+                    'login_time'            => $fallbackCheckIn,
+                    'logout_location'       => $odLogoutTime ? 'On Duty (OD)' : null,
                     'logout_latitude'       => 0,
                     'logout_longitude'      => 0,
-                    'logout_time'           => null,
-                    'overall_working_hours' => null,
+                    'logout_time'           => $odLogoutTime,
+                    'overall_working_hours' => $workingHours,
                     'attendance_date'       => $dateStr,
                     'attendance_status'     => 'od',
-                    'remarks'               => $odRequest->reason,
+                    'remarks'               => $odRequest->reason ?: $odNote,
+                ]);
+
+                Log::info('OD approval: created attendance record with OD check-in time', [
+                    'od_request_id' => $odRequest->id,
+                    'employee_id'   => $employee->id,
+                    'date'          => $dateStr,
+                    'login_time'    => $fallbackCheckIn,
                 ]);
             }
 

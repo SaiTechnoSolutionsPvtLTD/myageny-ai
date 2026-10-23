@@ -28,6 +28,7 @@ use App\Models\InvoiceItem;
 use App\Models\InvoicePayment;
 use App\Models\InvoiceSetting;
 use App\Models\ItemMaster;
+use App\Models\PurchaseOrder;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\CustomerMasterController;
 use App\Console\Commands\GenerateRecurringAccountExpensesCommand;
@@ -36,6 +37,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -61,6 +63,234 @@ class AccountsApiController extends Controller
             $user = $request->user();
             $companyId = $user?->company_id;
 
+            // Table availability checks for environment safety
+            $hasInvoices        = false;
+            $hasPurchaseOrders  = false;
+            $hasInvoicePayments = false;
+            $hasExpenses        = false;
+            try {
+                $hasInvoices        = Schema::hasTable('invoices');
+                $hasPurchaseOrders  = Schema::hasTable('purchase_orders');
+                $hasInvoicePayments = Schema::hasTable('invoice_payments');
+                $hasExpenses        = Schema::hasTable('account_expenses');
+            } catch (Throwable) {}
+
+            // 1. Receivables (Customer Invoices)
+            $totalReceivables    = 0.0;
+            $overdueReceivables  = 0.0;
+            $unpaidInvoicesCount = 0;
+            $receivablesInvoices = collect();
+
+            if ($hasInvoices) {
+                $totalReceivables = (float) Invoice::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled'])
+                    ->sum('balance_due');
+
+                $overdueReceivables = (float) Invoice::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled', 'paid'])
+                    ->where('balance_due', '>', 0)
+                    ->whereDate('due_date', '<', today())
+                    ->sum('balance_due');
+
+                $unpaidInvoicesCount = Invoice::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled', 'paid'])
+                    ->where('balance_due', '>', 0)
+                    ->count();
+
+                $receivablesInvoices = Invoice::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled', 'paid'])
+                    ->where('balance_due', '>', 0)
+                    ->with('customer')
+                    ->orderBy('due_date')
+                    ->take(20)
+                    ->get()
+                    ->map(fn($inv) => [
+                        'id'             => $inv->id,
+                        'invoice_number' => $inv->invoice_number,
+                        'customer_name'  => $inv->customer_name ?: ($inv->customer?->display_name ?? '—'),
+                        'customer_phone' => $inv->customer_phone,
+                        'invoice_date'   => $inv->invoice_date?->format('Y-m-d'),
+                        'due_date'       => $inv->due_date?->format('Y-m-d'),
+                        'total_amount'   => (float) $inv->total_amount,
+                        'paid_amount'    => (float) $inv->paid_amount,
+                        'balance_due'    => (float) $inv->balance_due,
+                        'status'         => $inv->status,
+                        'is_overdue'     => $inv->due_date && Carbon::parse($inv->due_date)->isPast(),
+                        'overdue_days'   => ($inv->due_date && Carbon::parse($inv->due_date)->isPast()) ? (int) now()->diffInDays(Carbon::parse($inv->due_date)) : 0,
+                    ]);
+            }
+
+            // 2. Payables (Vendor / Supplier Purchase Orders)
+            $totalPayables          = 0.0;
+            $pendingPoCount         = 0;
+            $payablesPurchaseOrders = collect();
+
+            if ($hasPurchaseOrders) {
+                $totalPayables = (float) PurchaseOrder::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled'])
+                    ->sum('total_amount');
+
+                $pendingPoCount = PurchaseOrder::forCompany($companyId)
+                    ->whereIn('status', ['draft', 'issued'])
+                    ->count();
+
+                $payablesPurchaseOrders = PurchaseOrder::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled'])
+                    ->with('supplier')
+                    ->latest('po_date')
+                    ->take(20)
+                    ->get()
+                    ->map(fn($po) => [
+                        'id'             => $po->id,
+                        'po_number'      => $po->po_number,
+                        'supplier_name'  => $po->supplier_name ?: ($po->supplier?->vendor_name ?? '—'),
+                        'po_date'        => $po->po_date?->format('Y-m-d'),
+                        'delivery_date'  => $po->delivery_date?->format('Y-m-d'),
+                        'total_amount'   => (float) $po->total_amount,
+                        'status'         => $po->status,
+                    ]);
+            }
+
+            // 3. Current Month Income & Expenses
+            $currentMonthStart = now()->startOfMonth();
+            $currentMonthEnd   = now()->endOfMonth();
+            $lastMonthStart    = now()->copy()->subMonth()->startOfMonth();
+            $lastMonthEnd      = now()->copy()->subMonth()->endOfMonth();
+
+            $incomeThisMonth     = 0.0;
+            $incomeLastMonth     = 0.0;
+            $incomePaymentsCount = 0;
+            $thisMonthPayments   = collect();
+
+            if ($hasInvoicePayments) {
+                $incomeThisMonth = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$currentMonthStart, $currentMonthEnd])
+                    ->sum('amount_received');
+
+                $incomeLastMonth = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$lastMonthStart, $lastMonthEnd])
+                    ->sum('amount_received');
+
+                $incomePaymentsCount = InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$currentMonthStart, $currentMonthEnd])
+                    ->count();
+
+                $thisMonthPayments = InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$currentMonthStart, $currentMonthEnd])
+                    ->with(['customer', 'invoice.customer'])
+                    ->latest('payment_date')
+                    ->take(50)
+                    ->get()
+                    ->map(fn($p) => [
+                        'id'                     => $p->id,
+                        'invoice_id'             => $p->invoice_id ? (int) $p->invoice_id : ($p->invoice?->id ? (int) $p->invoice?->id : null),
+                        'payment_number'         => $p->payment_number,
+                        'payment_date'           => $p->payment_date?->format('Y-m-d'),
+                        'payment_date_formatted' => $p->payment_date?->format('d M Y'),
+                        'customer_name'          => $p->customer?->display_name ?: ($p->invoice?->customer_name ?: ($p->invoice?->customer?->display_name ?? '—')),
+                        'invoice_number'         => $p->invoice?->invoice_number ?? '—',
+                        'invoice_date'           => $p->invoice?->invoice_date?->format('Y-m-d'),
+                        'invoice_date_formatted' => $p->invoice?->invoice_date?->format('d M Y'),
+                        'payment_mode'           => $p->payment_mode,
+                        'payment_mode_label'     => $p->payment_mode_label,
+                        'reference_number'       => $p->reference_number ?: '—',
+                        'amount_received'        => (float) $p->amount_received,
+                    ]);
+            }
+
+            $expenseThisMonth    = 0.0;
+            $expenseLastMonth    = 0.0;
+            $expenseEntriesCount = 0;
+            $thisMonthExpenses   = collect();
+
+            if ($hasExpenses) {
+                $expenseThisMonth = (float) AccountExpense::forCompany($companyId)
+                    ->whereBetween('expense_date', [$currentMonthStart, $currentMonthEnd])
+                    ->sum('amount');
+
+                $expenseLastMonth = (float) AccountExpense::forCompany($companyId)
+                    ->whereBetween('expense_date', [$lastMonthStart, $lastMonthEnd])
+                    ->sum('amount');
+
+                $expenseEntriesCount = AccountExpense::forCompany($companyId)
+                    ->whereBetween('expense_date', [$currentMonthStart, $currentMonthEnd])
+                    ->count();
+
+                $thisMonthExpenses = AccountExpense::forCompany($companyId)
+                    ->whereBetween('expense_date', [$currentMonthStart, $currentMonthEnd])
+                    ->with(['category', 'subcategory', 'vendor'])
+                    ->latest('expense_date')
+                    ->take(50)
+                    ->get()
+                    ->map(fn($exp) => [
+                        'id'                     => $exp->id,
+                        'expense_number'         => $exp->expense_number ?: ('EXP-' . str_pad($exp->id, 5, '0', STR_PAD_LEFT)),
+                        'expense_date'           => $exp->expense_date?->format('Y-m-d'),
+                        'expense_date_formatted' => $exp->expense_date?->format('d M Y'),
+                        'title'                  => $exp->title,
+                        'category_name'          => $exp->category?->name ?? '—',
+                        'subcategory_name'       => $exp->subcategory?->name,
+                        'vendor_name'            => $exp->vendor?->vendor_name ?: ($exp->vendor_name ?? '—'),
+                        'expense_type'           => $exp->expense_type ?? 'Fixed',
+                        'invoice_no'             => $exp->invoice_no ?: '—',
+                        'amount'                 => (float) $exp->amount,
+                        'payment_method'         => $exp->payment_method,
+                        'remarks'                => $exp->remarks ?: '—',
+                        'status'                 => $exp->status,
+                    ]);
+            }
+
+            // 4. Chart 1: Income vs Expense Breakdown (Default: Current Financial Year)
+            $currentFyStartYear = now()->month >= 4 ? now()->year : now()->year - 1;
+            $initialIncomeExpense = $this->calculateIncomeExpenseData($companyId, 'fy', $currentFyStartYear);
+
+            $fyYears = [
+                $currentFyStartYear,
+                $currentFyStartYear - 1,
+                $currentFyStartYear - 2,
+            ];
+            $cyYears = [
+                now()->year,
+                now()->year - 1,
+                now()->year - 2,
+            ];
+
+            // 5. Chart 2: Top Expenses by Category (Default: Month)
+            $initialTopExpenses = $this->calculateTopExpensesData($companyId, 'month');
+
+            // 6. Recent Sales Invoices & Recent Purchase Orders (5 Latest)
+            $recentInvoices = Invoice::forCompany($companyId)
+                ->with('customer')
+                ->latest('invoice_date')
+                ->latest('id')
+                ->take(5)
+                ->get()
+                ->map(fn($inv) => [
+                    'id'             => $inv->id,
+                    'invoice_number' => $inv->invoice_number,
+                    'customer_name'  => $inv->customer_name ?: ($inv->customer?->display_name ?? '—'),
+                    'invoice_date'   => $inv->invoice_date?->format('Y-m-d'),
+                    'total_amount'   => (float) $inv->total_amount,
+                    'balance_due'    => (float) $inv->balance_due,
+                    'status'         => $inv->status,
+                ]);
+
+            $recentPurchaseOrders = PurchaseOrder::forCompany($companyId)
+                ->with('supplier')
+                ->latest('po_date')
+                ->latest('id')
+                ->take(5)
+                ->get()
+                ->map(fn($po) => [
+                    'id'            => $po->id,
+                    'po_number'     => $po->po_number,
+                    'supplier_name' => $po->supplier_name ?: ($po->supplier?->vendor_name ?? '—'),
+                    'po_date'       => $po->po_date?->format('Y-m-d'),
+                    'total_amount'  => (float) $po->total_amount,
+                    'status'        => $po->status,
+                ]);
+
+            // 7. Retain Ad Budget & Accounts Stats
             $activeAdAccountsCount = AdAccountMaster::when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->where('status', 'active')
                 ->count();
@@ -91,6 +321,12 @@ class AccountsApiController extends Controller
                 ->whereYear('created_at', now()->year)
                 ->sum('amount');
 
+            $totalPartnerBudgetAmount = (float) AdBudgetRequest::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->where('type', 'partner')
+                ->whereMonth('created_at', now()->month)
+                ->whereYear('created_at', now()->year)
+                ->sum('amount');
+
             $recentRequests = AdBudgetRequest::with(['adAccount', 'requester', 'tlApprover', 'approver'])
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->latest()
@@ -101,12 +337,71 @@ class AccountsApiController extends Controller
             return response()->json([
                 'status' => true,
                 'data'   => [
+                    // Financial Overview
+                    'financial_overview' => [
+                        'total_receivables'        => $totalReceivables,
+                        'overdue_receivables'      => $overdueReceivables,
+                        'unpaid_invoices_count'    => $unpaidInvoicesCount,
+                        'receivables_invoices'     => $receivablesInvoices,
+
+                        'total_payables'           => $totalPayables,
+                        'pending_po_count'         => $pendingPoCount,
+                        'payables_purchase_orders' => $payablesPurchaseOrders,
+
+                        'income_this_month'        => $incomeThisMonth,
+                        'income_last_month'        => $incomeLastMonth,
+                        'income_payments_count'    => $incomePaymentsCount,
+                        'this_month_payments'      => $thisMonthPayments,
+
+                        'expense_this_month'       => $expenseThisMonth,
+                        'expense_last_month'       => $expenseLastMonth,
+                        'expense_entries_count'    => $expenseEntriesCount,
+                        'this_month_expenses'      => $thisMonthExpenses,
+                    ],
+
+                    // Charts
+                    'income_expense_chart' => [
+                        'chart_type'  => 'fy',
+                        'chart_year'  => $currentFyStartYear,
+                        'labels'      => $initialIncomeExpense['labels'],
+                        'full_labels' => $initialIncomeExpense['fullLabels'],
+                        'income'      => $initialIncomeExpense['income'],
+                        'expenses'    => $initialIncomeExpense['expenses'],
+                        'fy_years'    => $fyYears,
+                        'cy_years'    => $cyYears,
+                    ],
+
+                    'top_expenses_chart' => [
+                        'period' => 'month',
+                        'labels' => $initialTopExpenses['labels'],
+                        'values' => $initialTopExpenses['values'],
+                        'total'  => $initialTopExpenses['total'],
+                    ],
+
+                    // Recent Invoices & POs
+                    'recent_invoices'        => $recentInvoices,
+                    'recent_purchase_orders' => $recentPurchaseOrders,
+
+                    // Ad Budget Section
+                    'ad_budget' => [
+                        'active_ad_accounts_count'    => $activeAdAccountsCount,
+                        'client_requests_count'       => $clientRequestsCount,
+                        'partner_requests_count'      => $partnerRequestsCount,
+                        'pending_approvals_count'     => $pendingApprovalsCount,
+                        'pending_accounts_count'      => $pendingAccountsCount,
+                        'total_client_budget_amount'  => $totalClientBudgetAmount,
+                        'total_partner_budget_amount' => $totalPartnerBudgetAmount,
+                        'recent_requests'             => $recentRequests,
+                    ],
+
+                    // Backward compatibility fields
                     'active_ad_accounts_count'    => $activeAdAccountsCount,
                     'client_requests_count'       => $clientRequestsCount,
                     'partner_requests_count'      => $partnerRequestsCount,
                     'pending_approvals_count'     => $pendingApprovalsCount,
                     'pending_accounts_count'      => $pendingAccountsCount,
                     'total_client_budget_amount'  => $totalClientBudgetAmount,
+                    'total_partner_budget_amount' => $totalPartnerBudgetAmount,
                     'recent_requests'             => $recentRequests,
                 ],
             ]);
@@ -117,6 +412,231 @@ class AccountsApiController extends Controller
                 'message' => 'Failed to load Accounts dashboard data: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Dedicated chart endpoint for Income & Expense monthly breakdown.
+     */
+    public function dashboardIncomeExpenseChart(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+            $chartType = $request->query('chart_type', 'fy');
+            $currentFyStartYear = now()->month >= 4 ? now()->year : now()->year - 1;
+            $year = (int) $request->query('chart_year', $chartType === 'fy' ? $currentFyStartYear : now()->year);
+
+            $data = $this->calculateIncomeExpenseData($companyId, $chartType, $year);
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'chart_type'  => $chartType,
+                    'chart_year'  => $year,
+                    'labels'      => $data['labels'],
+                    'full_labels' => $data['fullLabels'],
+                    'income'      => $data['income'],
+                    'expenses'    => $data['expenses'],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts income/expense chart error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load chart data: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Dedicated chart endpoint for Top Expenses by category.
+     */
+    public function dashboardTopExpensesChart(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+            $period = $request->query('expense_period', 'month');
+
+            $data = $this->calculateTopExpensesData($companyId, $period);
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'period' => $period,
+                    'labels' => $data['labels'],
+                    'values' => $data['values'],
+                    'total'  => $data['total'],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts top expenses chart error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load top expenses: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Helper to compute Income & Expense monthly breakdown for FY or CY.
+     */
+    private function calculateIncomeExpenseData(?int $companyId, string $chartType, int $year): array
+    {
+        $hasInvoicePayments = false;
+        $hasExpenses = false;
+        try {
+            $hasInvoicePayments = Schema::hasTable('invoice_payments');
+            $hasExpenses = Schema::hasTable('account_expenses');
+        } catch (Throwable) {}
+
+        $labels = [];
+        $fullLabels = [];
+        $income = [];
+        $expenses = [];
+
+        if ($chartType === 'fy') {
+            // April ($year) to March ($year + 1)
+            for ($m = 4; $m <= 12; $m++) {
+                $dt = Carbon::create($year, $m, 1);
+                $labels[] = $dt->format('M');
+                $fullLabels[] = $dt->format('M Y');
+                $mStart = $dt->copy()->startOfMonth();
+                $mEnd   = $dt->copy()->endOfMonth();
+
+                $inc = 0.0;
+                if ($hasInvoicePayments) {
+                    $inc = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                        ->whereBetween('payment_date', [$mStart, $mEnd])
+                        ->sum('amount_received');
+                }
+                $exp = 0.0;
+                if ($hasExpenses) {
+                    $exp = (float) AccountExpense::forCompany($companyId)
+                        ->whereBetween('expense_date', [$mStart, $mEnd])
+                        ->sum('amount');
+                }
+
+                $income[]   = round($inc, 2);
+                $expenses[] = round($exp, 2);
+            }
+            for ($m = 1; $m <= 3; $m++) {
+                $dt = Carbon::create($year + 1, $m, 1);
+                $labels[] = $dt->format('M');
+                $fullLabels[] = $dt->format('M Y');
+                $mStart = $dt->copy()->startOfMonth();
+                $mEnd   = $dt->copy()->endOfMonth();
+
+                $inc = 0.0;
+                if ($hasInvoicePayments) {
+                    $inc = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                        ->whereBetween('payment_date', [$mStart, $mEnd])
+                        ->sum('amount_received');
+                }
+                $exp = 0.0;
+                if ($hasExpenses) {
+                    $exp = (float) AccountExpense::forCompany($companyId)
+                        ->whereBetween('expense_date', [$mStart, $mEnd])
+                        ->sum('amount');
+                }
+
+                $income[]   = round($inc, 2);
+                $expenses[] = round($exp, 2);
+            }
+        } else {
+            // Calendar Year: January ($year) to December ($year)
+            for ($m = 1; $m <= 12; $m++) {
+                $dt = Carbon::create($year, $m, 1);
+                $labels[] = $dt->format('M');
+                $fullLabels[] = $dt->format('M Y');
+                $mStart = $dt->copy()->startOfMonth();
+                $mEnd   = $dt->copy()->endOfMonth();
+
+                $inc = 0.0;
+                if ($hasInvoicePayments) {
+                    $inc = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                        ->whereBetween('payment_date', [$mStart, $mEnd])
+                        ->sum('amount_received');
+                }
+                $exp = 0.0;
+                if ($hasExpenses) {
+                    $exp = (float) AccountExpense::forCompany($companyId)
+                        ->whereBetween('expense_date', [$mStart, $mEnd])
+                        ->sum('amount');
+                }
+
+                $income[]   = round($inc, 2);
+                $expenses[] = round($exp, 2);
+            }
+        }
+
+        return [
+            'labels'     => $labels,
+            'fullLabels' => $fullLabels,
+            'income'     => $income,
+            'expenses'   => $expenses,
+        ];
+    }
+
+    /**
+     * Helper to compute Top Expenses category breakdown for Today, Month, Quarter, Year.
+     */
+    private function calculateTopExpensesData(?int $companyId, string $period): array
+    {
+        $query = AccountExpense::forCompany($companyId);
+
+        if ($period === 'today') {
+            $query->whereDate('expense_date', today());
+        } elseif ($period === 'month') {
+            $query->whereBetween('expense_date', [now()->startOfMonth(), now()->endOfMonth()]);
+        } elseif ($period === 'quarter') {
+            $query->whereBetween('expense_date', [now()->startOfQuarter(), now()->endOfQuarter()]);
+        } elseif ($period === 'year') {
+            // Current Financial Year
+            $fyStart = now()->month >= 4 ? Carbon::create(now()->year, 4, 1)->startOfDay() : Carbon::create(now()->year - 1, 4, 1)->startOfDay();
+            $fyEnd   = $fyStart->copy()->addYear()->subDay()->endOfDay();
+            $query->whereBetween('expense_date', [$fyStart, $fyEnd]);
+        }
+
+        $categoryExpenses = $query->with('category')
+            ->select('account_expense_category_id', DB::raw('SUM(amount) as total'))
+            ->groupBy('account_expense_category_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $topExpenseLabels = [];
+        $topExpenseValues = [];
+        $otherExpenseTotal = 0;
+        $grandTotal = 0;
+
+        foreach ($categoryExpenses as $index => $item) {
+            $catName = $item->category?->name ?? 'Uncategorized';
+            $val = round((float) $item->total, 2);
+            $grandTotal += $val;
+
+            if ($index < 5) {
+                $topExpenseLabels[] = $catName;
+                $topExpenseValues[] = $val;
+            } else {
+                $otherExpenseTotal += $val;
+            }
+        }
+
+        if ($otherExpenseTotal > 0) {
+            $topExpenseLabels[] = 'Others';
+            $topExpenseValues[] = round($otherExpenseTotal, 2);
+        }
+
+        if (empty($topExpenseLabels)) {
+            $topExpenseLabels = ['No Expenses'];
+            $topExpenseValues = [0.0];
+        }
+
+        return [
+            'labels' => $topExpenseLabels,
+            'values' => $topExpenseValues,
+            'total'  => $grandTotal,
+        ];
     }
 
     // ─────────────────────────────────────────────────────────────────────────
