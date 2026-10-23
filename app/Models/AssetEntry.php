@@ -28,6 +28,7 @@ class AssetEntry extends Model
         'location',
         'condition_notes',
         'description',
+        'custom_field_values',
         'created_by',
         'updated_by',
     ];
@@ -39,6 +40,7 @@ class AssetEntry extends Model
             'warranty_expiry_date' => 'date',
             'assigned_date' => 'date',
             'purchase_cost' => 'decimal:2',
+            'custom_field_values' => 'array',
         ];
     }
 

@@ -213,6 +213,9 @@ Route::middleware(['auth'])->group(function () {
             ->middleware('can:settings.manage')
             ->except(['show']);
 
+        Route::get('asset-categories/fields', [AssetCategoryController::class, 'getFields'])
+            ->name('asset-categories.fields');
+
         Route::resource('asset-categories', AssetCategoryController::class)
             ->middleware('can:settings.manage')
             ->except(['show']);
@@ -414,6 +417,13 @@ Route::middleware(['auth'])->group(function () {
                 Route::post('/', [App\Http\Controllers\InvoiceSettingController::class, 'update'])->name('update');
                 Route::delete('/remove-file/{type}', [App\Http\Controllers\InvoiceSettingController::class, 'removeFile'])->name('remove-file');
             });
+        });
+
+        // Quotations in Accounts Module
+        Route::prefix('quotations')->name('quotations.')->group(function () {
+            Route::get('/', [App\Http\Controllers\QuotationController::class, 'index'])->middleware('can:quotations.view')->name('index');
+            Route::get('/{quotation}', [App\Http\Controllers\QuotationController::class, 'show'])->middleware('can:quotations.view')->name('show');
+            Route::post('/{quotation}/convert-to-invoice', [App\Http\Controllers\QuotationController::class, 'convertToInvoice'])->name('convert-to-invoice');
         });
 
         // Accounts Sales Group (Invoices)
@@ -1194,10 +1204,12 @@ Route::post('/facebook-integration/sync-all', [FacebookIntegrationController::cl
     Route::get('/quotations/create/{leadId?}', [QuotationController::class, 'create'])->middleware('can:quotations.create')->name('quotations.create');
     Route::post('/quotations', [QuotationController::class, 'store'])->middleware('can:quotations.create')->name('quotations.store');
     Route::get('/quotations/{quotation}', [QuotationController::class, 'show'])->middleware('can:quotations.view')->name('quotations.show');
+    Route::get('/quotations/{quotation}/print', [QuotationController::class, 'print'])->middleware('can:quotations.view')->name('quotation.print');
     Route::get('/quotations/{quotation}/edit', [QuotationController::class, 'edit'])->middleware('can:quotations.create')->name('quotations.edit');
     Route::put('/quotations/{quotation}', [QuotationController::class, 'update'])->middleware('can:quotations.create')->name('quotations.update');
     Route::patch('/quotations/{quotation}/approve', [QuotationController::class, 'approve'])->middleware('can:quotations.approve')->name('quotations.approve');
     Route::post('/quotations/{quotation}/send-email', [QuotationController::class, 'sendEmail'])->middleware('can:quotations.view')->name('quotations.send-email');
+    Route::post('/quotations/{quotation}/convert-to-invoice', [QuotationController::class, 'convertToInvoice'])->name('quotations.convert-to-invoice');
     Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->middleware('can:quotations.delete')->name('quotations.destroy');
 
 

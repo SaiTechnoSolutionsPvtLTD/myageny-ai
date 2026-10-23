@@ -172,7 +172,9 @@ class EmployeeOnboardingController extends Controller
 
             $employee = new EmployeeOnboarding();
             $employee->fill($this->extractAttributes($validated));
-            $employee->employee_id = $this->generateNextEmployeeId($validated['branch_id'] ?? null);
+            $employee->employee_id = !empty($validated['employee_id'])
+                ? trim((string) $validated['employee_id'])
+                : $this->generateNextEmployeeId($validated['branch_id'] ?? null);
             $employee->portal_user_id = $portalUser->id;
             $employee->created_by = auth()->id();
             $employee->updated_by = auth()->id();
@@ -273,7 +275,9 @@ class EmployeeOnboardingController extends Controller
                 $employee_onboarding->portal_user_id = $portalUser->id;
             }
 
-            if (!empty($validated['branch_id'])) {
+            if (!empty($validated['employee_id'])) {
+                $employee_onboarding->employee_id = trim((string) $validated['employee_id']);
+            } elseif (!empty($validated['branch_id'])) {
                 $newBranchCode = Branch::withoutGlobalScopes()->where('id', $validated['branch_id'])->value('code') ?: self::EMPLOYEE_ID_PREFIX;
                 $newBranchCode = trim((string) $newBranchCode);
                 if ($newBranchCode !== '' && !str_starts_with((string) $employee_onboarding->employee_id, $newBranchCode)) {

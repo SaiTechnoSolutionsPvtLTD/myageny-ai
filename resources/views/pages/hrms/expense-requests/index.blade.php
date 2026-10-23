@@ -901,9 +901,9 @@ select.exp-filter-input {
                                 $isReqFinalStage = (empty($stages) || count($stages) <= 1 || $req->current_step >= count($stages));
                             @endphp
                             <div style="display:inline-flex; gap:6px;">
-                                <form id="approveForm_{{ $req->id }}" method="POST" action="{{ route('hrms.expense-requests.approve', $req) }}">
+                                <form id="approveForm_{{ $req->id }}" method="POST" action="{{ route('hrms.expense-requests.approve', $req) }}" enctype="multipart/form-data">
                                     @csrf
-                                    <button type="button" class="exp-req-btn exp-req-btn-primary" style="padding:6px 12px; font-size:11px; background:#16a34a; box-shadow:none;" onclick="showConfirmApproveModal('approveForm_{{ $req->id }}', {{ $isReqFinalStage ? 'true' : 'false' }}, {{ (float) $req->amount }})">
+                                    <button type="button" class="exp-req-btn exp-req-btn-primary" style="padding:6px 12px; font-size:11px; background:#16a34a; box-shadow:none;" onclick="showConfirmApproveModal('approveForm_{{ $req->id }}', {{ $isReqFinalStage ? 'true' : 'false' }}, {{ (float) $req->amount }}, {{ $req->expense_category_id ?? 'null' }}, '{{ addslashes($req->category?->name ?? '') }}')">
                                         Approve (Stage {{ $req->current_step }})
                                     </button>
                                 </form>
@@ -1126,34 +1126,71 @@ select.exp-filter-input {
 
 {{-- Confirm Approve Modal --}}
 <div id="confirmApproveModal" class="exp-confirm-modal">
-    <div class="exp-confirm-card" style="max-width: 480px; width: 100%;">
-        <div class="exp-confirm-head" style="background:#f0fdf4; border-bottom-color:#bbf7d0;">
-            <div class="exp-confirm-title" style="color:#15803d;">
-                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                Confirm Approval
+    <div id="confirmApproveCard" class="exp-confirm-card" style="max-width: 680px; width: 94%; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 25px 60px -10px rgba(0,0,0,0.25);">
+        <div class="exp-confirm-head" style="background:#f0fdf4; border-bottom-color:#bbf7d0; flex-shrink: 0; padding: 18px 26px;">
+            <div class="exp-confirm-title" style="color:#15803d; font-size: 16px;">
+                <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <span id="confirmApproveHeadText">Confirm Approval</span>
             </div>
             <button class="exp-modal-close" onclick="closeConfirmApproveModal()">✕</button>
         </div>
-        <div class="exp-confirm-body" style="padding: 20px 24px; text-align: left;">
-            <p id="approveModalTitleText" style="font-size:15px; font-weight:800; color:#111827; margin-bottom:6px;">Are you sure you want to approve this expense request?</p>
-            <p id="approveModalSubtext" style="font-size:13px; color:#6b7280; line-height:1.5; margin-bottom:14px;">An email notification will be sent to the next stage approver.</p>
+        <div class="exp-confirm-body" style="padding: 22px 28px; text-align: left; overflow-y: auto; max-height: calc(88vh - 130px); flex: 1;">
+            <p id="approveModalTitleText" style="font-size:16px; font-weight:800; color:#111827; margin-bottom:6px;">Are you sure you want to approve this expense request?</p>
+            <p id="approveModalSubtext" style="font-size:13px; color:#6b7280; line-height:1.5; margin-bottom:16px;">An email notification will be sent to the next stage approver.</p>
 
             {{-- Final Approval Payment Details Form Section --}}
-            <div id="finalApprovalPaymentFields" style="display:none; flex-direction:column; gap:12px; margin-bottom:16px; padding:14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px;">
-                <div style="font-size:12px; font-weight:800; color:#166534; text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
-                    💳 Final Approval Payment Details
+            <div id="finalApprovalPaymentFields" style="display:none; flex-direction:column; gap:14px; margin-bottom:18px; padding:18px 20px; background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:13px; font-weight:800; color:#166534; text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:8px;">
+                        💳 Final Approval &amp; Accounts Settlement
+                    </div>
+                    <span style="font-size:11px; font-weight:800; background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:6px; border:1px solid #bbf7d0;">
+                        Auto-sync to Accounts
+                    </span>
                 </div>
                 
-                <div class="exp-form-group" style="display:flex; flex-direction:column; gap:4px; margin:0;">
-                    <label class="exp-form-label" style="font-size:12px; margin:0; color:#166534; font-weight:700;">Payment Amount (₹) <span style="color:#dc2626;">*</span></label>
-                    <input type="number" step="0.01" min="0.01" id="approvePaidAmountInput" class="exp-input" placeholder="0.00">
-                    <div id="approvePaidAmountError" style="display:none; color:#dc2626; font-size:11px; font-weight:700; margin-top:2px;">⚠️ Payment Amount is required and must be greater than 0.</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                    <div class="exp-form-group" style="display:flex; flex-direction:column; gap:5px; margin:0;">
+                        <label class="exp-form-label" style="font-size:12px; margin:0; color:#166534; font-weight:700;">Payment Amount (₹) <span style="color:#dc2626;">*</span></label>
+                        <div style="position:relative;">
+                            <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-weight:800; color:#15803d; font-size:14px;">₹</span>
+                            <input type="number" step="0.01" min="0.01" id="approvePaidAmountInput" class="exp-input" style="padding-left:28px; font-weight:700; color:#166534; height: 42px; border-radius:10px;" placeholder="0.00">
+                        </div>
+                        <div id="approvePaidAmountError" style="display:none; color:#dc2626; font-size:11px; font-weight:700; margin-top:2px;">⚠️ Payment Amount is required and must be greater than 0.</div>
+                    </div>
+
+                    <div class="exp-form-group" style="display:flex; flex-direction:column; gap:5px; margin:0;">
+                        <label class="exp-form-label" style="font-size:12px; margin:0; color:#166534; font-weight:700;">Payment Date <span style="color:#dc2626;">*</span></label>
+                        <input type="date" id="approvePaidDateInput" class="exp-input" value="{{ date('Y-m-d') }}" style="height: 42px; border-radius:10px;">
+                        <div id="approvePaidDateError" style="display:none; color:#dc2626; font-size:11px; font-weight:700; margin-top:2px;">⚠️ Payment Date is required.</div>
+                    </div>
                 </div>
 
-                <div class="exp-form-group" style="display:flex; flex-direction:column; gap:4px; margin:0;">
-                    <label class="exp-form-label" style="font-size:12px; margin:0; color:#166534; font-weight:700;">Payment Date <span style="color:#dc2626;">*</span></label>
-                    <input type="date" id="approvePaidDateInput" class="exp-input" value="{{ date('Y-m-d') }}">
-                    <div id="approvePaidDateError" style="display:none; color:#dc2626; font-size:11px; font-weight:700; margin-top:2px;">⚠️ Payment Date is required.</div>
+                {{-- Accounts Category and Subcategory Mapping --}}
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                    <div class="exp-form-group" style="display:flex; flex-direction:column; gap:5px; margin:0;">
+                        <label class="exp-form-label" style="font-size:12px; margin:0; color:#166534; font-weight:700;">Accounts Expense Category</label>
+                        <select id="approveAccountCategorySelect" class="exp-input" style="background:#fff; font-size:13px; height: 42px; border-radius:10px; padding:8px 12px;">
+                            <option value="">Auto-map from Category</option>
+                            @foreach($accountCategories ?? [] as $accCat)
+                                <option value="{{ $accCat->id }}">{{ $accCat->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="exp-form-group" style="display:flex; flex-direction:column; gap:5px; margin:0;">
+                        <label class="exp-form-label" style="font-size:12px; margin:0; color:#166534; font-weight:700;">Accounts Subcategory</label>
+                        <select id="approveAccountSubcategorySelect" class="exp-input" style="background:#fff; font-size:13px; height: 42px; border-radius:10px; padding:8px 12px;">
+                            <option value="">Auto-detect / Default</option>
+                        </select>
+                    </div>
+                </div>
+
+                {{-- Payment Voucher / Receipt Attachment --}}
+                <div class="exp-form-group" style="display:flex; flex-direction:column; gap:5px; margin:0;">
+                    <label class="exp-form-label" style="font-size:12px; margin:0; color:#166534; font-weight:700;">Payment Voucher / Receipt Attachment (Optional)</label>
+                    <input type="file" id="approveReceiptInput" class="exp-input" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" style="background:#fff; padding:8px 12px; font-size:13px; border-radius:10px;">
+                    <small style="font-size:11px; color:#15803d; line-height:1.4;">Attach payment slip, bank receipt, or voucher (PDF, JPG, PNG up to 25MB).</small>
                 </div>
             </div>
 
@@ -1162,15 +1199,15 @@ select.exp-filter-input {
                     <span style="font-weight:700; color:#374151;">Approval Remarks <span style="color:#dc2626;">*</span></span>
                     <span style="font-size:11px; font-weight:700; color:#dc2626; text-transform:none;">Mandatory</span>
                 </label>
-                <textarea id="approveRemarksInput" rows="3" class="exp-textarea" style="width:100%; box-sizing:border-box;" placeholder="Enter your approval remarks or comments (mandatory)..." required></textarea>
+                <textarea id="approveRemarksInput" rows="3" class="exp-textarea" style="width:100%; box-sizing:border-box; border-radius:10px; padding:10px 14px; font-size:13px;" placeholder="Enter your approval remarks or comments (mandatory)..." required></textarea>
                 <div id="approveRemarksError" style="display:none; color:#dc2626; font-size:12px; font-weight:700; margin-top:2px;">
                     ⚠️ Approval remarks are mandatory. Please enter remarks before approving.
                 </div>
             </div>
         </div>
-        <div class="exp-confirm-foot">
-            <button type="button" class="exp-req-btn exp-req-btn-outline" onclick="closeConfirmApproveModal()">Cancel</button>
-            <button type="button" class="exp-req-btn exp-req-btn-primary" id="btnConfirmApproveSubmit" style="background:#16a34a;">Yes, Approve</button>
+        <div class="exp-confirm-foot" style="padding: 16px 28px; flex-shrink: 0; background: #fafafa; border-top: 1px solid #f3f4f6; display: flex; justify-content: flex-end; gap: 12px;">
+            <button type="button" class="exp-req-btn exp-req-btn-outline" onclick="closeConfirmApproveModal()" style="padding: 9px 20px; font-size: 13px;">Cancel</button>
+            <button type="button" class="exp-req-btn exp-req-btn-primary" id="btnConfirmApproveSubmit" style="background:#16a34a; padding: 9px 22px; font-size: 13px;">Yes, Approve</button>
         </div>
     </div>
 </div>
@@ -1226,8 +1263,9 @@ select.exp-filter-input {
 <script>
 let pendingApproveFormId = null;
 let isFinalApprovalStage = false;
+const allAccountCategories = @json($accountCategories ?? []);
 
-$(document).ready(function() {
+document.addEventListener('DOMContentLoaded', function() {
     if (window.jQuery && window.jQuery.fn.select2) {
         $('#send_expense_category_id').select2({
             placeholder: '-- Select Category --',
@@ -1417,7 +1455,7 @@ function closeConfirmSendModal() {
     document.getElementById('confirmSendModal').classList.remove('show');
 }
 
-function showConfirmApproveModal(formId, isFinal, reqAmount) {
+function showConfirmApproveModal(formId, isFinal, reqAmount, reqCatId, reqCatName) {
     pendingApproveFormId = formId;
     isFinalApprovalStage = !!isFinal;
 
@@ -1430,6 +1468,9 @@ function showConfirmApproveModal(formId, isFinal, reqAmount) {
     const paymentFields = document.getElementById('finalApprovalPaymentFields');
     const titleText = document.getElementById('approveModalTitleText');
     const subtext = document.getElementById('approveModalSubtext');
+    const accCatSelect = document.getElementById('approveAccountCategorySelect');
+    const accSubcatSelect = document.getElementById('approveAccountSubcategorySelect');
+    const receiptInput = document.getElementById('approveReceiptInput');
 
     if (rInput) {
         rInput.value = '';
@@ -1438,9 +1479,14 @@ function showConfirmApproveModal(formId, isFinal, reqAmount) {
     }
     if (rError) rError.style.display = 'none';
 
+    const card = document.getElementById('confirmApproveCard');
+    const headText = document.getElementById('confirmApproveHeadText');
+
     if (isFinalApprovalStage) {
-        if (titleText) titleText.textContent = 'Final Approval & Payment Entry';
-        if (subtext) subtext.textContent = 'Please confirm the payment amount, date, and mandatory remarks to complete final approval.';
+        if (card) card.style.maxWidth = '680px';
+        if (headText) headText.textContent = 'Final Approval & Accounts Settlement';
+        if (titleText) titleText.textContent = 'Final Approval & Accounts Settlement';
+        if (subtext) subtext.textContent = 'Confirm payment amount, date, and mandatory remarks. The expense will be recorded in Accounts Expense.';
         if (paymentFields) paymentFields.style.display = 'flex';
 
         if (amtInput) {
@@ -1455,7 +1501,26 @@ function showConfirmApproveModal(formId, isFinal, reqAmount) {
             dateInput.style.borderColor = '';
         }
         if (dateError) dateError.style.display = 'none';
+
+        // Auto-select matching Account Category if available
+        if (accCatSelect && typeof allAccountCategories !== 'undefined') {
+            let matchedCat = null;
+            if (reqCatName) {
+                matchedCat = allAccountCategories.find(c => c.name.toLowerCase().trim() === reqCatName.toLowerCase().trim());
+            }
+            if (matchedCat) {
+                accCatSelect.value = matchedCat.id;
+                accCatSelect.dispatchEvent(new Event('change'));
+            } else {
+                accCatSelect.value = '';
+                if (accSubcatSelect) accSubcatSelect.innerHTML = '<option value="">Auto-detect / Default</option>';
+            }
+        }
+
+        if (receiptInput) receiptInput.value = '';
     } else {
+        if (card) card.style.maxWidth = '500px';
+        if (headText) headText.textContent = 'Confirm Approval';
         if (titleText) titleText.textContent = 'Are you sure you want to approve this expense request?';
         if (subtext) subtext.textContent = 'An email notification will be sent to the next stage approver.';
         if (paymentFields) paymentFields.style.display = 'none';
@@ -1560,6 +1625,27 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Dynamic remarks input listener to clear error
+    const accCatSelect = document.getElementById('approveAccountCategorySelect');
+    const accSubcatSelect = document.getElementById('approveAccountSubcategorySelect');
+
+    if (accCatSelect && accSubcatSelect) {
+        accCatSelect.addEventListener('change', function() {
+            const catId = this.value;
+            accSubcatSelect.innerHTML = '<option value="">Auto-detect / Default</option>';
+            if (catId && Array.isArray(allAccountCategories)) {
+                const found = allAccountCategories.find(c => String(c.id) === String(catId));
+                if (found && found.active_subcategories && found.active_subcategories.length > 0) {
+                    found.active_subcategories.forEach(sub => {
+                        const opt = document.createElement('option');
+                        opt.value = sub.id;
+                        opt.textContent = sub.name;
+                        accSubcatSelect.appendChild(opt);
+                    });
+                }
+            }
+        });
+    }
+
     const rInput = document.getElementById('approveRemarksInput');
     if (rInput) {
         rInput.addEventListener('input', function() {
@@ -1683,6 +1769,40 @@ document.addEventListener('DOMContentLoaded', function() {
                             form.appendChild(hiddenDate);
                         }
                         hiddenDate.value = paidDateVal;
+
+                        // Hidden account_expense_category_id
+                        const catSelect = document.getElementById('approveAccountCategorySelect');
+                        if (catSelect && catSelect.value) {
+                            let hiddenCat = form.querySelector('input[name="account_expense_category_id"]');
+                            if (!hiddenCat) {
+                                hiddenCat = document.createElement('input');
+                                hiddenCat.type = 'hidden';
+                                hiddenCat.name = 'account_expense_category_id';
+                                form.appendChild(hiddenCat);
+                            }
+                            hiddenCat.value = catSelect.value;
+                        }
+
+                        // Hidden account_expense_subcategory_id
+                        const subcatSelect = document.getElementById('approveAccountSubcategorySelect');
+                        if (subcatSelect && subcatSelect.value) {
+                            let hiddenSubcat = form.querySelector('input[name="account_expense_subcategory_id"]');
+                            if (!hiddenSubcat) {
+                                hiddenSubcat = document.createElement('input');
+                                hiddenSubcat.type = 'hidden';
+                                hiddenSubcat.name = 'account_expense_subcategory_id';
+                                form.appendChild(hiddenSubcat);
+                            }
+                            hiddenSubcat.value = subcatSelect.value;
+                        }
+
+                        // Payment receipt file input
+                        const receiptInput = document.getElementById('approveReceiptInput');
+                        if (receiptInput && receiptInput.files && receiptInput.files.length > 0) {
+                            form.enctype = 'multipart/form-data';
+                            receiptInput.name = 'payment_receipt';
+                            form.appendChild(receiptInput);
+                        }
                     }
 
                     closeConfirmApproveModal();

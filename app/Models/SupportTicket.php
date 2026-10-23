@@ -22,14 +22,18 @@ class SupportTicket extends Model
         'to_user_id',
         'status',
         'remark',
+        'payment_amount',
+        'resolution_attachment_path',
     ];
 
     protected $casts = [
-        'attachments' => 'array',
+        'attachments'    => 'array',
+        'payment_amount' => 'decimal:2',
     ];
 
     protected $appends = [
         'attachment_url',
+        'resolution_attachment_url',
     ];
 
     /**
@@ -82,5 +86,25 @@ class SupportTicket extends Model
         }
 
         return asset('storage/' . $this->attachment_path);
+    }
+
+    /**
+     * Get the full public URL for the resolution/payment attachment.
+     */
+    public function getResolutionAttachmentUrlAttribute(): ?string
+    {
+        if (!$this->resolution_attachment_path) {
+            return null;
+        }
+
+        if (str_starts_with($this->resolution_attachment_path, 'http://') || str_starts_with($this->resolution_attachment_path, 'https://')) {
+            return $this->resolution_attachment_path;
+        }
+
+        if (str_starts_with($this->resolution_attachment_path, 'uploads/')) {
+            return asset($this->resolution_attachment_path);
+        }
+
+        return asset('storage/' . $this->resolution_attachment_path);
     }
 }

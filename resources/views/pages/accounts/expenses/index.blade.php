@@ -495,7 +495,16 @@
                             </span>
                         </td>
                         <td style="white-space:nowrap; font-weight:600;">
-                            {{ $exp->invoice_no ?: '—' }}
+                            <div>{{ $exp->invoice_no ?: '—' }}</div>
+                            @if(str_starts_with($exp->invoice_no ?? '', 'HRMS-REQ-'))
+                                <span style="display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:800; color:#0369a1; background:#e0f2fe; padding:1px 6px; border-radius:4px; margin-top:3px;">
+                                    <i class="bi bi-person-badge"></i> HRMS Reimb.
+                                </span>
+                            @elseif(str_starts_with($exp->invoice_no ?? '', 'SUPPORT-TICKET-'))
+                                <span style="display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:800; color:#047857; background:#ecfdf5; padding:1px 6px; border-radius:4px; margin-top:3px;">
+                                    <i class="bi bi-headset"></i> Support
+                                </span>
+                            @endif
                         </td>
                         <td>
                             <div style="font-weight:700; color:#1e293b;">
@@ -505,6 +514,24 @@
                                 <div style="font-size:11px; color:#64748b; margin-top:2px;">
                                     ↳ {{ $exp->subcategory->name }}
                                 </div>
+                            @endif
+                            @if($exp->remarks)
+                                @php
+                                    $firstRemark = '';
+                                    if (preg_match('/Approver Remarks:\s*([^\n]+)/i', $exp->remarks, $m)) {
+                                        $firstRemark = $m[1];
+                                    } elseif (preg_match('/Resolution Remarks:\s*([^\n]+)/i', $exp->remarks, $m)) {
+                                        $firstRemark = $m[1];
+                                    } else {
+                                        $lines = array_filter(explode("\n", $exp->remarks));
+                                        $firstRemark = reset($lines) ?: '';
+                                    }
+                                @endphp
+                                @if($firstRemark)
+                                    <div style="font-size:11px; color:#64748b; margin-top:3px; font-style:italic; max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="{{ $exp->remarks }}">
+                                        💬 {{ Str::limit($firstRemark, 35) }}
+                                    </div>
+                                @endif
                             @endif
                         </td>
                         <td>

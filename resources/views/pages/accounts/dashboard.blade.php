@@ -21,25 +21,226 @@
 /* Alert Banner */
 .acc-alert-banner { background: linear-gradient(135deg, #fffbeb, #fef3c7); border: 1.5px solid #f59e0b; border-radius: 14px; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.12); flex-wrap:wrap; gap:12px; }
 
-/* Financial KPI Grid (4 Cards) */
-.acc-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; }
-.acc-kpi-card { background:#fff; border-radius:16px; padding:20px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.03); display:flex; flex-direction:column; justify-content:space-between; position:relative; overflow:hidden; transition:all 0.2s ease; cursor:pointer; user-select:none; }
-.acc-kpi-card:hover { transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,0.08); border-color:#cbd5e1; }
-.acc-kpi-card::before { content:''; position:absolute; top:0; left:0; width:5px; height:100%; transition:width 0.2s; }
-.acc-kpi-card:hover::before { width:7px; }
+/* Financial KPI Grid (4 Cards) - Premium Gradient Card Style matching HRMS & Admin Dashboards */
+.acc-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:18px; }
+.acc-kpi-card {
+    position:relative;
+    overflow:hidden;
+    border-radius:20px;
+    padding:22px 24px;
+    border:none !important;
+    color:#fff !important;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    min-height:165px;
+    box-shadow:0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+    transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor:pointer;
+    user-select:none;
+    isolation:isolate;
+}
+.acc-kpi-card:hover {
+    transform:translateY(-5px);
+}
+.acc-kpi-card::after {
+    content:'';
+    position:absolute;
+    right:-15px;
+    bottom:-20px;
+    width:130px;
+    height:130px;
+    background:radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 70%);
+    border-radius:50%;
+    pointer-events:none;
+    z-index:1;
+    transition:transform 0.4s ease;
+}
+.acc-kpi-card:hover::after {
+    transform:scale(1.35);
+}
+.acc-kpi-watermark {
+    position:absolute;
+    right:12px;
+    bottom:6px;
+    font-size:82px;
+    color:rgba(255, 255, 255, 0.10);
+    pointer-events:none;
+    z-index:0;
+    line-height:1;
+    transition:all 0.3s ease;
+}
+.acc-kpi-card:hover .acc-kpi-watermark {
+    transform:scale(1.1) rotate(-6deg);
+    color:rgba(255, 255, 255, 0.16);
+}
 
-.kpi-receivable::before { background:linear-gradient(180deg, #3b82f6, #1d4ed8); }
-.kpi-payable::before { background:linear-gradient(180deg, #ea580c, #c2410c); }
-.kpi-income::before { background:linear-gradient(180deg, #10b981, #059669); }
-.kpi-expense::before { background:linear-gradient(180deg, #ef4444, #dc2626); }
+.kpi-receivable {
+    background:linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #3b82f6 100%);
+    box-shadow:0 10px 25px -5px rgba(37, 99, 235, 0.35), 0 8px 10px -6px rgba(37, 99, 235, 0.2);
+}
+.kpi-receivable:hover {
+    box-shadow:0 18px 32px -6px rgba(37, 99, 235, 0.45), 0 10px 14px -5px rgba(37, 99, 235, 0.25);
+}
 
-.acc-kpi-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-.acc-kpi-label { font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:6px; }
-.acc-kpi-icon { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
-.acc-kpi-value { font-size:26px; font-weight:800; color:#0f172a; line-height:1.1; margin-bottom:8px; }
-.acc-kpi-sub { font-size:12px; color:#64748b; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; }
-.acc-click-hint { font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:4px; opacity:0.85; }
-.acc-kpi-card:hover .acc-click-hint { opacity:1; text-decoration:underline; }
+.kpi-payable {
+    background:linear-gradient(135deg, #9a3412 0%, #ea580c 55%, #f97316 100%);
+    box-shadow:0 10px 25px -5px rgba(234, 88, 12, 0.35), 0 8px 10px -6px rgba(234, 88, 12, 0.2);
+}
+.kpi-payable:hover {
+    box-shadow:0 18px 32px -6px rgba(234, 88, 12, 0.45), 0 10px 14px -5px rgba(234, 88, 12, 0.25);
+}
+
+.kpi-income {
+    background:linear-gradient(135deg, #064e3b 0%, #059669 55%, #10b981 100%);
+    box-shadow:0 10px 25px -5px rgba(5, 150, 105, 0.35), 0 8px 10px -6px rgba(5, 150, 105, 0.2);
+}
+.kpi-income:hover {
+    box-shadow:0 18px 32px -6px rgba(5, 150, 105, 0.45), 0 10px 14px -5px rgba(5, 150, 105, 0.25);
+}
+
+.kpi-expense {
+    background:linear-gradient(135deg, #881337 0%, #dc2626 55%, #ef4444 100%);
+    box-shadow:0 10px 25px -5px rgba(220, 38, 38, 0.35), 0 8px 10px -6px rgba(220, 38, 38, 0.2);
+}
+.kpi-expense:hover {
+    box-shadow:0 18px 32px -6px rgba(220, 38, 38, 0.45), 0 10px 14px -5px rgba(220, 38, 38, 0.25);
+}
+
+.acc-kpi-header {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:10px;
+    position:relative;
+    z-index:2;
+}
+.acc-kpi-label {
+    font-size:11.5px;
+    font-weight:800;
+    color:rgba(255,255,255,0.92) !important;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    display:flex;
+    align-items:center;
+    gap:7px;
+}
+.acc-kpi-icon {
+    width:42px;
+    height:42px;
+    border-radius:12px;
+    background:rgba(255, 255, 255, 0.22);
+    backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(255, 255, 255, 0.28);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:19px;
+    color:#fff !important;
+    flex-shrink:0;
+    transition:all 0.3s ease;
+}
+.acc-kpi-card:hover .acc-kpi-icon {
+    transform:scale(1.08) rotate(5deg);
+    background:rgba(255, 255, 255, 0.32);
+}
+.acc-kpi-value {
+    font-size:28px;
+    font-weight:900;
+    color:#ffffff !important;
+    line-height:1.15;
+    margin:6px 0 10px;
+    text-shadow:0 2px 5px rgba(0,0,0,0.16);
+    letter-spacing:-0.02em;
+    position:relative;
+    z-index:2;
+}
+.acc-kpi-sub {
+    font-size:12px;
+    color:rgba(255,255,255,0.9);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:auto;
+    position:relative;
+    z-index:2;
+}
+.acc-kpi-pill {
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    padding:3px 9px;
+    border-radius:8px;
+    background:rgba(255, 255, 255, 0.2);
+    backdrop-filter:blur(4px);
+    border:1px solid rgba(255, 255, 255, 0.25);
+    font-size:11px;
+    font-weight:700;
+    color:#ffffff;
+}
+.acc-click-hint {
+    font-size:11px;
+    font-weight:700;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    color:#ffffff;
+    background:rgba(0, 0, 0, 0.16);
+    padding:4px 9px;
+    border-radius:7px;
+    border:1px solid rgba(255, 255, 255, 0.18);
+    transition:all 0.2s ease;
+}
+.acc-kpi-card:hover .acc-click-hint {
+    background:rgba(0, 0, 0, 0.26);
+    transform:translateX(2px);
+    border-color:rgba(255, 255, 255, 0.35);
+}
+
+/* Sub KPI Cards for Ad Budgets */
+.acc-sub-kpi-card {
+    background:#ffffff;
+    border-radius:14px;
+    padding:16px 18px;
+    border:1px solid #e2e8f0;
+    display:flex;
+    align-items:center;
+    gap:14px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.02);
+    transition:all 0.2s ease;
+}
+.acc-sub-kpi-card:hover {
+    transform:translateY(-2px);
+    box-shadow:0 6px 16px rgba(0,0,0,0.06);
+    border-color:#cbd5e1;
+}
+.acc-sub-kpi-icon {
+    width:44px;
+    height:44px;
+    border-radius:12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:20px;
+    flex-shrink:0;
+}
+.acc-sub-kpi-label {
+    font-size:11px;
+    font-weight:700;
+    color:#64748b;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+}
+.acc-sub-kpi-value {
+    font-size:22px;
+    font-weight:800;
+    color:#0f172a;
+    line-height:1.2;
+    margin-top:2px;
+}
 
 /* Buttons */
 .acc-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:10px; font-size:12.5px; font-weight:700; text-decoration:none; transition:all .2s; border:none; cursor:pointer; }
@@ -164,94 +365,96 @@
 
             {{-- 1. Total Receivables Card --}}
             <div class="acc-kpi-card kpi-receivable" onclick="openModal('receivablesModal')" title="Click to view all outstanding receivables">
+                <i class="bi bi-receipt acc-kpi-watermark"></i>
                 <div>
                     <div class="acc-kpi-header">
                         <span class="acc-kpi-label">
-                            <i class="bi bi-arrow-down-left-circle-fill" style="color:#2563eb;"></i> Total Receivables
+                            <i class="bi bi-arrow-down-left-circle-fill"></i> Total Receivables
                         </span>
-                        <div class="acc-kpi-icon" style="background:#eff6ff; color:#2563eb;">
+                        <div class="acc-kpi-icon">
                             <i class="bi bi-receipt"></i>
                         </div>
                     </div>
                     <div class="acc-kpi-value">₹{{ number_format($totalReceivables, 2) }}</div>
                 </div>
                 <div class="acc-kpi-sub">
-                    @if($overdueReceivables > 0)
-                        <span style="color:#dc2626; font-weight:700; background:#fef2f2; padding:2px 8px; border-radius:6px; border:1px solid #fee2e2;">
-                            <i class="bi bi-exclamation-circle-fill"></i> ₹{{ number_format($overdueReceivables, 2) }} Overdue
-                        </span>
-                    @else
-                        <span style="color:#059669; font-weight:700; background:#ecfdf5; padding:2px 8px; border-radius:6px;">
-                            <i class="bi bi-check-circle-fill"></i> No overdue invoices
-                        </span>
-                    @endif
-                    <span class="acc-click-hint" style="color:#2563eb;">
-                        {{ $unpaidInvoicesCount }} open &bull; Details <i class="bi bi-box-arrow-up-right"></i>
+                    <span class="acc-kpi-pill" style="background:rgba(255,255,255,0.22); border-color:rgba(255,255,255,0.3);">
+                        <i class="bi bi-receipt"></i> {{ $unpaidInvoicesCount }} Open Invoices
+                    </span>
+                    <span class="acc-click-hint">
+                        View Details <i class="bi bi-arrow-right-short" style="font-size:15px; margin-left:-2px;"></i>
                     </span>
                 </div>
             </div>
 
             {{-- 2. Total Payables Card --}}
             <div class="acc-kpi-card kpi-payable" onclick="openModal('payablesModal')" title="Click to view all purchase order payables">
+                <i class="bi bi-bag-check-fill acc-kpi-watermark"></i>
                 <div>
                     <div class="acc-kpi-header">
                         <span class="acc-kpi-label">
-                            <i class="bi bi-arrow-up-right-circle-fill" style="color:#ea580c;"></i> Total Payables
+                            <i class="bi bi-arrow-up-right-circle-fill"></i> Total Payables
                         </span>
-                        <div class="acc-kpi-icon" style="background:#fff7ed; color:#ea580c;">
+                        <div class="acc-kpi-icon">
                             <i class="bi bi-bag-check-fill"></i>
                         </div>
                     </div>
                     <div class="acc-kpi-value">₹{{ number_format($totalPayables, 2) }}</div>
                 </div>
                 <div class="acc-kpi-sub">
-                    <span style="color:#c2410c; font-weight:700; background:#fff7ed; padding:2px 8px; border-radius:6px; border:1px solid #ffedd5;">
+                    <span class="acc-kpi-pill" style="background:rgba(255,255,255,0.22); border-color:rgba(255,255,255,0.3);">
                         <i class="bi bi-box-seam"></i> {{ $pendingPoCount }} Open POs
                     </span>
-                    <span class="acc-click-hint" style="color:#ea580c;">
-                        Details <i class="bi bi-box-arrow-up-right"></i>
+                    <span class="acc-click-hint">
+                        View Details <i class="bi bi-arrow-right-short" style="font-size:15px; margin-left:-2px;"></i>
                     </span>
                 </div>
             </div>
 
             {{-- 3. Income This Month Card --}}
             <div class="acc-kpi-card kpi-income" onclick="openModal('incomeModal')" title="Click to view all income collections this month">
+                <i class="bi bi-wallet-fill acc-kpi-watermark"></i>
                 <div>
                     <div class="acc-kpi-header">
                         <span class="acc-kpi-label">
-                            <i class="bi bi-cash-stack" style="color:#059669;"></i> Income (This Month)
+                            <i class="bi bi-cash-stack"></i> Income (This Month)
                         </span>
-                        <div class="acc-kpi-icon" style="background:#ecfdf5; color:#059669;">
+                        <div class="acc-kpi-icon">
                             <i class="bi bi-wallet-fill"></i>
                         </div>
                     </div>
-                    <div class="acc-kpi-value" style="color:#059669;">₹{{ number_format($incomeThisMonth, 2) }}</div>
+                    <div class="acc-kpi-value">₹{{ number_format($incomeThisMonth, 2) }}</div>
                 </div>
                 <div class="acc-kpi-sub">
-                    <span>Last Month: <strong>₹{{ number_format($incomeLastMonth, 2) }}</strong></span>
-                    <span class="acc-click-hint" style="color:#059669;">
-                        {{ $thisMonthPayments->count() }} payments &bull; Details <i class="bi bi-box-arrow-up-right"></i>
+                    <span class="acc-kpi-pill" style="background:rgba(255,255,255,0.22); border-color:rgba(255,255,255,0.3);">
+                        <i class="bi bi-wallet2"></i> {{ $thisMonthPayments->count() }} Payments Received
+                    </span>
+                    <span class="acc-click-hint">
+                        View Details <i class="bi bi-arrow-right-short" style="font-size:15px; margin-left:-2px;"></i>
                     </span>
                 </div>
             </div>
 
             {{-- 4. Expenses This Month Card --}}
             <div class="acc-kpi-card kpi-expense" onclick="openModal('expensesModal')" title="Click to view all recorded expenses this month">
+                <i class="bi bi-credit-card-fill acc-kpi-watermark"></i>
                 <div>
                     <div class="acc-kpi-header">
                         <span class="acc-kpi-label">
-                            <i class="bi bi-receipt" style="color:#dc2626;"></i> Expenses (This Month)
+                            <i class="bi bi-receipt"></i> Expenses (This Month)
                         </span>
-                        <div class="acc-kpi-icon" style="background:#fef2f2; color:#dc2626;">
+                        <div class="acc-kpi-icon">
                             <i class="bi bi-credit-card-fill"></i>
                         </div>
                     </div>
-                    <div class="acc-kpi-value" style="color:#dc2626;">₹{{ number_format($expenseThisMonth, 2) }}</div>
+                    <div class="acc-kpi-value">₹{{ number_format($expenseThisMonth, 2) }}</div>
                 </div>
                 <div class="acc-kpi-sub">
-                    <span>Last Month: <strong>₹{{ number_format($expenseLastMonth, 2) }}</strong></span>
-                    <span class="acc-click-hint" style="color:#dc2626;">
-                        {{ $thisMonthExpenses->count() }} entries &bull; Details <i class="bi bi-box-arrow-up-right"></i>
+                    <span class="acc-kpi-pill" style="background:rgba(255,255,255,0.22); border-color:rgba(255,255,255,0.3);">
+                        <i class="bi bi-credit-card"></i> {{ $thisMonthExpenses->count() }} Recorded Entries
+                    </span>
+                    <span class="acc-click-hint">
+                        View Details <i class="bi bi-arrow-right-short" style="font-size:15px; margin-left:-2px;"></i>
                     </span>
                 </div>
             </div>
@@ -346,41 +549,41 @@
                     <a href="{{ route('accounts.ad-budget.partners') }}" class="acc-btn acc-btn-outline" style="padding:4px 12px; font-size:12px;">Partner Budgets</a>
                 </div>
             </div>
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px;">
-                <div style="background:#f8fafc; border-radius:12px; padding:14px 16px; border:1px solid #e2e8f0; display:flex; align-items:center; gap:12px;">
-                    <div style="width:40px; height:40px; border-radius:10px; background:#eff6ff; color:#2563eb; display:flex; align-items:center; justify-content:center; font-size:18px;">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:14px;">
+                <div class="acc-sub-kpi-card">
+                    <div class="acc-sub-kpi-icon" style="background:#eff6ff; color:#2563eb; border:1px solid #dbeafe;">
                         <i class="bi bi-person-badge"></i>
                     </div>
                     <div>
-                        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Active Ad Accounts</div>
-                        <div style="font-size:20px; font-weight:800; color:#0f172a;">{{ $activeAdAccountsCount }}</div>
+                        <div class="acc-sub-kpi-label">Active Ad Accounts</div>
+                        <div class="acc-sub-kpi-value">{{ $activeAdAccountsCount }}</div>
                     </div>
                 </div>
-                <div style="background:#f8fafc; border-radius:12px; padding:14px 16px; border:1px solid #e2e8f0; display:flex; align-items:center; gap:12px;">
-                    <div style="width:40px; height:40px; border-radius:10px; background:#fff7ed; color:#ea580c; display:flex; align-items:center; justify-content:center; font-size:18px;">
-                        <i class="bi bi-send"></i>
+                <div class="acc-sub-kpi-card">
+                    <div class="acc-sub-kpi-icon" style="background:#fff7ed; color:#ea580c; border:1px solid #ffedd5;">
+                        <i class="bi bi-send-fill"></i>
                     </div>
                     <div>
-                        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Client Requests (Month)</div>
-                        <div style="font-size:20px; font-weight:800; color:#0f172a;">{{ $clientRequestsCount }}</div>
+                        <div class="acc-sub-kpi-label">Client Requests (Month)</div>
+                        <div class="acc-sub-kpi-value">{{ $clientRequestsCount }}</div>
                     </div>
                 </div>
-                <div style="background:#f8fafc; border-radius:12px; padding:14px 16px; border:1px solid #e2e8f0; display:flex; align-items:center; gap:12px;">
-                    <div style="width:40px; height:40px; border-radius:10px; background:#ecfdf5; color:#059669; display:flex; align-items:center; justify-content:center; font-size:18px;">
+                <div class="acc-sub-kpi-card">
+                    <div class="acc-sub-kpi-icon" style="background:#ecfdf5; color:#059669; border:1px solid #a7f3d0;">
                         <i class="bi bi-currency-rupee"></i>
                     </div>
                     <div>
-                        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Client Ad Spend (Month)</div>
-                        <div style="font-size:20px; font-weight:800; color:#0f172a;">₹{{ number_format($totalClientBudgetAmount, 2) }}</div>
+                        <div class="acc-sub-kpi-label">Client Ad Spend (Month)</div>
+                        <div class="acc-sub-kpi-value">₹{{ number_format($totalClientBudgetAmount, 2) }}</div>
                     </div>
                 </div>
-                <div style="background:#f8fafc; border-radius:12px; padding:14px 16px; border:1px solid #e2e8f0; display:flex; align-items:center; gap:12px;">
-                    <div style="width:40px; height:40px; border-radius:10px; background:#fef3c7; color:#d97706; display:flex; align-items:center; justify-content:center; font-size:18px;">
+                <div class="acc-sub-kpi-card">
+                    <div class="acc-sub-kpi-icon" style="background:#fef3c7; color:#d97706; border:1px solid #fde68a;">
                         <i class="bi bi-hourglass-split"></i>
                     </div>
                     <div>
-                        <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Pending Approvals</div>
-                        <div style="font-size:20px; font-weight:800; color:#0f172a;">{{ $pendingApprovalsCount }}</div>
+                        <div class="acc-sub-kpi-label">Pending Approvals</div>
+                        <div class="acc-sub-kpi-value">{{ $pendingApprovalsCount }}</div>
                     </div>
                 </div>
             </div>

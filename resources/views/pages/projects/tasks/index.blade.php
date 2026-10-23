@@ -758,13 +758,13 @@
                     @foreach($supportTaskProjects ?? [] as $proj)
                         @if(strtolower(trim($proj->resolved_product_name ?? '')) !== 'other tasks' && strtolower(trim($proj->resolved_company_name ?? '')) !== 'other tasks')
                             <option value="{{ $proj->id }}">
-                                {{ $proj->resolved_company_name ?? 'Client' }} — {{ $proj->resolved_product_name ?? 'Project' }}
+                                {{ $proj->resolved_company_name ?? 'Client' }} — {{ $proj->resolved_product_name ?? 'Project' }}{{ !empty($proj->department_name) && $proj->department_name !== 'General / Other' ? ' (' . $proj->department_name . ')' : '' }}
                             </option>
                         @endif
                     @endforeach
                 </select>
                 <div class="pts-help" style="font-size:12px; color:#64748b; margin-top:4px;">
-                    Select <strong>Other Tasks</strong> or choose an approved production project requiring support.
+                    Select <strong>Other Tasks</strong> or search &amp; choose from all available projects.
                 </div>
             </div>
 

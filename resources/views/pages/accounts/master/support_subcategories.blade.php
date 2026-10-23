@@ -192,8 +192,13 @@
                     <option value="active" {{ request('status') === 'active' ? 'selected' : '' }}>Active</option>
                     <option value="inactive" {{ request('status') === 'inactive' ? 'selected' : '' }}>Inactive</option>
                 </select>
+                <select name="is_expense_add" class="acm-select" onchange="this.form.submit()">
+                    <option value="">All Expense Types</option>
+                    <option value="1" {{ request('is_expense_add') === '1' ? 'selected' : '' }}>Expense Add: Yes</option>
+                    <option value="0" {{ request('is_expense_add') === '0' ? 'selected' : '' }}>Expense Add: No</option>
+                </select>
                 <button type="submit" class="acm-btn acm-btn-secondary" style="padding:8px 14px; font-size:12px;">Filter</button>
-                @if(request()->hasAny(['search', 'category_id', 'status']))
+                @if(request()->hasAny(['search', 'category_id', 'status', 'is_expense_add']))
                     <a href="{{ route('accounts.master.support-subcategories.index') }}" class="acm-btn acm-btn-secondary" style="padding:8px 14px; font-size:12px; background:#fff; border:1px solid #cbd5e1;">Reset</a>
                 @endif
             </div>
@@ -217,6 +222,7 @@
                             <th>Subcategory Name</th>
                             <th>Parent Category</th>
                             <th>Code</th>
+                            <th>Is Expense Add?</th>
                             <th>User Hierarchy Chain</th>
                             <th>Description</th>
                             <th>Status</th>
@@ -245,6 +251,17 @@
                                     <code style="background:#f1f5f9; padding:2px 8px; border-radius:6px; font-size:12px; color:#4338ca; font-weight:700;">{{ $subcategory->code }}</code>
                                 @else
                                     <span style="color:#94a3b8;">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if($subcategory->is_expense_add)
+                                    <span class="acm-badge" style="background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; font-weight:700;">
+                                        <i class="bi bi-check-circle-fill"></i> Yes
+                                    </span>
+                                @else
+                                    <span class="acm-badge" style="background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0; font-weight:700;">
+                                        <i class="bi bi-dash-circle"></i> No
+                                    </span>
                                 @endif
                             </td>
                             <td>
@@ -369,6 +386,13 @@
                         <option value="inactive">Inactive</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Is this Expense Add? <span style="color:#dc2626;">*</span></label>
+                    <select name="is_expense_add" class="form-input" required>
+                        <option value="0" selected>No</option>
+                        <option value="1">Yes</option>
+                    </select>
+                </div>
 
                 {{-- User-Wise Multiple Hierarchy Builder --}}
                 <div class="hierarchy-builder-section">
@@ -442,6 +466,13 @@
                     <select id="edit_subcat_status" name="status" class="form-input" required>
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Is this Expense Add? <span style="color:#dc2626;">*</span></label>
+                    <select id="edit_subcat_is_expense_add" name="is_expense_add" class="form-input" required>
+                        <option value="0">No</option>
+                        <option value="1">Yes</option>
                     </select>
                 </div>
 
@@ -587,6 +618,7 @@ function openEditSubcategoryModal(item) {
     $('#edit_subcat_code').val(item.code || '');
     $('#edit_subcat_description').val(item.description || '');
     $('#edit_subcat_status').val(item.status || 'active');
+    $('#edit_subcat_is_expense_add').val(item.is_expense_add ? '1' : '0');
 
     // Populate hierarchy levels
     $('#edit_hierarchy_container').empty();

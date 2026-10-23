@@ -24,6 +24,10 @@ class StoreEmployeeOnboardingRequest extends FormRequest
         if (! $this->filled('portal_email') && $this->filled('email')) {
             $this->merge(['portal_email' => $this->input('email')]);
         }
+
+        if ($this->has('employee_id')) {
+            $this->merge(['employee_id' => trim((string) $this->input('employee_id'))]);
+        }
     }
 
     public function rules(): array
@@ -44,6 +48,7 @@ class StoreEmployeeOnboardingRequest extends FormRequest
             'branches' => ['nullable', 'array'],
             'branches.*' => ['exists:branches,id'],
             'tl_user_id' => ['required', 'exists:users,id', $this->validTeamLeadRule()],
+            'employee_id' => ['required', 'string', 'max:50', Rule::unique('employee_onboardings', 'employee_id')],
             'name' => ['required', 'string', 'max:150'],
             'father_name' => ['nullable', 'string', 'max:150'],
             'correspondence_address' => ['nullable', 'string', 'max:2000'],

@@ -37,6 +37,7 @@
                     <tr>
                         <th>#</th>
                         <th>Asset Category</th>
+                        <th>Custom Form Fields</th>
                         <th>Description</th>
                         <th>Created</th>
                         <th class="text-right">Actions</th>
@@ -47,6 +48,16 @@
                     <tr>
                         <td>{{ ($assetCategories->firstItem() ?? 1) + $loop->index }}</td>
                         <td><strong>{{ $assetCategory->name }}</strong></td>
+                        <td>
+                            @php $cfCount = is_array($assetCategory->custom_fields) ? count($assetCategory->custom_fields) : 0; @endphp
+                            @if($cfCount > 0)
+                                <span style="background:#fff7ed; color:#ea580c; border:1px solid #fed7aa; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700;">
+                                    {{ $cfCount }} Field{{ $cfCount > 1 ? 's' : '' }}
+                                </span>
+                            @else
+                                <span style="color:#94a3b8; font-size:12px;">Default only</span>
+                            @endif
+                        </td>
                         <td>{{ \Illuminate\Support\Str::limit($assetCategory->description ?: 'No description added.', 70) }}</td>
                         <td>{{ $assetCategory->created_at->format('d M Y') }}</td>
                         <td class="text-right">

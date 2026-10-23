@@ -175,7 +175,7 @@
                                 <select name="customer_id" id="customerSelect" class="form-input select2" style="border-color:#fdba74; font-size:13.5px; padding:10px 14px;" onchange="onCustomerSelected(this.value)" required>
                                     <option value="">-- Choose Existing Customer --</option>
                                     @foreach($customers as $cust)
-                                        <option value="{{ $cust->id }}" {{ old('customer_id', request('customer_id')) == $cust->id ? 'selected' : '' }}>
+                                        <option value="{{ $cust->id }}" {{ old('customer_id', request('customer_id', $prefillCustomer?->id)) == $cust->id ? 'selected' : '' }}>
                                             {{ $cust->customer_name }} {{ $cust->company_name ? "({$cust->company_name})" : '' }} {{ $cust->mobile_number ? "- {$cust->mobile_number}" : '' }}
                                         </option>
                                     @endforeach
@@ -246,7 +246,7 @@
                             <select name="place_of_supply" id="placeOfSupply" class="form-input" required onchange="onPlaceOfSupplyChanged()">
                                 <option value="">-- Select State for GST Place of Supply --</option>
                                 @foreach($states as $codeKey => $stateName)
-                                    <option value="{{ $codeKey }}" {{ old('place_of_supply', '[33] Tamil Nadu') === $codeKey ? 'selected' : '' }}>
+                                    <option value="{{ $codeKey }}" {{ old('place_of_supply', $prefillPlaceOfSupply ?? '[33] Tamil Nadu') === $codeKey ? 'selected' : '' }}>
                                         {{ $codeKey }}
                                     </option>
                                 @endforeach
@@ -421,7 +421,7 @@
                                 <div class="summary-row" style="align-items:center;">
                                     <div style="display:flex; align-items:center; gap:6px;">
                                         <span>CGST (</span>
-                                        <input type="number" step="0.01" min="0" max="50" id="inputCgstPercent" class="form-input" style="width:70px; padding:4px 8px; font-size:12px; font-weight:700; text-align:right;" value="9.00" oninput="onGstPercentChange('cgst')">
+                                        <input type="number" step="0.01" min="0" max="50" id="inputCgstPercent" class="form-input" style="width:70px; padding:4px 8px; font-size:12px; font-weight:700; text-align:right;" value="{{ old('cgst_percent', !empty($prefillQuotation) && isset($prefillQuotation->cgst_rate) ? number_format((float)$prefillQuotation->cgst_rate, 2, '.', '') : '9.00') }}" oninput="onGstPercentChange('cgst')">
                                         <span>%)</span>
                                     </div>
                                     <span style="font-weight:700;" id="sumCgst">₹0.00</span>
@@ -431,7 +431,7 @@
                                 <div class="summary-row" style="align-items:center;">
                                     <div style="display:flex; align-items:center; gap:6px;">
                                         <span>SGST (</span>
-                                        <input type="number" step="0.01" min="0" max="50" id="inputSgstPercent" class="form-input" style="width:70px; padding:4px 8px; font-size:12px; font-weight:700; text-align:right;" value="9.00" oninput="onGstPercentChange('sgst')">
+                                        <input type="number" step="0.01" min="0" max="50" id="inputSgstPercent" class="form-input" style="width:70px; padding:4px 8px; font-size:12px; font-weight:700; text-align:right;" value="{{ old('sgst_percent', !empty($prefillQuotation) && isset($prefillQuotation->sgst_rate) ? number_format((float)$prefillQuotation->sgst_rate, 2, '.', '') : '9.00') }}" oninput="onGstPercentChange('sgst')">
                                         <span>%)</span>
                                     </div>
                                     <span style="font-weight:700;" id="sumSgst">₹0.00</span>
@@ -444,7 +444,7 @@
                                 <div class="summary-row" style="align-items:center;">
                                     <div style="display:flex; align-items:center; gap:6px;">
                                         <span>IGST (</span>
-                                        <input type="number" step="0.01" min="0" max="100" id="inputIgstPercent" class="form-input" style="width:70px; padding:4px 8px; font-size:12px; font-weight:700; text-align:right;" value="18.00" oninput="onGstPercentChange('igst')">
+                                        <input type="number" step="0.01" min="0" max="100" id="inputIgstPercent" class="form-input" style="width:70px; padding:4px 8px; font-size:12px; font-weight:700; text-align:right;" value="{{ old('igst_percent', !empty($prefillQuotation) && isset($prefillQuotation->igst_rate) ? number_format((float)$prefillQuotation->igst_rate, 2, '.', '') : '18.00') }}" oninput="onGstPercentChange('igst')">
                                         <span>%)</span>
                                     </div>
                                     <span style="font-weight:700;" id="sumIgst">₹0.00</span>
@@ -1524,10 +1524,16 @@ function addInvoiceItemRow(data = {}) {
     tr.id = 'itemRow_' + currentRowIndex;
 
     let itemsOptions = '<option value="">-- Choose Item from Master --</option>';
+    let itemMatched = false;
     catalogItems.forEach(it => {
-        const isSelected = data.item_id && data.item_id == it.id ? 'selected' : '';
-        itemsOptions += `<option value="${it.id}" ${isSelected}>${escapeHtml(it.item_name)} (₹${parseFloat(it.rate || 0).toFixed(2)})</option>`;
+        const isSelected = data.item_id && String(data.item_id) === String(it.id);
+        if (isSelected) itemMatched = true;
+        itemsOptions += `<option value="${it.id}" ${isSelected ? 'selected' : ''}>${escapeHtml(it.item_name)} (₹${parseFloat(it.rate || 0).toFixed(2)})</option>`;
     });
+
+    if (data.item_id && !itemMatched) {
+        itemsOptions += `<option value="${data.item_id}" selected>${escapeHtml(data.item_name || 'Selected Item')} (₹${parseFloat(data.rate || 0).toFixed(2)})</option>`;
+    }
 
     const itemName = data.item_name || '';
     const desc = data.description || '';
@@ -1559,12 +1565,12 @@ function addInvoiceItemRow(data = {}) {
             <span id="rowAmountSpan_${currentRowIndex}">₹${parseFloat(amount).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
             <input type="hidden" name="items[${currentRowIndex}][amount]" id="rowAmount_${currentRowIndex}" value="${amount}">
             <input type="hidden" name="items[${currentRowIndex}][total_amount]" id="rowTotal_${currentRowIndex}" value="${amount}">
-            <input type="hidden" name="items[${currentRowIndex}][cgst_percent]" id="rowCgst_${currentRowIndex}" value="0.00">
-            <input type="hidden" name="items[${currentRowIndex}][cgst_amount]" id="rowCgstAmt_${currentRowIndex}" value="0.00">
-            <input type="hidden" name="items[${currentRowIndex}][sgst_percent]" id="rowSgst_${currentRowIndex}" value="0.00">
-            <input type="hidden" name="items[${currentRowIndex}][sgst_amount]" id="rowSgstAmt_${currentRowIndex}" value="0.00">
-            <input type="hidden" name="items[${currentRowIndex}][igst_percent]" id="rowIgst_${currentRowIndex}" value="0.00">
-            <input type="hidden" name="items[${currentRowIndex}][igst_amount]" id="rowIgstAmt_${currentRowIndex}" value="0.00">
+            <input type="hidden" name="items[${currentRowIndex}][cgst_percent]" id="rowCgst_${currentRowIndex}" value="${data.cgst_percent !== undefined ? data.cgst_percent : '0.00'}">
+            <input type="hidden" name="items[${currentRowIndex}][cgst_amount]" id="rowCgstAmt_${currentRowIndex}" value="${data.cgst_amount !== undefined ? data.cgst_amount : '0.00'}">
+            <input type="hidden" name="items[${currentRowIndex}][sgst_percent]" id="rowSgst_${currentRowIndex}" value="${data.sgst_percent !== undefined ? data.sgst_percent : '0.00'}">
+            <input type="hidden" name="items[${currentRowIndex}][sgst_amount]" id="rowSgstAmt_${currentRowIndex}" value="${data.sgst_amount !== undefined ? data.sgst_amount : '0.00'}">
+            <input type="hidden" name="items[${currentRowIndex}][igst_percent]" id="rowIgst_${currentRowIndex}" value="${data.igst_percent !== undefined ? data.igst_percent : '0.00'}">
+            <input type="hidden" name="items[${currentRowIndex}][igst_amount]" id="rowIgstAmt_${currentRowIndex}" value="${data.igst_amount !== undefined ? data.igst_amount : '0.00'}">
         </td>
         <td style="text-align:center; padding-top:12px;">
             <button type="button" class="acm-btn acm-btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeInvoiceItemRow(${currentRowIndex})" title="Remove item">
@@ -1577,6 +1583,17 @@ function addInvoiceItemRow(data = {}) {
 
     // Initialize Select2 on the newly created row's select
     initRowSelect2(currentRowIndex);
+
+    // Explicitly sync select value with Select2 if prefilled
+    if (data.item_id && window.jQuery) {
+        const $sel = $(`#rowSelect_${currentRowIndex}`);
+        if ($sel.length) {
+            $sel.val(String(data.item_id));
+            if ($sel.data('select2')) {
+                $sel.trigger('change.select2');
+            }
+        }
+    }
 
     calculateRow(currentRowIndex);
     itemRowIndex++;
@@ -1805,14 +1822,28 @@ document.addEventListener('DOMContentLoaded', function() {
     @if(old('items') && is_array(old('items')) && count(old('items')) > 0)
         const oldItems = @json(old('items'));
         oldItems.forEach(it => addInvoiceItemRow(it));
+    @elseif(!empty($prefillItems) && count($prefillItems) > 0)
+        const prefillItems = @json($prefillItems);
+        prefillItems.forEach(it => addInvoiceItemRow(it));
     @else
         addInvoiceItemRow();
     @endif
 
     const custSel = document.getElementById('customerSelect');
-    if (custSel && custSel.value) {
-        onCustomerSelected(custSel.value);
-    }
+    @if(!empty($prefillCustomer))
+        if (custSel) {
+            custSel.value = "{{ $prefillCustomer->id }}";
+            if (window.$ && $(custSel).data('select2')) {
+                $(custSel).val("{{ $prefillCustomer->id }}").trigger('change');
+            } else {
+                onCustomerSelected("{{ $prefillCustomer->id }}");
+            }
+        }
+    @else
+        if (custSel && custSel.value) {
+            onCustomerSelected(custSel.value);
+        }
+    @endif
 
     // Initial check for invoice totals
     calculateInvoiceTotals();

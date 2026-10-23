@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AccountExpense;
+use App\Models\AccountExpenseCategory;
+use App\Models\AccountExpenseSubcategory;
 use App\Models\AccountSupportCategory;
 use App\Models\AccountSupportSubcategory;
 use App\Models\SupportTicket;
@@ -17,7 +20,7 @@ class SupportController extends Controller
     /**
      * Display a listing of support tickets.
      */
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
         $userId = $user->id;
@@ -50,6 +53,30 @@ class SupportController extends Controller
                     || str_contains($display, 'super admin');
             });
 
+        $selectedCategoryId = $request->input('category_id');
+        $selectedSubcategoryId = $request->input('subcategory_id');
+        $search = trim((string) $request->input('search'));
+
+        // Filter callback for queries
+        $applyFilters = function ($query) use ($selectedCategoryId, $selectedSubcategoryId, $search) {
+            if ($selectedCategoryId) {
+                $query->where('account_support_category_id', $selectedCategoryId);
+            }
+            if ($selectedSubcategoryId) {
+                $query->where('account_support_subcategory_id', $selectedSubcategoryId);
+            }
+            if ($search !== '') {
+                $query->where(function ($q) use ($search) {
+                    $q->where('subject', 'like', "%{$search}%")
+                      ->orWhere('message', 'like', "%{$search}%")
+                      ->orWhere('remark', 'like', "%{$search}%")
+                      ->orWhere('id', 'like', "%{$search}%")
+                      ->orWhereHas('creator', fn($cq) => $cq->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"))
+                      ->orWhereHas('assignedTo', fn($aq) => $aq->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"));
+                });
+            }
+        };
+
         // Calculate total KPI statistics from database for card metrics
         if ($isCompanyAdmin) {
             $kpiQuery = SupportTicket::query();
@@ -67,6 +94,8 @@ class SupportController extends Controller
             });
         }
 
+        $applyFilters($kpiQuery);
+
         $statTotal     = (clone $kpiQuery)->count();
         $statPending   = (clone $kpiQuery)->where('status', 'pending')->count();
         $statOnProcess = (clone $kpiQuery)->where('status', 'onprocess')->count();
@@ -82,24 +111,40 @@ class SupportController extends Controller
                       ->orWhereHas('assignedTo', fn($aq) => $aq->where('company_id', $companyId));
                 });
             }
+            $applyFilters($allTicketsQuery);
             $allTickets = $allTicketsQuery->latest()->paginate(15, ['*'], 'all_page')->withQueryString();
         } else {
             $allTickets = collect();
         }
 
         // Get received tickets (where current user is the target) (Paginated)
-        $receivedTickets = SupportTicket::with(['creator', 'assignedTo', 'category', 'subcategory'])
-            ->where('to_user_id', $userId)
-            ->latest()
+        $receivedTicketsQuery = SupportTicket::with(['creator', 'assignedTo', 'category', 'subcategory'])
+            ->where('to_user_id', $userId);
+        $applyFilters($receivedTicketsQuery);
+        $receivedTickets = $receivedTicketsQuery->latest()
             ->paginate(15, ['*'], 'received_page')
             ->withQueryString();
 
         // Get created tickets (where current user is the creator) (Paginated)
-        $createdTickets = SupportTicket::with(['creator', 'assignedTo', 'category', 'subcategory'])
-            ->where('created_by', $userId)
-            ->latest()
+        $createdTicketsQuery = SupportTicket::with(['creator', 'assignedTo', 'category', 'subcategory'])
+            ->where('created_by', $userId);
+        $applyFilters($createdTicketsQuery);
+        $createdTickets = $createdTicketsQuery->latest()
             ->paginate(15, ['*'], 'created_page')
             ->withQueryString();
+
+        // Fetch active categories with subcategories for filtering
+        $categories = AccountSupportCategory::when($companyId, function ($q) use ($companyId) {
+                $q->where(function ($sq) use ($companyId) {
+                    $sq->where('company_id', $companyId)->orWhereNull('company_id');
+                });
+            })
+            ->active()
+            ->with(['activeSubcategories' => function ($q) {
+                $q->orderBy('name');
+            }])
+            ->orderBy('name')
+            ->get();
 
         // Get users for Select2 dropdown (exclude current user, include all active users for the company)
         $usersQuery = User::withoutGlobalScope('branch')
@@ -122,6 +167,9 @@ class SupportController extends Controller
             'allTickets',
             'isCompanyAdmin',
             'users',
+            'categories',
+            'selectedCategoryId',
+            'selectedSubcategoryId',
             'statTotal',
             'statPending',
             'statOnProcess',
@@ -374,15 +422,49 @@ class SupportController extends Controller
                 ->with('error', 'This ticket has already been closed and cannot be updated.');
         }
 
-        $request->validate([
+        // Check if ticket's subcategory is marked for expense settlement
+        $isExpenseAdd = (bool) ($ticket->subcategory?->is_expense_add ?? false);
+        $isClosingOrResolving = in_array($request->status, ['resolved', 'closed'], true);
+
+        $rules = [
             'status' => ['required', 'string', 'in:pending,onprocess,resolved,closed'],
             'remark' => ['nullable', 'string'],
-        ]);
+        ];
 
-        $ticket->update([
+        if ($isExpenseAdd && $isClosingOrResolving) {
+            $rules['payment_amount'] = ['required', 'numeric', 'min:0'];
+            $rules['remark'] = ['required', 'string'];
+            $rules['resolution_attachment'] = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx', 'max:25600'];
+        }
+
+        $request->validate($rules);
+
+        $ticketData = [
             'status' => $request->status,
             'remark' => $request->remark,
-        ]);
+        ];
+
+        if ($isExpenseAdd && $isClosingOrResolving) {
+            $ticketData['payment_amount'] = $request->payment_amount;
+
+            if ($request->hasFile('resolution_attachment')) {
+                $file = $request->file('resolution_attachment');
+                $filename = 'res_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $targetDir = public_path('uploads/support_resolutions');
+                if (!file_exists($targetDir)) {
+                    @mkdir($targetDir, 0755, true);
+                }
+                $file->move($targetDir, $filename);
+                $ticketData['resolution_attachment_path'] = 'uploads/support_resolutions/' . $filename;
+            }
+        }
+
+        $ticket->update($ticketData);
+
+        // Synchronize into Accounts Expense module if expense ticket is resolved or closed
+        if ($isExpenseAdd && $isClosingOrResolving && $ticket->payment_amount !== null) {
+            $this->syncToAccountExpense($ticket, $user);
+        }
 
         // Send email to the ticket creator and optionally cc assigned user
         try {
@@ -418,5 +500,162 @@ class SupportController extends Controller
         return redirect()
             ->route('support.index')
             ->with('success', 'Ticket status and remark updated successfully.');
+    }
+
+    /**
+     * Automatically synchronize an expense-marked support ticket into the Accounts Module (AccountExpense).
+     */
+    private function syncToAccountExpense(SupportTicket $ticket, User $user): ?AccountExpense
+    {
+        try {
+            $companyId = $ticket->company_id ?: ($ticket->creator?->company_id ?: $user->company_id);
+
+            // 1. Resolve Category and Subcategory Names
+            $categoryName = $ticket->category ? trim($ticket->category->name) : 'Support & Operations';
+            if (empty($categoryName)) {
+                $categoryName = 'Support & Operations';
+            }
+
+            $subcategoryName = $ticket->subcategory ? trim($ticket->subcategory->name) : 'Support Expense';
+            if (empty($subcategoryName)) {
+                $subcategoryName = 'Support Expense';
+            }
+
+            // 2. Find or Create AccountExpenseCategory
+            $accCategory = AccountExpenseCategory::withoutGlobalScopes()
+                ->where(function ($q) use ($companyId) {
+                    if ($companyId) {
+                        $q->where('company_id', $companyId)->orWhereNull('company_id');
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($categoryName)])
+                ->first();
+
+            if (! $accCategory) {
+                $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $categoryName), 0, 4));
+                if (empty($code)) {
+                    $code = 'SUP';
+                }
+
+                $accCategory = AccountExpenseCategory::create([
+                    'company_id'  => $companyId,
+                    'name'        => $categoryName,
+                    'code'        => $code,
+                    'status'      => 'active',
+                    'description' => 'Auto-created from Support Category: ' . $categoryName,
+                    'created_by'  => $user->id,
+                ]);
+            }
+
+            // 3. Find or Create AccountExpenseSubcategory
+            $accSubcategory = AccountExpenseSubcategory::withoutGlobalScopes()
+                ->where('account_expense_category_id', $accCategory->id)
+                ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($subcategoryName)])
+                ->first();
+
+            if (! $accSubcategory) {
+                $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $subcategoryName), 0, 4));
+                if (empty($code)) {
+                    $code = 'EXP';
+                }
+
+                $accSubcategory = AccountExpenseSubcategory::create([
+                    'company_id'                  => $companyId,
+                    'account_expense_category_id' => $accCategory->id,
+                    'name'                        => $subcategoryName,
+                    'code'                        => $code,
+                    'status'                      => 'active',
+                    'description'                 => 'Auto-created from Support Subcategory: ' . $subcategoryName,
+                    'created_by'                  => $user->id,
+                ]);
+            }
+
+            // 4. Format Attachments
+            $accAttachments = [];
+            if (!empty($ticket->resolution_attachment_path)) {
+                $cleanPath = ltrim($ticket->resolution_attachment_path, '/');
+                $fullPath = public_path($cleanPath);
+                $exists = file_exists($fullPath);
+                $accAttachments[] = [
+                    'path'      => $cleanPath,
+                    'name'      => basename($cleanPath),
+                    'size'      => $exists ? @filesize($fullPath) : null,
+                    'mime_type' => $exists ? @mime_content_type($fullPath) : null,
+                ];
+            } elseif (!empty($ticket->attachment_path)) {
+                $cleanPath = ltrim($ticket->attachment_path, '/');
+                $fullPath = public_path($cleanPath);
+                $exists = file_exists($fullPath);
+                $accAttachments[] = [
+                    'path'      => $cleanPath,
+                    'name'      => basename($cleanPath),
+                    'size'      => $exists ? @filesize($fullPath) : null,
+                    'mime_type' => $exists ? @mime_content_type($fullPath) : null,
+                ];
+            }
+
+            // 5. Build rich remarks
+            $effectiveAmount = (float) $ticket->payment_amount;
+            $effectiveDate = now()->toDateString();
+
+            $remarksLines = [];
+            $remarksLines[] = "[Support Ticket #{$ticket->id}]";
+            $remarksLines[] = "Requester: " . ($ticket->creator?->name ?? 'User') . ($ticket->creator?->email ? " ({$ticket->creator->email})" : '');
+            $remarksLines[] = "Category: {$categoryName}";
+            $remarksLines[] = "Subcategory: {$subcategoryName}";
+            $remarksLines[] = "Subject: " . $ticket->subject;
+            if (!empty($ticket->remark)) {
+                $remarksLines[] = "Resolution Remarks: " . trim($ticket->remark);
+            }
+            $remarksLines[] = "Resolved / Closed By: {$user->name} on " . now()->format('d M Y, h:i A');
+            $remarksLines[] = "Payment Amount: ₹" . number_format($effectiveAmount, 2);
+
+            $finalRemarks = implode("\n", $remarksLines);
+            $invoiceRef = "SUPPORT-TICKET-{$ticket->id}";
+
+            // 6. Check existing AccountExpense to update or create
+            $accountExpense = AccountExpense::withoutGlobalScopes()
+                ->where(function ($q) use ($invoiceRef, $ticket) {
+                    $q->where('invoice_no', $invoiceRef)
+                      ->orWhere('remarks', 'like', "%[Support Ticket #{$ticket->id}]%");
+                })
+                ->first();
+
+            if ($accountExpense) {
+                $accountExpense->update([
+                    'company_id'                     => $companyId,
+                    'expense_date'                   => $effectiveDate,
+                    'account_expense_category_id'    => $accCategory->id,
+                    'account_expense_subcategory_id' => $accSubcategory?->id,
+                    'amount'                         => $effectiveAmount,
+                    'expense_type'                   => 'Variable',
+                    'remarks'                        => $finalRemarks,
+                    'attachments'                    => !empty($accAttachments) ? $accAttachments : $accountExpense->attachments,
+                    'updated_by'                     => $user->id,
+                ]);
+            } else {
+                $accountExpense = AccountExpense::create([
+                    'company_id'                     => $companyId,
+                    'expense_date'                   => $effectiveDate,
+                    'account_expense_category_id'    => $accCategory->id,
+                    'account_expense_subcategory_id' => $accSubcategory?->id,
+                    'amount'                         => $effectiveAmount,
+                    'expense_type'                   => 'Variable',
+                    'is_recurring'                   => false,
+                    'invoice_no'                     => $invoiceRef,
+                    'remarks'                        => $finalRemarks,
+                    'attachments'                    => $accAttachments,
+                    'created_by'                     => $user->id,
+                    'updated_by'                     => $user->id,
+                ]);
+            }
+
+            return $accountExpense;
+        } catch (\Throwable $e) {
+            Log::error("Failed to sync Support Ticket #{$ticket->id} to AccountExpense: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return null;
+        }
     }
 }

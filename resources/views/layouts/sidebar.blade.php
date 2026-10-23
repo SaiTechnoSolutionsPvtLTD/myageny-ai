@@ -187,6 +187,24 @@
                     </div>
                 </a>
 
+                <!-- Quotations -->
+                @if(auth()->user()?->can('quotations.menuview') || auth()->user()?->can('quotations.view'))
+                <a href="{{ route('accounts.quotations.index') }}" class="nav-item {{ request()->routeIs('accounts.quotations.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('accounts.quotations.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                            <path d="M14 3v6h6"></path>
+                            <line x1="8" y1="13" x2="16" y2="13"></line>
+                            <line x1="8" y1="17" x2="14" y2="17"></line>
+                        </svg>
+                        <span>Quotations</span>
+                    </div>
+                </a>
+                @endif
+
                 <!-- Sales Dropdown -->
                 <a href="javascript:void(0)"
                    class="nav-item has-dropdown {{ request()->routeIs('accounts.sales.*') ? 'active open' : '' }}"

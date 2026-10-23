@@ -189,6 +189,21 @@ class Quotation extends Model
         return $this->hasMany(QuotationItem::class);
     }
 
+    public function getConvertedInvoiceAttribute(): ?Invoice
+    {
+        return Invoice::where(function ($q) {
+                if ($this->company_id) {
+                    $q->where('company_id', $this->company_id);
+                }
+            })
+            ->where(function ($q) {
+                $q->where('customer_notes', 'like', "%{$this->quotation_no}%")
+                  ->orWhere('terms_conditions', 'like', "%{$this->quotation_no}%");
+            })
+            ->latest('id')
+            ->first();
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /**

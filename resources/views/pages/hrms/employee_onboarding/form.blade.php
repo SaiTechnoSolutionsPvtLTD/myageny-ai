@@ -403,9 +403,30 @@
                                 @error('branches')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
-                                <label class="eob-label">Employee ID</label>
-                                <input type="text" class="eob-input" id="generatedEmployeeIdInput" value="{{ $generatedEmployeeId }}" readonly>
-                                <div class="eob-help">Auto-generated based on the selected branch.</div>
+                                <label class="eob-label">Employee ID <span class="eob-label-required">*</span></label>
+                                <div style="display: flex; gap: 8px;">
+                                    <input
+                                        type="text"
+                                        name="employee_id"
+                                        class="eob-input @error('employee_id') is-invalid @enderror"
+                                        id="generatedEmployeeIdInput"
+                                        value="{{ old('employee_id', $employee?->employee_id ?? $generatedEmployeeId) }}"
+                                        placeholder="Enter Employee ID"
+                                        required
+                                        style="flex: 1;"
+                                    >
+                                    <button
+                                        type="button"
+                                        class="eob-btn eob-btn-ghost eob-btn-sm"
+                                        id="btnRegenerateEmployeeId"
+                                        title="Auto-generate ID based on selected branch"
+                                        style="white-space: nowrap; flex-shrink: 0;"
+                                    >
+                                        <i class="bi bi-arrow-clockwise"></i> Auto Generate
+                                    </button>
+                                </div>
+                                <div class="eob-help">Auto-generated based on the selected branch. You can edit this ID manually if needed.</div>
+                                @error('employee_id')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">Department @if($portalAccountRequired)<span class="eob-label-required">*</span>@endif</label>
@@ -947,21 +968,32 @@ document.addEventListener('DOMContentLoaded', function () {
     const isEdit = {{ $employee ? 'true' : 'false' }};
     const originalBranchId = '{{ (string) $portalBranchId }}';
     const originalEmployeeId = '{{ (string) ($employee?->employee_id ?? '') }}';
+    let isEmployeeIdManuallyEdited = false;
 
-    function fetchGeneratedEmployeeId() {
+    const empIdInput = document.getElementById('generatedEmployeeIdInput');
+    const btnRegenerateEmployeeId = document.getElementById('btnRegenerateEmployeeId');
+
+    if (empIdInput) {
+        empIdInput.addEventListener('input', function () {
+            isEmployeeIdManuallyEdited = true;
+        });
+    }
+
+    function fetchGeneratedEmployeeId(force = false) {
         if (!branchSelect) return;
         const branchId = branchSelect.value;
+        if (!empIdInput) return;
+
         if (!branchId) {
-            const empIdInput = document.getElementById('generatedEmployeeIdInput');
-            if (empIdInput) empIdInput.value = '';
+            if (force || !isEmployeeIdManuallyEdited) {
+                empIdInput.value = '';
+            }
             return;
         }
 
-        if (isEdit && originalBranchId && originalEmployeeId && String(branchId) === String(originalBranchId)) {
-            const empIdInput = document.getElementById('generatedEmployeeIdInput');
-            if (empIdInput) {
-                empIdInput.value = originalEmployeeId;
-            }
+        if (!force && isEdit && originalBranchId && originalEmployeeId && String(branchId) === String(originalBranchId)) {
+            empIdInput.value = originalEmployeeId;
+            isEmployeeIdManuallyEdited = false;
             return;
         }
 
@@ -974,12 +1006,23 @@ document.addEventListener('DOMContentLoaded', function () {
         })
         .then(res => res.json())
         .then(data => {
-            const empIdInput = document.getElementById('generatedEmployeeIdInput');
             if (empIdInput && data.employee_id) {
                 empIdInput.value = data.employee_id;
+                isEmployeeIdManuallyEdited = false;
             }
         })
         .catch(err => console.error('Error fetching generated Employee ID:', err));
+    }
+
+    if (btnRegenerateEmployeeId) {
+        btnRegenerateEmployeeId.addEventListener('click', function (e) {
+            e.preventDefault();
+            btnRegenerateEmployeeId.disabled = true;
+            fetchGeneratedEmployeeId(true);
+            setTimeout(function () {
+                btnRegenerateEmployeeId.disabled = false;
+            }, 600);
+        });
     }
 
     if (personalEmailInput && portalEmailInput) {
