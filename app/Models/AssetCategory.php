@@ -14,7 +14,15 @@ class AssetCategory extends Model
     protected $fillable = [
         'name',
         'description',
+        'custom_fields',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'custom_fields' => 'array',
+        ];
+    }
 
     public function assetEntries(): HasMany
     {

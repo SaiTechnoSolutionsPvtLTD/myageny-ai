@@ -139,6 +139,9 @@ class AccountSupportMasterController extends Controller
             })
             ->when($request->filled('status'), function ($q) use ($request) {
                 $q->where('status', $request->status);
+            })
+            ->when($request->filled('is_expense_add'), function ($q) use ($request) {
+                $q->where('is_expense_add', (bool) $request->is_expense_add);
             });
 
         $subcategories = $subcategoryQuery->orderBy('name', 'asc')->paginate(15)->withQueryString();
@@ -184,6 +187,7 @@ class AccountSupportMasterController extends Controller
             'code'                        => 'nullable|string|max:50',
             'description'                 => 'nullable|string',
             'status'                      => 'required|in:active,inactive',
+            'is_expense_add'              => 'nullable|in:0,1,yes,no,true,false',
             'hierarchy'                   => 'nullable|array',
             'hierarchy_json'              => 'nullable|string',
         ]);
@@ -193,6 +197,7 @@ class AccountSupportMasterController extends Controller
         $validated['created_by'] = $user?->id;
 
         $validated['hierarchy'] = $this->parseHierarchyInput($request);
+        $validated['is_expense_add'] = in_array($request->input('is_expense_add'), [1, '1', 'yes', 'true', true], true);
 
         AccountSupportSubcategory::create($validated);
 
@@ -211,11 +216,13 @@ class AccountSupportMasterController extends Controller
             'code'                        => 'nullable|string|max:50',
             'description'                 => 'nullable|string',
             'status'                      => 'required|in:active,inactive',
+            'is_expense_add'              => 'nullable|in:0,1,yes,no,true,false',
             'hierarchy'                   => 'nullable|array',
             'hierarchy_json'              => 'nullable|string',
         ]);
 
         $validated['hierarchy'] = $this->parseHierarchyInput($request);
+        $validated['is_expense_add'] = in_array($request->input('is_expense_add'), [1, '1', 'yes', 'true', true], true);
 
         $subcategory->update($validated);
 
@@ -253,7 +260,7 @@ class AccountSupportMasterController extends Controller
     {
         $subcategories = $category->activeSubcategories()
             ->orderBy('name')
-            ->get(['id', 'name', 'code', 'account_support_category_id', 'hierarchy']);
+            ->get(['id', 'name', 'code', 'account_support_category_id', 'hierarchy', 'is_expense_add']);
 
         return response()->json([
             'status' => true,

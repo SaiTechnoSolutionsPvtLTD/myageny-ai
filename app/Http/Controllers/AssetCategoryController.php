@@ -29,6 +29,31 @@ class AssetCategoryController extends Controller
         return view('pages.settings.asset-category.index', compact('assetCategories'));
     }
 
+    public function getFields(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $name = trim((string) $request->query('name'));
+        $id = $request->query('id');
+
+        $category = null;
+        if ($id) {
+            $category = AssetCategory::find($id);
+        } elseif ($name !== '') {
+            $category = AssetCategory::where('name', $name)->first();
+        }
+
+        $fields = $category && is_array($category->custom_fields) ? $category->custom_fields : [];
+        if (is_string($fields)) {
+            $fields = json_decode($fields, true) ?: [];
+        }
+
+        return response()->json([
+            'success' => true,
+            'category_id' => $category?->id,
+            'category_name' => $category?->name,
+            'fields' => $fields,
+        ]);
+    }
+
     public function create(): View
     {
         return view('pages.settings.asset-category.create');

@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AccountExpense;
+use App\Models\AccountExpenseCategory;
+use App\Models\AccountExpenseSubcategory;
 use App\Models\AdAccountMaster;
 use App\Models\AdBudgetRequest;
 use App\Models\Branch;
@@ -342,6 +345,8 @@ class AdBudgetController extends Controller
                 'approved_at' => now(),
             ]);
 
+            $this->removeOrCancelAccountExpense($adBudgetRequest);
+
             $this->sendNotificationMail($adBudgetRequest, 'rejected');
 
             return redirect()->back()->with('success', 'Request rejected by Accounts Team.');
@@ -379,9 +384,224 @@ class AdBudgetController extends Controller
             'attachments'      => $uploadedPaths,
         ]);
 
+        // Automatically record this approved amount into Accounts Expense
+        $this->syncToAccountExpense($adBudgetRequest, auth()->user());
+
         $this->sendNotificationMail($adBudgetRequest, 'accounts_approved');
 
-        return redirect()->back()->with('success', 'Ad Budget Request approved and finalized by Accounts Team!');
+        return redirect()->back()->with('success', 'Ad Budget Request approved and recorded in Accounts Expense successfully!');
+    }
+
+    /**
+     * Automatically synchronize an approved Ad Budget Request into the Accounts Module (AccountExpense).
+     */
+    private function syncToAccountExpense(AdBudgetRequest $adBudgetRequest, ?User $user = null): ?AccountExpense
+    {
+        try {
+            $user = $user ?: auth()->user();
+            $companyId = $adBudgetRequest->company_id ?: ($adBudgetRequest->requester?->company_id ?: $user?->company_id);
+
+            // 1. Resolve or Create Category: "Ad Budget"
+            $categoryName = 'Ad Budget';
+            $accCategory = AccountExpenseCategory::withoutGlobalScopes()
+                ->where(function ($q) use ($companyId) {
+                    if ($companyId) {
+                        $q->where('company_id', $companyId)->orWhereNull('company_id');
+                    }
+                })
+                ->where(function ($q) {
+                    $q->whereRaw('LOWER(TRIM(name)) = ?', ['ad budget'])
+                      ->orWhereRaw('LOWER(TRIM(name)) = ?', ['advertising & marketing'])
+                      ->orWhereRaw('LOWER(TRIM(name)) = ?', ['advertising']);
+                })
+                ->first();
+
+            if (! $accCategory) {
+                $accCategory = AccountExpenseCategory::create([
+                    'company_id'  => $companyId,
+                    'name'        => $categoryName,
+                    'code'        => 'ADBD',
+                    'status'      => 'active',
+                    'description' => 'Auto-created category for Ad Budget requests',
+                    'created_by'  => $user?->id,
+                ]);
+            }
+
+            // 2. Resolve or Create Subcategory: e.g. "Meta Ads", "Google Ads", or Account Name
+            $adAccount = $adBudgetRequest->adAccount;
+            $subcategoryName = 'Digital Ads';
+            if ($adAccount) {
+                if (!empty($adAccount->platform)) {
+                    $subcategoryName = trim($adAccount->platform);
+                    if (!str_ends_with(strtolower($subcategoryName), 'ads')) {
+                        $subcategoryName .= ' Ads';
+                    }
+                } elseif (!empty($adAccount->account_name)) {
+                    $subcategoryName = trim($adAccount->account_name);
+                }
+            } elseif (!empty($adBudgetRequest->type)) {
+                $subcategoryName = ucfirst($adBudgetRequest->type) . ' Ad Spend';
+            }
+
+            $accSubcategory = AccountExpenseSubcategory::withoutGlobalScopes()
+                ->where('account_expense_category_id', $accCategory->id)
+                ->where(function ($q) use ($companyId) {
+                    if ($companyId) {
+                        $q->where('company_id', $companyId)->orWhereNull('company_id');
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($subcategoryName)])
+                ->first();
+
+            if (! $accSubcategory) {
+                $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $subcategoryName), 0, 4)) ?: 'ADSB';
+                $accSubcategory = AccountExpenseSubcategory::create([
+                    'company_id'                  => $companyId,
+                    'account_expense_category_id' => $accCategory->id,
+                    'name'                        => $subcategoryName,
+                    'code'                        => $code,
+                    'status'                      => 'active',
+                    'description'                 => 'Auto-created subcategory for Ad Budget platform: ' . $subcategoryName,
+                    'created_by'                  => $user?->id,
+                ]);
+            }
+
+            // 3. Format Attachments
+            $accAttachments = [];
+            if (!empty($adBudgetRequest->attachments) && is_array($adBudgetRequest->attachments)) {
+                foreach ($adBudgetRequest->attachments as $att) {
+                    $filePath = is_array($att) ? ($att['path'] ?? '') : (string) $att;
+                    if (empty($filePath)) {
+                        continue;
+                    }
+
+                    $cleanPath = ltrim($filePath, '/');
+                    if (!str_starts_with($cleanPath, 'storage/') && !str_starts_with($cleanPath, 'uploads/')) {
+                        $cleanPath = 'storage/' . $cleanPath;
+                    }
+
+                    $fullPath = public_path($cleanPath);
+                    $exists = file_exists($fullPath);
+                    $fileName = is_array($att) ? ($att['name'] ?? basename($cleanPath)) : basename($cleanPath);
+                    $fileSize = is_array($att) && isset($att['size']) ? $att['size'] : ($exists ? @filesize($fullPath) : null);
+                    $mime = $exists ? @mime_content_type($fullPath) : null;
+
+                    $accAttachments[] = [
+                        'path'      => $cleanPath,
+                        'name'      => $fileName,
+                        'size'      => $fileSize,
+                        'mime_type' => $mime,
+                    ];
+                }
+            }
+
+            // 4. Build Rich Remarks
+            $effectiveAmount = (float) $adBudgetRequest->approved_amount;
+            $effectiveDate = $adBudgetRequest->payment_date
+                ? Carbon::parse($adBudgetRequest->payment_date)->toDateString()
+                : now()->toDateString();
+
+            $remarksLines = [];
+            $remarksLines[] = "[Ad Budget Request #{$adBudgetRequest->id}]";
+            $remarksLines[] = "Requester: " . ($adBudgetRequest->requester?->name ?? 'User') . ($adBudgetRequest->requester?->email ? " ({$adBudgetRequest->requester->email})" : '');
+            $remarksLines[] = "Type: " . ucfirst($adBudgetRequest->type ?? 'client');
+            if (!empty($adBudgetRequest->client_name)) {
+                $remarksLines[] = "Client: " . $adBudgetRequest->client_name;
+            }
+            if ($adAccount) {
+                $accountInfo = $adAccount->account_name;
+                if ($adAccount->account_id) {
+                    $accountInfo .= " ({$adAccount->account_id})";
+                }
+                if ($adAccount->platform) {
+                    $accountInfo .= " - " . $adAccount->platform;
+                }
+                $remarksLines[] = "Ad Account: " . $accountInfo;
+            }
+            if (!empty($adBudgetRequest->number_of_days)) {
+                $remarksLines[] = "Duration: " . $adBudgetRequest->number_of_days . " day(s)";
+            }
+            if (!empty($adBudgetRequest->remarks)) {
+                $remarksLines[] = "Request Notes: " . trim($adBudgetRequest->remarks);
+            }
+            if (!empty($adBudgetRequest->tl_remarks)) {
+                $remarksLines[] = "TL Remarks: " . trim($adBudgetRequest->tl_remarks);
+            }
+            if (!empty($adBudgetRequest->accounts_remarks)) {
+                $remarksLines[] = "Accounts Remarks: " . trim($adBudgetRequest->accounts_remarks);
+            }
+            $remarksLines[] = "Approved By: " . ($user?->name ?? 'Accounts Team') . " on " . now()->format('d M Y, h:i A');
+            $remarksLines[] = "Approved Amount: ₹" . number_format($effectiveAmount, 2);
+
+            $finalRemarks = implode("\n", $remarksLines);
+            $invoiceRef = "AD-BUDGET-{$adBudgetRequest->id}";
+
+            // 5. Check existing AccountExpense to update or create
+            $accountExpense = AccountExpense::withoutGlobalScopes()
+                ->where(function ($q) use ($invoiceRef, $adBudgetRequest) {
+                    $q->where('invoice_no', $invoiceRef)
+                      ->orWhere('remarks', 'like', "%[Ad Budget Request #{$adBudgetRequest->id}]%");
+                })
+                ->first();
+
+            if ($accountExpense) {
+                $accountExpense->update([
+                    'company_id'                     => $companyId,
+                    'expense_date'                   => $effectiveDate,
+                    'account_expense_category_id'    => $accCategory->id,
+                    'account_expense_subcategory_id' => $accSubcategory?->id,
+                    'amount'                         => $effectiveAmount,
+                    'expense_type'                   => 'Variable',
+                    'remarks'                        => $finalRemarks,
+                    'attachments'                    => !empty($accAttachments) ? $accAttachments : $accountExpense->attachments,
+                    'updated_by'                     => $user?->id,
+                ]);
+            } else {
+                $accountExpense = AccountExpense::create([
+                    'company_id'                     => $companyId,
+                    'expense_date'                   => $effectiveDate,
+                    'account_expense_category_id'    => $accCategory->id,
+                    'account_expense_subcategory_id' => $accSubcategory?->id,
+                    'amount'                         => $effectiveAmount,
+                    'expense_type'                   => 'Variable',
+                    'is_recurring'                   => false,
+                    'invoice_no'                     => $invoiceRef,
+                    'remarks'                        => $finalRemarks,
+                    'attachments'                    => $accAttachments,
+                    'created_by'                     => $user?->id,
+                    'updated_by'                     => $user?->id,
+                ]);
+            }
+
+            return $accountExpense;
+        } catch (\Throwable $e) {
+            Log::error("Failed to sync AdBudgetRequest #{$adBudgetRequest->id} to AccountExpense: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Remove or cancel synchronized AccountExpense if request is rejected or cancelled.
+     */
+    private function removeOrCancelAccountExpense(AdBudgetRequest $adBudgetRequest): void
+    {
+        try {
+            $invoiceRef = "AD-BUDGET-{$adBudgetRequest->id}";
+            $accountExpense = AccountExpense::withoutGlobalScopes()
+                ->where(function ($q) use ($invoiceRef, $adBudgetRequest) {
+                    $q->where('invoice_no', $invoiceRef)
+                      ->orWhere('remarks', 'like', "%[Ad Budget Request #{$adBudgetRequest->id}]%");
+                })
+                ->first();
+
+            if ($accountExpense) {
+                $accountExpense->delete();
+            }
+        } catch (\Throwable $e) {
+            Log::error("Failed to remove AccountExpense for AdBudgetRequest #{$adBudgetRequest->id}: " . $e->getMessage());
+        }
     }
 
     /**

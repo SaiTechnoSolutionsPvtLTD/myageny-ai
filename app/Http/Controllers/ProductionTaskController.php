@@ -193,11 +193,12 @@ class ProductionTaskController extends Controller
 
         $supportTaskProjects = ProductionInitiation::query()
             ->with(['lead:id,company_name,contact_name', 'leadProduct:id,product_name', 'department:id,name'])
-            ->whereIn('production_approval_status', ['approval', 'approved'])
-            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
-            ->when($userDeptId && !$isAdminLike, function ($q) use ($userDeptId) {
-                $q->where('department_id', $userDeptId);
+            ->where(function ($q) {
+                $q->whereIn('production_approval_status', ['approval', 'approved'])
+                  ->orWhereNull('production_approval_status')
+                  ->orWhere('production_approval_status', '');
             })
+            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
             ->whereRaw("LOWER(COALESCE(product_name, '')) NOT IN ('other tasks', 'other task')")
             ->whereRaw("LOWER(COALESCE(company_name, '')) NOT IN ('other tasks', 'other task')")
             ->latest('id')
@@ -210,7 +211,9 @@ class ProductionTaskController extends Controller
                 $proj->department_name = $proj->department?->name ?? 'General / Other';
                 $proj->resolved_department_id = (int) ($proj->department_id ?? 0);
                 return $proj;
-            });
+            })
+            ->sortBy('resolved_company_name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
 
         $supportTaskTeamMembers = $this->getSupportTaskTeamMembers($user);
 

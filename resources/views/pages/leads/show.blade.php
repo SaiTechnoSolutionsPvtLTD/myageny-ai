@@ -1274,7 +1274,7 @@ tbody tr:last-child td { border-bottom: none; }
                         <td>{{ $q->approver->name ?? '—' }}</td>  --}}
                         <td>
                             <div class="action-btns">
-                                <a href="/quotations/{{ $q->id }}/pdf" class="btn-outline-sm">
+                                <a href="{{ route('quotations.show', $q) }}" class="btn-outline-sm">
                                     <i class="bi bi-eye"></i> View
                                 </a>
                                 @if(!$q->is_approved)

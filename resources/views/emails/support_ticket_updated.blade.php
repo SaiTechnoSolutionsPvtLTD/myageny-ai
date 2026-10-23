@@ -39,6 +39,14 @@
                         </span>
                     </td>
                 </tr>
+                @if($ticket->payment_amount !== null && (float)$ticket->payment_amount > 0)
+                <tr>
+                    <td style="padding:9px 0;color:#666;border-bottom:1px solid #f0eef2;vertical-align:top;">Payment Amount</td>
+                    <td style="padding:9px 0;border-bottom:1px solid #f0eef2;">
+                        <strong style="color:#059669;font-size:15px;">₹{{ number_format((float)$ticket->payment_amount, 2) }}</strong>
+                    </td>
+                </tr>
+                @endif
             </table>
 
             @if($ticket->remark)

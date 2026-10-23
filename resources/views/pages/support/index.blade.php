@@ -4,52 +4,144 @@
 
 @push('styles')
 <style>
-.support-page {
+/* ── Corporate Page Layout & Topbar ── */
+.sup-page {
+    display: flex;
+    flex-direction: column;
     min-height: 100%;
-    padding: 28px;
-    background:
-        radial-gradient(circle at top left, rgba(254, 95, 4, 0.08), transparent 35%),
-        linear-gradient(180deg, #f8f6f2 0%, #f3f5f8 100%);
+    background: #f4f5f7;
+    font-family: 'Inter', sans-serif;
 }
-.support-hero {
+.sup-topbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 20px;
-    margin-bottom: 28px;
-    padding: 28px;
-    border: 1px solid #e6e8ee;
-    border-radius: 22px;
-    background: linear-gradient(135deg, #fff9f3 0%, #ffffff 55%, #f7f9fc 100%);
-    box-shadow: 0 14px 40px rgba(15, 23, 42, 0.04);
+    gap: 16px;
+    padding: 0 28px;
+    min-height: 60px;
+    background: #fff;
+    border-bottom: 1px solid #e1dee3;
+    position: sticky;
+    top: 0;
+    z-index: 30;
 }
-.support-kicker {
-    display: inline-flex;
+.sup-topbar-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.sup-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #121212;
+    display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 12px;
-    border-radius: 999px;
-    background: #fff1e8;
-    color: #c2410c;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: .7px;
-    text-transform: uppercase;
-    margin-bottom: 12px;
+    line-height: 1.2;
 }
-.support-title {
-    margin: 0;
-    font-size: 30px;
-    font-weight: 800;
-    line-height: 1.1;
-    color: #111827;
+.sup-breadcrumbs {
+    font-size: 12px;
+    color: #9e9e9e;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
 }
-.support-subtitle {
-    margin: 10px 0 0;
-    max-width: 640px;
-    font-size: 14px;
-    line-height: 1.7;
-    color: #6b7280;
+.sup-breadcrumbs a {
+    color: #9e9e9e;
+    text-decoration: none;
+    transition: color .15s;
+}
+.sup-breadcrumbs a:hover {
+    color: #fe5f04;
+}
+.sup-breadcrumbs .sep {
+    color: #ccc;
+}
+.sup-breadcrumbs .current {
+    color: #424242;
+    font-weight: 600;
+}
+.sup-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.sup-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    transition: all .15s;
+    border: none;
+}
+.sup-btn-primary {
+    background: linear-gradient(135deg, #fe5f04, #ff7c30);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(254, 95, 4, 0.25);
+}
+.sup-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(254, 95, 4, 0.35);
+    color: #fff;
+}
+.sup-btn-outline {
+    background: #fff;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+}
+.sup-btn-outline:hover {
+    border-color: #fe5f04;
+    color: #fe5f04;
+}
+.sup-body {
+    padding: 22px 28px 34px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    flex: 1;
+}
+@media (max-width: 900px) {
+    .sup-topbar {
+        padding: 14px 20px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        min-height: auto;
+    }
+    .sup-body {
+        padding: 16px 20px 24px;
+    }
+}
+.sup-alert {
+    padding: 12px 18px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.sup-alert-success {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #065f46;
+}
+.sup-alert-danger {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+}
+
+.support-page {
+    min-height: 100%;
 }
 .btn-create-ticket {
     display: inline-flex;
@@ -58,17 +150,19 @@
     background: linear-gradient(135deg, #fe5f04 0%, #ff8c3a 100%);
     color: #ffffff;
     font-weight: 700;
-    font-size: 14px;
-    padding: 12px 20px;
-    border-radius: 14px;
-    box-shadow: 0 10px 20px rgba(254, 95, 4, 0.2);
+    font-size: 13px;
+    padding: 8px 18px;
+    border-radius: 9px;
+    box-shadow: 0 4px 14px rgba(254, 95, 4, 0.25);
     border: none;
     cursor: pointer;
+    text-decoration: none;
     transition: all 0.2s ease;
 }
 .btn-create-ticket:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 24px rgba(254, 95, 4, 0.25);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(254, 95, 4, 0.35);
+    color: #ffffff;
 }
 
 /* Tabs */
@@ -97,6 +191,131 @@
 .tab-btn.active {
     color: #fe5f04;
     border-bottom-color: #fe5f04;
+}
+
+/* Filter Card & Form */
+.support-filter-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.03);
+}
+.support-filter-form {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+.support-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.support-filter-label {
+    font-size: 12px;
+    font-weight: 800;
+    color: #4b5563;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+.support-filter-select {
+    padding: 9px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1f2937;
+    background: #ffffff;
+    outline: none;
+    min-width: 180px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.support-filter-select:focus {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12);
+}
+.support-filter-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 8px 14px;
+    flex: 1;
+    min-width: 200px;
+    transition: all 0.2s ease;
+}
+.support-filter-search:focus-within {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12);
+}
+.support-filter-search input {
+    border: none;
+    outline: none;
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+    width: 100%;
+    background: transparent;
+}
+.btn-filter-apply {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    background: #fe5f04;
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+.btn-filter-apply:hover {
+    background: #ea580c;
+    box-shadow: 0 4px 10px rgba(254, 95, 4, 0.2);
+}
+.btn-filter-reset {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    background: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #e5e7eb;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+.btn-filter-reset:hover {
+    background: #e5e7eb;
+    color: #111827;
+}
+@media (max-width: 768px) {
+    .support-filter-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .support-filter-group {
+        width: 100%;
+    }
+    .support-filter-select {
+        width: 100%;
+        min-width: 100%;
+    }
+    .support-filter-search {
+        width: 100%;
+    }
 }
 .tab-panel {
     display: none;
@@ -576,37 +795,45 @@
 @endpush
 
 @section('content')
-<div class="support-page">
-    @if(session('success'))
-        <div class="alert-success">
-            {{ session('success') }}
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="alert-error" style="background-color: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 14px 20px; border-radius: 12px; margin-bottom: 24px; font-size: 14px; font-weight: 600;">
-            {{ session('error') }}
-        </div>
-    @endif
-
-    <div class="support-hero">
-        <div>
-            <div class="support-kicker">
-                <i class="bi bi-chat-left-text-fill"></i> Helpdesk Portal
+<div class="sup-page">
+    {{-- Sticky Corporate Topbar --}}
+    <div class="sup-topbar">
+        <div class="sup-topbar-left">
+            <div class="sup-title">
+                <i class="bi bi-headset" style="color: #fe5f04;"></i>
+                <span>Support Tickets</span>
             </div>
-            <h2 class="support-title">Support Tickets</h2>
-            <p class="support-subtitle">
-                @if($isCompanyAdmin)
-                    Company Administration Portal: Monitor, manage and resolve all internal support tickets across all employees.
-                @else
-                    Create internal support tickets, collaborate with members, and manage incoming ticket updates.
-                @endif
-            </p>
+            <div class="sup-breadcrumbs">
+                <a href="{{ route('dashboard') }}">Dashboard</a>
+                <span class="sep">/</span>
+                <span class="current">Support &amp; Helpdesk</span>
+            </div>
         </div>
-
-        <a href="{{ route('support.create') }}" class="btn-create-ticket" style="text-decoration: none;">
-            <i class="bi bi-plus-lg"></i> Create Support Ticket
-        </a>
+        <div class="sup-topbar-actions">
+            @if(request()->hasAny(['category_id', 'subcategory_id', 'search']))
+                <a href="{{ route('support.index') }}" class="sup-btn sup-btn-outline" title="Reset all active filters">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset Filters
+                </a>
+            @endif
+            <a href="{{ route('support.create') }}" class="sup-btn sup-btn-primary">
+                <i class="bi bi-plus-lg"></i> Create Support Ticket
+            </a>
+        </div>
     </div>
+
+    <div class="sup-body">
+        @if(session('success'))
+            <div class="sup-alert sup-alert-success">
+                <i class="bi bi-check-circle-fill"></i>
+                <div>{{ session('success') }}</div>
+            </div>
+        @endif
+        @if(session('error'))
+            <div class="sup-alert sup-alert-danger">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <div>{{ session('error') }}</div>
+            </div>
+        @endif
 
     {{-- Active Tab Resolution --}}
     @php
@@ -672,7 +899,74 @@
         </div>
     </div>
 
-    <!-- Tabs Toolbar & Search -->
+    {{-- Filter Bar: Category & Subcategory Filter --}}
+    <div class="support-filter-card">
+        <form method="GET" action="{{ route('support.index') }}" class="support-filter-form" id="supportFilterForm">
+            <div class="support-filter-group">
+                <i class="bi bi-funnel-fill" style="color: #fe5f04; font-size: 15px;"></i>
+                <span class="support-filter-label">Filter:</span>
+            </div>
+
+            <div class="support-filter-group" style="flex: 1; min-width: 190px;">
+                <select name="category_id" id="filterCategoryId" class="support-filter-select no-select2" data-no-select2="true" style="width: 100%;">
+                    <option value="">All Categories</option>
+                    @foreach($categories as $cat)
+                        <option value="{{ $cat->id }}" {{ (string) request('category_id') === (string) $cat->id ? 'selected' : '' }}>
+                            {{ $cat->name }} {{ $cat->code ? "({$cat->code})" : '' }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="support-filter-group" style="flex: 1; min-width: 190px;">
+                <select name="subcategory_id" id="filterSubcategoryId" class="support-filter-select no-select2" data-no-select2="true" style="width: 100%;">
+                    <option value="">All Subcategories</option>
+                    @if(request('category_id'))
+                        @php
+                            $currentCat = $categories->firstWhere('id', request('category_id'));
+                        @endphp
+                        @if($currentCat)
+                            @foreach($currentCat->activeSubcategories as $subcat)
+                                <option value="{{ $subcat->id }}" data-category-id="{{ $currentCat->id }}" {{ (string) request('subcategory_id') === (string) $subcat->id ? 'selected' : '' }}>
+                                    {{ $subcat->name }} {{ $subcat->code ? "({$subcat->code})" : '' }}
+                                </option>
+                            @endforeach
+                        @endif
+                    @else
+                        @foreach($categories as $cat)
+                            @if($cat->activeSubcategories && $cat->activeSubcategories->count() > 0)
+                                <optgroup label="{{ $cat->name }}">
+                                    @foreach($cat->activeSubcategories as $subcat)
+                                        <option value="{{ $subcat->id }}" data-category-id="{{ $cat->id }}" {{ (string) request('subcategory_id') === (string) $subcat->id ? 'selected' : '' }}>
+                                            {{ $subcat->name }} {{ $subcat->code ? "({$subcat->code})" : '' }}
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                            @endif
+                        @endforeach
+                    @endif
+                </select>
+            </div>
+
+            <div class="support-filter-search">
+                <i class="bi bi-search" style="color: #9ca3af; font-size: 13px;"></i>
+                <input type="text" name="search" id="ticketSearchInput" value="{{ request('search') }}" placeholder="Search tickets, subject, remark, user..." onkeyup="filterSupportTickets(this.value)">
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button type="submit" class="btn-filter-apply">
+                    <i class="bi bi-funnel"></i> Apply
+                </button>
+                @if(request()->hasAny(['category_id', 'subcategory_id', 'search']))
+                    <a href="{{ route('support.index') }}" class="btn-filter-reset">
+                        <i class="bi bi-x-circle"></i> Reset
+                    </a>
+                @endif
+            </div>
+        </form>
+    </div>
+
+    <!-- Tabs Toolbar -->
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 22px;">
         <div class="tabs-container" style="margin-bottom: 0;">
             @if($isCompanyAdmin)
@@ -693,12 +987,6 @@
                     <i class="bi bi-send-fill"></i> Created Tickets ({{ $createdTickets->total() }})
                 </button>
             @endif
-        </div>
-
-        <div style="display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid #d1d5db; border-radius: 12px; padding: 8px 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
-            <i class="bi bi-search" style="color: #9ca3af; font-size: 13px;"></i>
-            <input type="text" id="ticketSearchInput" onkeyup="filterSupportTickets(this.value)" placeholder="Search tickets, from, to..." 
-                   style="border: none; outline: none; font-size: 13px; font-weight: 600; color: #111827; width: 220px; background: transparent;">
         </div>
     </div>
 
@@ -723,7 +1011,9 @@
                         </thead>
                         <tbody>
                             @forelse($allTickets as $ticket)
-                                <tr data-status="{{ strtolower(trim($ticket->status)) }}">
+                                <tr data-status="{{ strtolower(trim($ticket->status)) }}"
+                                    data-category-id="{{ $ticket->account_support_category_id ?? '' }}"
+                                    data-subcategory-id="{{ $ticket->account_support_subcategory_id ?? '' }}">
                                     <td><strong>#{{ $ticket->id }}</strong></td>
                                 <td>
                                     <div>
@@ -738,12 +1028,15 @@
                                            data-attachment="{{ $ticket->attachment_url ?? '' }}"
                                            data-category="{{ $ticket->category?->name ?? '' }}"
                                            data-subcategory="{{ $ticket->subcategory?->name ?? '' }}"
+                                           data-is-expense="{{ $ticket->subcategory?->is_expense_add ? '1' : '0' }}"
+                                           data-payment-amount="{{ $ticket->payment_amount ? number_format((float)$ticket->payment_amount, 2, '.', '') : '' }}"
+                                           data-resolution-attachment="{{ $ticket->resolution_attachment_url ?? '' }}"
                                            style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                             {{ $ticket->subject }}
                                         </a>
                                     </div>
                                     <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
-                                    @if($ticket->category || $ticket->subcategory)
+                                    @if($ticket->category || $ticket->subcategory || $ticket->payment_amount)
                                         <div style="display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap;">
                                             @if($ticket->category)
                                                 <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
@@ -753,6 +1046,16 @@
                                             @if($ticket->subcategory)
                                                 <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #fff1e8; color: #c2410c; border: 1px solid #fed7aa;">
                                                     <i class="bi bi-tag-fill" style="font-size: 10px;"></i> {{ $ticket->subcategory->name }}
+                                                </span>
+                                            @endif
+                                            @if($ticket->subcategory?->is_expense_add)
+                                                <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;" title="Expense Settlement Required on Close/Resolve">
+                                                    <i class="bi bi-cash-coin" style="font-size: 10px;"></i> Expense
+                                                </span>
+                                            @endif
+                                            @if($ticket->payment_amount !== null && (float)$ticket->payment_amount > 0)
+                                                <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;" title="Settled Payment Amount">
+                                                    <i class="bi bi-currency-rupee" style="font-size: 10px;"></i> {{ number_format((float)$ticket->payment_amount, 2) }}
                                                 </span>
                                             @endif
                                         </div>
@@ -814,6 +1117,13 @@
                                     @else
                                         <span class="text-gray">-</span>
                                     @endif
+                                    @if($ticket->resolution_attachment_path)
+                                        <div style="margin-top: 4px;">
+                                            <a href="{{ $ticket->resolution_attachment_url }}" target="_blank" style="color: #059669; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" title="Payment Receipt / Resolution Invoice">
+                                                <i class="bi bi-receipt"></i> Receipt
+                                            </a>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td style="text-align: center;">
                                     @if($ticket->status === 'closed')
@@ -822,7 +1132,7 @@
                                         </button>
                                     @else
                                         <button type="button" class="btn-update-status" 
-                                                onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}')">
+                                                onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}', {{ $ticket->subcategory?->is_expense_add ? 'true' : 'false' }}, '{{ $ticket->payment_amount ?? '' }}', '{{ addslashes($ticket->subcategory?->name ?? '') }}', '{{ $ticket->resolution_attachment_url ?? '' }}')">
                                             <i class="bi bi-pencil-square"></i> Update Status
                                         </button>
                                     @endif
@@ -874,7 +1184,9 @@
                     </thead>
                     <tbody>
                         @forelse($receivedTickets as $ticket)
-                            <tr data-status="{{ strtolower(trim($ticket->status)) }}">
+                            <tr data-status="{{ strtolower(trim($ticket->status)) }}"
+                                data-category-id="{{ $ticket->account_support_category_id ?? '' }}"
+                                data-subcategory-id="{{ $ticket->account_support_subcategory_id ?? '' }}">
                                 <td><strong>#{{ $ticket->id }}</strong></td>
                             <td>
                                 <div>
@@ -889,12 +1201,15 @@
                                        data-attachment="{{ $ticket->attachment_url ?? '' }}"
                                        data-category="{{ $ticket->category?->name ?? '' }}"
                                        data-subcategory="{{ $ticket->subcategory?->name ?? '' }}"
+                                       data-is-expense="{{ $ticket->subcategory?->is_expense_add ? '1' : '0' }}"
+                                       data-payment-amount="{{ $ticket->payment_amount ? number_format((float)$ticket->payment_amount, 2, '.', '') : '' }}"
+                                       data-resolution-attachment="{{ $ticket->resolution_attachment_url ?? '' }}"
                                        style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                         {{ $ticket->subject }}
                                     </a>
                                 </div>
                                 <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
-                                @if($ticket->category || $ticket->subcategory)
+                                @if($ticket->category || $ticket->subcategory || $ticket->payment_amount)
                                     <div style="display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap;">
                                         @if($ticket->category)
                                             <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
@@ -904,6 +1219,16 @@
                                         @if($ticket->subcategory)
                                             <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #fff1e8; color: #c2410c; border: 1px solid #fed7aa;">
                                                 <i class="bi bi-tag-fill" style="font-size: 10px;"></i> {{ $ticket->subcategory->name }}
+                                            </span>
+                                        @endif
+                                        @if($ticket->subcategory?->is_expense_add)
+                                            <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;" title="Expense Settlement Required on Close/Resolve">
+                                                <i class="bi bi-cash-coin" style="font-size: 10px;"></i> Expense
+                                            </span>
+                                        @endif
+                                        @if($ticket->payment_amount !== null && (float)$ticket->payment_amount > 0)
+                                            <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;" title="Settled Payment Amount">
+                                                <i class="bi bi-currency-rupee" style="font-size: 10px;"></i> {{ number_format((float)$ticket->payment_amount, 2) }}
                                             </span>
                                         @endif
                                     </div>
@@ -965,6 +1290,13 @@
                                 @else
                                     <span class="text-gray">-</span>
                                 @endif
+                                @if($ticket->resolution_attachment_path)
+                                    <div style="margin-top: 4px;">
+                                        <a href="{{ $ticket->resolution_attachment_url }}" target="_blank" style="color: #059669; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" title="Payment Receipt / Resolution Invoice">
+                                            <i class="bi bi-receipt"></i> Receipt
+                                        </a>
+                                    </div>
+                                @endif
                             </td>
                             <td style="text-align: center;">
                                 @if($ticket->status === 'closed')
@@ -973,7 +1305,7 @@
                                     </button>
                                 @else
                                     <button type="button" class="btn-update-status" 
-                                            onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}')">
+                                            onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}', {{ $ticket->subcategory?->is_expense_add ? 'true' : 'false' }}, '{{ $ticket->payment_amount ?? '' }}', '{{ addslashes($ticket->subcategory?->name ?? '') }}', '{{ $ticket->resolution_attachment_url ?? '' }}')">
                                         <i class="bi bi-pencil-square"></i> Update Status
                                     </button>
                                 @endif
@@ -1023,7 +1355,9 @@
                     </thead>
                     <tbody>
                         @forelse($createdTickets as $ticket)
-                            <tr data-status="{{ strtolower(trim($ticket->status)) }}">
+                            <tr data-status="{{ strtolower(trim($ticket->status)) }}"
+                                data-category-id="{{ $ticket->account_support_category_id ?? '' }}"
+                                data-subcategory-id="{{ $ticket->account_support_subcategory_id ?? '' }}">
                                 <td><strong>#{{ $ticket->id }}</strong></td>
                             <td>
                                 <div>
@@ -1038,12 +1372,15 @@
                                        data-attachment="{{ $ticket->attachment_url ?? '' }}"
                                        data-category="{{ $ticket->category?->name ?? '' }}"
                                        data-subcategory="{{ $ticket->subcategory?->name ?? '' }}"
+                                       data-is-expense="{{ $ticket->subcategory?->is_expense_add ? '1' : '0' }}"
+                                       data-payment-amount="{{ $ticket->payment_amount ? number_format((float)$ticket->payment_amount, 2, '.', '') : '' }}"
+                                       data-resolution-attachment="{{ $ticket->resolution_attachment_url ?? '' }}"
                                        style="color: #111827; text-decoration: none; font-weight: 800; transition: color 0.15s ease;">
                                         {{ $ticket->subject }}
                                     </a>
                                 </div>
                                 <div class="ticket-message-preview">{!! strip_tags($ticket->message) !!}</div>
-                                @if($ticket->category || $ticket->subcategory)
+                                @if($ticket->category || $ticket->subcategory || $ticket->payment_amount)
                                     <div style="display: flex; align-items: center; gap: 6px; margin-top: 5px; flex-wrap: wrap;">
                                         @if($ticket->category)
                                             <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
@@ -1053,6 +1390,16 @@
                                         @if($ticket->subcategory)
                                             <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #fff1e8; color: #c2410c; border: 1px solid #fed7aa;">
                                                 <i class="bi bi-tag-fill" style="font-size: 10px;"></i> {{ $ticket->subcategory->name }}
+                                            </span>
+                                        @endif
+                                        @if($ticket->subcategory?->is_expense_add)
+                                            <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;" title="Expense Settlement Required on Close/Resolve">
+                                                <i class="bi bi-cash-coin" style="font-size: 10px;"></i> Expense
+                                            </span>
+                                        @endif
+                                        @if($ticket->payment_amount !== null && (float)$ticket->payment_amount > 0)
+                                            <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: #fef3c7; color: #b45309; border: 1px solid #fde68a;" title="Settled Payment Amount">
+                                                <i class="bi bi-currency-rupee" style="font-size: 10px;"></i> {{ number_format((float)$ticket->payment_amount, 2) }}
                                             </span>
                                         @endif
                                     </div>
@@ -1114,6 +1461,13 @@
                                 @else
                                     <span class="text-gray">-</span>
                                 @endif
+                                @if($ticket->resolution_attachment_path)
+                                    <div style="margin-top: 4px;">
+                                        <a href="{{ $ticket->resolution_attachment_url }}" target="_blank" style="color: #059669; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" title="Payment Receipt / Resolution Invoice">
+                                            <i class="bi bi-receipt"></i> Receipt
+                                        </a>
+                                    </div>
+                                @endif
                             </td>
                             <td style="text-align: center;">
                                 @if($isCompanyAdmin)
@@ -1123,7 +1477,7 @@
                                         </button>
                                     @else
                                         <button type="button" class="btn-update-status" 
-                                                onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}')">
+                                                onclick="openUpdateModal({{ $ticket->id }}, '{{ $ticket->status }}', '{{ addslashes($ticket->remark ?? '') }}', {{ $ticket->subcategory?->is_expense_add ? 'true' : 'false' }}, '{{ $ticket->payment_amount ?? '' }}', '{{ addslashes($ticket->subcategory?->name ?? '') }}', '{{ $ticket->resolution_attachment_url ?? '' }}')">
                                             <i class="bi bi-pencil-square"></i> Update Status
                                         </button>
                                     @endif
@@ -1154,6 +1508,7 @@
                 </div>
             @endif
         </div>
+    </div>
     </div>
 </div>
 
@@ -1204,16 +1559,27 @@
 <!-- UPDATE STATUS MODAL -->
 <div id="updateStatusModal" class="support-modal">
     <div class="support-modal-content">
-        <form id="updateStatusForm" method="POST" action="">
+        <form id="updateStatusForm" method="POST" action="" enctype="multipart/form-data">
             @csrf
             <div class="support-modal-header">
                 <h3 class="support-modal-title">Update Ticket Status & Remarks</h3>
                 <button type="button" class="support-modal-close" onclick="closeUpdateModal()">&times;</button>
             </div>
             <div class="support-modal-body">
+                <!-- Subcategory Expense Notice (Dynamic) -->
+                <div id="ticket_is_expense_notice" style="display: none; margin-bottom: 16px; padding: 12px 16px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #065f46;">
+                        <i class="bi bi-wallet2" style="font-size: 16px; color: #059669;"></i>
+                        <span>Expense Subcategory: <span id="ticket_notice_subcategory"></span></span>
+                    </div>
+                    <div style="font-size: 12px; color: #047857; margin-top: 4px; line-height: 1.4;">
+                        Resolving or closing this ticket requires Payment Amount, Remarks, and an optional/required receipt attachment. It will automatically synchronize into Accounts Expenses.
+                    </div>
+                </div>
+
                 <div class="form-group">
-                    <label for="ticket_status">Status</label>
-                    <select name="status" id="ticket_status" class="form-control" required>
+                    <label for="ticket_status">Status <span class="required-star">*</span></label>
+                    <select name="status" id="ticket_status" class="form-control" required onchange="handleStatusChange()">
                         <option value="pending">Pending</option>
                         <option value="onprocess">On Process</option>
                         <option value="resolved">Resolved</option>
@@ -1221,9 +1587,37 @@
                     </select>
                 </div>
 
+                <!-- Dynamic Expense Fields (shown when is_expense_add is true AND status is resolved or closed) -->
+                <div id="expenseFieldsGroup" style="display: none; background: #fafafa; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 18px;">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
+                        <i class="bi bi-cash-stack" style="color: #fe5f04;"></i> Expense Settlement Details
+                    </div>
+
+                    <div class="form-group">
+                        <label for="ticket_payment_amount">Payment Amount (₹) <span class="required-star">*</span></label>
+                        <div style="position: relative;">
+                            <span style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-weight: 700; color: #6b7280;">₹</span>
+                            <input type="number" step="0.01" min="0" name="payment_amount" id="ticket_payment_amount" class="form-control" style="padding-left: 32px;" placeholder="0.00">
+                        </div>
+                        <small class="form-text text-muted" style="font-size: 11px; color: #64748b; margin-top: 4px; display: block;">Enter the total amount spent/paid for this ticket (e.g. Domain purchase price).</small>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="ticket_resolution_attachment">Attachments (Invoice / Receipt / Bill)</label>
+                        <input type="file" name="resolution_attachment" id="ticket_resolution_attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                        <div id="ticket_existing_attachment_wrap" style="display: none; margin-top: 6px; font-size: 12px;">
+                            <span style="color: #4b5563;">Current Attachment: </span>
+                            <a id="ticket_existing_attachment_link" href="#" target="_blank" style="color: #fe5f04; font-weight: 700; text-decoration: none;">
+                                <i class="bi bi-file-earmark-check"></i> View Existing Receipt
+                            </a>
+                        </div>
+                        <small class="form-text text-muted" style="font-size: 11px; color: #64748b; margin-top: 4px; display: block;">Upload invoice, payment slip, or domain purchase receipt (PDF, JPG, PNG up to 25MB).</small>
+                    </div>
+                </div>
+
                 <div class="form-group" style="margin-bottom: 0;">
-                    <label for="ticket_remark">Remark / Update Message</label>
-                    <textarea name="remark" id="ticket_remark" class="form-control" rows="5" placeholder="Enter details about status resolution, notes, or messages for the creator..."></textarea>
+                    <label for="ticket_remark">Remark / Update Message <span id="remark_required_star" class="required-star" style="display: none;">*</span></label>
+                    <textarea name="remark" id="ticket_remark" class="form-control" rows="4" placeholder="Enter details about status resolution, notes, or messages for the creator..."></textarea>
                 </div>
             </div>
             <div class="support-modal-footer">
@@ -1262,6 +1656,14 @@
                 <span id="vt_subcategory_badge" style="display: none; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; background: #fff1e8; color: #c2410c; border: 1px solid #fed7aa;">
                     <i class="bi bi-tag-fill"></i> <span id="vt_subcategory_text"></span>
                 </span>
+                <span id="vt_expense_badge" style="display: none; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;">
+                    <i class="bi bi-cash-coin"></i> Expense Ticket
+                </span>
+            </div>
+
+            <div id="vt_payment_section" style="display: none; margin-bottom: 20px; background: #ecfdf5; border-radius: 12px; padding: 14px 18px; border: 1px solid #a7f3d0;">
+                <div style="font-size: 11px; font-weight: 800; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Settled Payment Amount</div>
+                <div id="vt_payment_amount" style="font-size: 20px; font-weight: 800; color: #065f46; margin-top: 3px;">₹0.00</div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
@@ -1286,12 +1688,20 @@
             </div>
 
             <div style="margin-bottom: 24px;" id="vt_attachment_section">
-                <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px;">Attachment</div>
+                <div style="font-size: 11px; font-weight: 800; color: #4b5563; text-transform: uppercase; letter-spacing: 0.5px;">Ticket Attachment</div>
                 <div style="margin-top: 6px;">
                     <a id="vt_attachment_link" href="#" target="_blank" style="color: #fe5f04; font-weight: 700; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
                         <i class="bi bi-file-earmark-arrow-down" style="font-size: 18px;"></i> View Attached File
                     </a>
                     <span id="vt_no_attachment" class="text-gray" style="font-size: 14px; color: #9ca3af;">No attachment provided</span>
+                </div>
+                <div id="vt_resolution_attachment_section" style="display: none; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #e2e8f0;">
+                    <div style="font-size: 11px; font-weight: 800; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Payment / Resolution Attachment</div>
+                    <div style="margin-top: 6px;">
+                        <a id="vt_resolution_link" href="#" target="_blank" style="color: #059669; font-weight: 700; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                            <i class="bi bi-receipt" style="font-size: 18px;"></i> View Payment Receipt / Invoice
+                        </a>
+                    </div>
                 </div>
             </div>
 
@@ -1408,10 +1818,15 @@
         applySupportFilters();
     }
 
-    // Combined filter function for Search + KPI Card Status
+    // Combined filter function for Search + Category + Subcategory + KPI Card Status
     function applySupportFilters() {
         const searchInput = document.getElementById('ticketSearchInput');
         const q = (searchInput ? searchInput.value : '').toLowerCase().trim();
+        const categorySelect = document.getElementById('filterCategoryId');
+        const subcategorySelect = document.getElementById('filterSubcategoryId');
+        const selectedCatId = categorySelect ? categorySelect.value.trim() : '';
+        const selectedSubcatId = subcategorySelect ? subcategorySelect.value.trim() : '';
+
         const activePanel = document.querySelector('.tab-panel.active');
         if (!activePanel) return;
 
@@ -1423,6 +1838,8 @@
             if (row.querySelector('td[colspan]')) return;
 
             const rowStatus = (row.getAttribute('data-status') || '').toLowerCase().trim();
+            const rowCatId = (row.getAttribute('data-category-id') || '').trim();
+            const rowSubcatId = (row.getAttribute('data-subcategory-id') || '').trim();
             const rowText = row.textContent.toLowerCase();
 
             // Status filter check
@@ -1435,10 +1852,16 @@
                 matchesStatus = (rowStatus === currentCardStatusFilter);
             }
 
+            // Category filter check
+            let matchesCategory = (!selectedCatId || rowCatId === selectedCatId);
+
+            // Subcategory filter check
+            let matchesSubcategory = (!selectedSubcatId || rowSubcatId === selectedSubcatId);
+
             // Search query check
             let matchesSearch = (!q || rowText.includes(q));
 
-            if (matchesStatus && matchesSearch) {
+            if (matchesStatus && matchesCategory && matchesSubcategory && matchesSearch) {
                 row.style.display = '';
                 visibleCount++;
             } else {
@@ -1460,7 +1883,7 @@
                         <td colspan="9" style="text-align: center; padding: 40px 20px; color: #6b7280;">
                             <i class="bi bi-funnel" style="font-size: 32px; display: block; margin-bottom: 8px; color: #9ca3af;"></i>
                             <span style="font-weight: 700; font-size: 14px; color: #374151;">No tickets match the selected filter.</span>
-                            <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">Try selecting another card or clearing the search box.</div>
+                            <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">Try adjusting category, subcategory, or search filters.</div>
                         </td>
                     `;
                     tbody.appendChild(dynamicEmptyRow);
@@ -1470,6 +1893,68 @@
                 dynamicEmptyRow.style.display = 'none';
             }
         }
+    }
+
+    // Dynamic Subcategory population and filter trigger
+    const allCategoriesData = @json($categories ?? []);
+    const catSelect = document.getElementById('filterCategoryId');
+    const subcatSelect = document.getElementById('filterSubcategoryId');
+
+    function populateSubcategories(selectedCatId, preselectedSubcatId) {
+        if (!subcatSelect) return;
+        subcatSelect.innerHTML = '<option value="">All Subcategories</option>';
+
+        if (selectedCatId) {
+            const foundCat = allCategoriesData.find(c => String(c.id) === String(selectedCatId));
+            if (foundCat && foundCat.active_subcategories && foundCat.active_subcategories.length > 0) {
+                foundCat.active_subcategories.forEach(sub => {
+                    const opt = document.createElement('option');
+                    opt.value = sub.id;
+                    opt.textContent = sub.name + (sub.code ? ` (${sub.code})` : '');
+                    opt.setAttribute('data-category-id', foundCat.id);
+                    if (preselectedSubcatId && String(sub.id) === String(preselectedSubcatId)) {
+                        opt.selected = true;
+                    }
+                    subcatSelect.appendChild(opt);
+                });
+            }
+        } else {
+            // When all categories selected, show all subcategories grouped by category
+            allCategoriesData.forEach(cat => {
+                if (cat.active_subcategories && cat.active_subcategories.length > 0) {
+                    const grp = document.createElement('optgroup');
+                    grp.label = cat.name + (cat.code ? ` (${cat.code})` : '');
+                    cat.active_subcategories.forEach(sub => {
+                        const opt = document.createElement('option');
+                        opt.value = sub.id;
+                        opt.textContent = sub.name + (sub.code ? ` (${sub.code})` : '');
+                        opt.setAttribute('data-category-id', cat.id);
+                        if (preselectedSubcatId && String(sub.id) === String(preselectedSubcatId)) {
+                            opt.selected = true;
+                        }
+                        grp.appendChild(opt);
+                    });
+                    subcatSelect.appendChild(grp);
+                }
+            });
+        }
+    }
+
+    if (catSelect && subcatSelect) {
+        catSelect.addEventListener('change', function () {
+            populateSubcategories(this.value);
+            applySupportFilters();
+        });
+
+        subcatSelect.addEventListener('change', function () {
+            const selectedOpt = this.options[this.selectedIndex];
+            const parentCatId = selectedOpt ? selectedOpt.getAttribute('data-category-id') : null;
+            if (parentCatId && !catSelect.value) {
+                catSelect.value = parentCatId;
+                populateSubcategories(parentCatId, this.value);
+            }
+            applySupportFilters();
+        });
     }
 
     // Modal Control Logic
@@ -1507,7 +1992,9 @@
         modal.classList.remove('show');
     }
 
-    function openUpdateModal(ticketId, currentStatus, currentRemark) {
+    let currentTicketIsExpense = false;
+
+    function openUpdateModal(ticketId, currentStatus, currentRemark, isExpense = false, paymentAmount = '', subcategoryName = '', resolutionAttachmentUrl = '') {
         const modal = document.getElementById('updateStatusModal');
         const form = document.getElementById('updateStatusForm');
         
@@ -1516,9 +2003,60 @@
         
         // Pre-fill form fields
         document.getElementById('ticket_status').value = currentStatus;
-        document.getElementById('ticket_remark').value = currentRemark;
+        document.getElementById('ticket_remark').value = currentRemark || '';
+        
+        currentTicketIsExpense = Boolean(isExpense);
+
+        // Notice section
+        const noticeEl = document.getElementById('ticket_is_expense_notice');
+        const noticeSubcat = document.getElementById('ticket_notice_subcategory');
+        if (currentTicketIsExpense) {
+            noticeEl.style.display = 'block';
+            noticeSubcat.innerText = subcategoryName || 'Expense Applicable';
+        } else {
+            noticeEl.style.display = 'none';
+        }
+
+        // Payment Amount
+        const amountInput = document.getElementById('ticket_payment_amount');
+        amountInput.value = paymentAmount ? parseFloat(paymentAmount) : '';
+
+        // File / Attachment
+        const fileInput = document.getElementById('ticket_resolution_attachment');
+        if (fileInput) fileInput.value = '';
+        const existingAttachWrap = document.getElementById('ticket_existing_attachment_wrap');
+        const existingAttachLink = document.getElementById('ticket_existing_attachment_link');
+        if (resolutionAttachmentUrl) {
+            existingAttachWrap.style.display = 'block';
+            existingAttachLink.href = resolutionAttachmentUrl;
+        } else {
+            existingAttachWrap.style.display = 'none';
+        }
+
+        handleStatusChange();
         
         modal.classList.add('show');
+    }
+
+    function handleStatusChange() {
+        const status = document.getElementById('ticket_status').value;
+        const isClosingOrResolving = (status === 'resolved' || status === 'closed');
+        const expenseGroup = document.getElementById('expenseFieldsGroup');
+        const amountInput = document.getElementById('ticket_payment_amount');
+        const remarkInput = document.getElementById('ticket_remark');
+        const remarkStar = document.getElementById('remark_required_star');
+
+        if (currentTicketIsExpense && isClosingOrResolving) {
+            if (expenseGroup) expenseGroup.style.display = 'block';
+            if (amountInput) amountInput.required = true;
+            if (remarkInput) remarkInput.required = true;
+            if (remarkStar) remarkStar.style.display = 'inline';
+        } else {
+            if (expenseGroup) expenseGroup.style.display = 'none';
+            if (amountInput) amountInput.required = false;
+            if (remarkInput) remarkInput.required = false;
+            if (remarkStar) remarkStar.style.display = 'none';
+        }
     }
 
     function closeUpdateModal() {
@@ -1542,6 +2080,7 @@
         // Category & Subcategory Badges
         const catBadge = document.getElementById('vt_category_badge');
         const subBadge = document.getElementById('vt_subcategory_badge');
+        const expenseBadge = document.getElementById('vt_expense_badge');
         if (ticket.category) {
             document.getElementById('vt_category_text').innerText = ticket.category;
             catBadge.style.display = 'inline-flex';
@@ -1554,6 +2093,20 @@
         } else {
             subBadge.style.display = 'none';
         }
+        if (ticket.is_expense && ticket.is_expense !== '0') {
+            expenseBadge.style.display = 'inline-flex';
+        } else {
+            expenseBadge.style.display = 'none';
+        }
+
+        // Settled Payment Amount
+        const paymentSection = document.getElementById('vt_payment_section');
+        if (ticket.payment_amount && parseFloat(ticket.payment_amount) > 0) {
+            document.getElementById('vt_payment_amount').innerText = '₹' + parseFloat(ticket.payment_amount).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            paymentSection.style.display = 'block';
+        } else {
+            paymentSection.style.display = 'none';
+        }
 
         // Attachment section
         const attachmentLink = document.getElementById('vt_attachment_link');
@@ -1565,6 +2118,16 @@
         } else {
             attachmentLink.style.display = 'none';
             noAttachment.style.display = 'inline';
+        }
+
+        // Resolution attachment section
+        const resolutionSection = document.getElementById('vt_resolution_attachment_section');
+        const resolutionLink = document.getElementById('vt_resolution_link');
+        if (ticket.resolution_attachment) {
+            resolutionLink.href = ticket.resolution_attachment;
+            resolutionSection.style.display = 'block';
+        } else {
+            resolutionSection.style.display = 'none';
         }
 
         // Remarks section
@@ -1585,10 +2148,10 @@
     }
 
     function showConfirmModal() {
-        // Validate form fields are filled (status is required)
-        const statusField = document.getElementById('ticket_status');
-        if (!statusField.value) {
-            statusField.reportValidity();
+        // Validate form fields are filled (status is required, and payment amount/remark if expense ticket resolving/closing)
+        const updateForm = document.getElementById('updateStatusForm');
+        if (updateForm && !updateForm.checkValidity()) {
+            updateForm.reportValidity();
             return;
         }
         
@@ -1700,6 +2263,9 @@
                 const attachment = this.getAttribute('data-attachment');
                 const category = this.getAttribute('data-category');
                 const subcategory = this.getAttribute('data-subcategory');
+                const isExpense = this.getAttribute('data-is-expense');
+                const paymentAmount = this.getAttribute('data-payment-amount');
+                const resolutionAttachment = this.getAttribute('data-resolution-attachment');
                 const messageHtml = document.getElementById('ticket-msg-' + ticketId).innerHTML;
 
                 openViewModal({
@@ -1713,6 +2279,9 @@
                     attachment_path: attachment,
                     category: category,
                     subcategory: subcategory,
+                    is_expense: isExpense,
+                    payment_amount: paymentAmount,
+                    resolution_attachment: resolutionAttachment,
                     message: messageHtml
                 });
             });

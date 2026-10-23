@@ -161,7 +161,7 @@ tbody tr:last-child td { border-bottom: none; }
     @endif
 
     <div class="filter-card">
-        <form method="GET" action="{{ route('quotations.index') }}" class="filter-form">
+        <form method="GET" action="{{ url()->current() }}" class="filter-form">
             @if(request('lead_id'))
                 <input type="hidden" name="lead_id" value="{{ request('lead_id') }}">
             @endif
@@ -219,7 +219,7 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
 
             <button type="submit" class="btn-primary">Apply Filter</button>
-            <a href="{{ route('quotations.index', request()->filled('lead_id') ? ['lead_id' => request('lead_id')] : []) }}" class="btn-filter-reset">Reset</a>
+            <a href="{{ url()->current() . (request()->filled('lead_id') ? '?lead_id=' . request('lead_id') : '') }}" class="btn-filter-reset">Reset</a>
         </form>
     </div>
 
@@ -285,7 +285,7 @@ tbody tr:last-child td { border-bottom: none; }
                         {{--  <td>{{ $q->approver->name ?? '—' }}</td>  --}}
                         <td>
                             <div class="action-btns">
-                                <a href="/quotations/{{ $q->id }}/pdf" target="_blank" class="btn-outline-sm">
+                                <a href="{{ request()->routeIs('accounts.*') ? route('accounts.quotations.show', $q) : route('quotations.show', $q) }}" class="btn-outline-sm">
                                     <i class="bi bi-eye"></i> View
                                 </a>
                                 <a href="{{ route('quotations.edit', $q) }}" class="btn-outline-sm">

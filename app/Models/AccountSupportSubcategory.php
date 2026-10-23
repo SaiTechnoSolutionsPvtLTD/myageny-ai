@@ -20,11 +20,13 @@ class AccountSupportSubcategory extends Model
         'description',
         'status',
         'hierarchy',
+        'is_expense_add',
         'created_by',
     ];
 
     protected $casts = [
-        'hierarchy' => 'array',
+        'hierarchy'      => 'array',
+        'is_expense_add' => 'boolean',
     ];
 
     public function category()

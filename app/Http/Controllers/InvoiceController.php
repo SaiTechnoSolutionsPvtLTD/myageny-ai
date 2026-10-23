@@ -11,6 +11,7 @@ use App\Models\InvoicePayment;
 use App\Models\InvoiceSetting;
 use App\Models\ItemMaster;
 use App\Models\Lead;
+use App\Models\Quotation;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -175,6 +176,132 @@ class InvoiceController extends Controller
             ->take(80)
             ->get(['id', 'contact_name', 'company_name', 'mobile_number', 'email']);
 
+        // Prefill from Quotation if requested
+        $prefillQuotation     = null;
+        $prefillItems         = [];
+        $prefillCustomer      = null;
+        $prefillPlaceOfSupply = null;
+        $quotationId          = request('from_quotation_id', request('quotation_id'));
+
+        if ($quotationId) {
+            $prefillQuotation = Quotation::with(['lead', 'items.product'])->find($quotationId);
+            if ($prefillQuotation) {
+                $lead = $prefillQuotation->lead;
+                if ($lead) {
+                    $prefillCustomer = CustomerMaster::where('lead_id', $lead->id)->first();
+                    if (! $prefillCustomer && ! empty($lead->company_name)) {
+                        $prefillCustomer = CustomerMaster::where(function ($q) use ($companyId) {
+                            if ($companyId) {
+                                $q->where('company_id', $companyId)->orWhereNull('company_id');
+                            }
+                        })
+                        ->whereRaw('LOWER(TRIM(company_name)) = ?', [strtolower(trim($lead->company_name))])
+                        ->first();
+                    }
+
+                    if (! $prefillCustomer) {
+                        $custName = $lead->contact_name ?: ($lead->company_name ?: 'Valued Customer');
+                        $prefillCustomer = CustomerMaster::create([
+                            'company_id'                => $companyId,
+                            'lead_id'                   => $lead->id,
+                            'customer_name'             => $custName,
+                            'company_name'              => $lead->company_name ?: $custName,
+                            'mobile_number'             => $lead->mobile_number,
+                            'email'                     => $lead->email,
+                            'gst_number'                => $prefillQuotation->gst_number,
+                            'payment_terms'             => 'Due on Receipt',
+                            'billing_attention'         => $custName,
+                            'billing_country'           => 'India',
+                            'billing_address_street_1'  => $prefillQuotation->bill_to_address,
+                            'billing_state'             => $prefillQuotation->customer_state ?: 'Tamil Nadu',
+                            'shipping_attention'        => $custName,
+                            'shipping_country'          => 'India',
+                            'shipping_address_street_1' => $prefillQuotation->ship_to_address ?: $prefillQuotation->bill_to_address,
+                            'shipping_state'            => $prefillQuotation->customer_state ?: 'Tamil Nadu',
+                            'status'                    => 'active',
+                            'created_by'                => auth()->id(),
+                        ]);
+
+                        $customers = CustomerMaster::query()
+                            ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                            ->active()
+                            ->orderBy('customer_name')
+                            ->get();
+                    }
+                }
+
+                $cgstPct = (float) ($prefillQuotation->cgst_rate ?: 0);
+                $sgstPct = (float) ($prefillQuotation->sgst_rate ?: 0);
+                $igstPct = (float) ($prefillQuotation->igst_rate ?: 0);
+
+                foreach ($prefillQuotation->items as $idx => $qi) {
+                    $rate   = (float) $qi->unit_price;
+                    $qty    = (float) ($qi->qty ?: 1);
+                    $amount = (float) ($qi->total ?: ($rate * $qty));
+
+                    $productName = $qi->product?->product_name ?: ($qi->product?->package_name ?: ($qi->description ?: 'Product / Service'));
+
+                    // Look for existing ItemMaster or auto-create it so it appears in the Line Item dropdown
+                    $itemMaster = ItemMaster::where(function ($q) use ($companyId) {
+                        if ($companyId) {
+                            $q->where('company_id', $companyId)->orWhereNull('company_id');
+                        }
+                    })
+                    ->whereRaw('LOWER(TRIM(item_name)) = ?', [strtolower(trim($productName))])
+                    ->first();
+
+                    if (! $itemMaster) {
+                        $itemMaster = ItemMaster::create([
+                            'company_id'   => $companyId,
+                            'item_name'    => $productName,
+                            'description'  => $qi->description ?: ($qi->product?->description ?: null),
+                            'hsn_sac_code' => null,
+                            'rate'         => $rate,
+                            'gst'          => $cgstPct + $sgstPct + $igstPct,
+                            'status'       => 'active',
+                            'created_by'   => auth()->id(),
+                        ]);
+                    }
+
+                    $prefillItems[] = [
+                        'item_id'       => $itemMaster->id,
+                        'item_name'     => $productName,
+                        'description'   => $qi->description,
+                        'hsn_sac_code'  => $itemMaster->hsn_sac_code ?: '',
+                        'qty'           => $qty,
+                        'rate'          => $rate,
+                        'amount'        => $amount,
+                        'cgst_percent'  => $cgstPct,
+                        'cgst_amount'   => round(($amount * $cgstPct) / 100, 2),
+                        'sgst_percent'  => $sgstPct,
+                        'sgst_amount'   => round(($amount * $sgstPct) / 100, 2),
+                        'igst_percent'  => $igstPct,
+                        'igst_amount'   => round(($amount * $igstPct) / 100, 2),
+                    ];
+                }
+
+                // Refresh catalog items so newly created ItemMasters appear in JavaScript catalogItems
+                $items = ItemMaster::query()
+                    ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                    ->active()
+                    ->orderBy('item_name')
+                    ->get();
+
+                // Resolve Place of Supply from Quotation customer_state
+                $prefillPlaceOfSupply = '[33] Tamil Nadu';
+                if (! empty($prefillQuotation->customer_state)) {
+                    foreach (self::$indianStates as $codeName => $stateName) {
+                        if (strcasecmp($stateName, trim($prefillQuotation->customer_state)) === 0 || stripos($codeName, trim($prefillQuotation->customer_state)) !== false) {
+                            $prefillPlaceOfSupply = $codeName;
+                            break;
+                        }
+                    }
+                }
+
+                $defaultNotes = "Converted from Quotation #{$prefillQuotation->quotation_no}." . ($prefillQuotation->notes ? "\n" . $prefillQuotation->notes : '');
+            }
+        }
+
         return view('pages.accounts.sales.invoices.create', compact(
             'invoiceNumber',
             'setting',
@@ -184,7 +311,11 @@ class InvoiceController extends Controller
             'states',
             'defaultTerms',
             'defaultNotes',
-            'recentConvertedLeads'
+            'recentConvertedLeads',
+            'prefillQuotation',
+            'prefillItems',
+            'prefillCustomer',
+            'prefillPlaceOfSupply'
         ));
     }
 

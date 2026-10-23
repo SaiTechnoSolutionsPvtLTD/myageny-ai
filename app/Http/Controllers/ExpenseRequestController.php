@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AccountExpense;
+use App\Models\AccountExpenseCategory;
+use App\Models\AccountExpenseSubcategory;
 use App\Models\ExpenseCategory;
 use App\Models\ExpensePipeline;
 use App\Models\ExpenseRequest;
@@ -9,6 +12,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class ExpenseRequestController extends Controller
@@ -69,6 +73,18 @@ class ExpenseRequestController extends Controller
         $approvedCount = (clone $scopedQuery)->where('status', 'approved')->count();
         $rejectedCount = (clone $scopedQuery)->where('status', 'rejected')->count();
 
+        // Fetch Accounts Expense Categories for final approval mapping
+        $accountCategories = AccountExpenseCategory::withoutGlobalScopes()
+            ->when($user->company_id, function ($q) use ($user) {
+                $q->where(fn($sq) => $sq->where('company_id', $user->company_id)->orWhereNull('company_id'));
+            })
+            ->active()
+            ->with(['activeSubcategories' => function ($q) {
+                $q->orderBy('name');
+            }])
+            ->orderBy('name')
+            ->get();
+
         // Apply search and status filters for main paginated table
         $requests = $scopedQuery
             ->when($request->filled('status'), fn($q) => $q->where('status', $request->status))
@@ -89,6 +105,7 @@ class ExpenseRequestController extends Controller
         return view('pages.hrms.expense-requests.index', compact(
             'requests',
             'categories',
+            'accountCategories',
             'userRoleIds',
             'totalCount',
             'pendingCount',
@@ -348,6 +365,9 @@ class ExpenseRequestController extends Controller
         if ($isFinalStage) {
             $rules['paid_amount'] = 'required|numeric|min:0.01';
             $rules['paid_date']   = 'required|date';
+            $rules['account_expense_category_id'] = 'nullable|integer|exists:account_expense_categories,id';
+            $rules['account_expense_subcategory_id'] = 'nullable|integer|exists:account_expense_subcategories,id';
+            $rules['payment_receipt'] = 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx|max:25600';
             $messages['paid_amount.required'] = 'Payment Amount is mandatory for final approval.';
             $messages['paid_amount.numeric']  = 'Payment Amount must be a valid number.';
             $messages['paid_amount.min']      = 'Payment Amount must be greater than zero.';
@@ -360,6 +380,19 @@ class ExpenseRequestController extends Controller
         $remarks = trim($validated['remarks']);
         $paidAmount = $isFinalStage ? $validated['paid_amount'] : null;
         $paidDate = $isFinalStage ? $validated['paid_date'] : null;
+
+        // Handle optional payment voucher / receipt file upload on final approval
+        $receiptPath = null;
+        if ($isFinalStage && $request->hasFile('payment_receipt')) {
+            $file = $request->file('payment_receipt');
+            $filename = 'pay_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $targetDir = public_path('uploads/expense_receipts');
+            if (!file_exists($targetDir)) {
+                @mkdir($targetDir, 0755, true);
+            }
+            $file->move($targetDir, $filename);
+            $receiptPath = 'uploads/expense_receipts/' . $filename;
+        }
 
         $currentRoleId = $expenseRequest->current_approver_role_id ?: ($approvalChain[$currentStep - 1] ?? null);
         $currentRole = Role::withoutGlobalScopes()->find($currentRoleId);
@@ -381,6 +414,9 @@ class ExpenseRequestController extends Controller
         if ($isFinalStage) {
             $historyEntry['paid_amount'] = $paidAmount;
             $historyEntry['paid_date']   = $paidDate;
+            if ($receiptPath) {
+                $historyEntry['payment_receipt'] = $receiptPath;
+            }
         }
 
         $history[] = $historyEntry;
@@ -412,10 +448,22 @@ class ExpenseRequestController extends Controller
                 'actioned_at'   => now(),
             ]);
 
+            // Sync to Accounts Module Expense (Variable Expense with auto/selected category & subcategory)
+            $this->syncToAccountExpense(
+                $expenseRequest,
+                $user,
+                $remarks,
+                $paidAmount,
+                $paidDate,
+                $request->filled('account_expense_category_id') ? (int) $request->account_expense_category_id : null,
+                $request->filled('account_expense_subcategory_id') ? (int) $request->account_expense_subcategory_id : null,
+                $receiptPath
+            );
+
             // Notify applicant of final approval
             $this->sendApplicantStatusNotification($expenseRequest, 'approved', $remarks);
 
-            $msg = "Expense request fully approved with payment details saved!";
+            $msg = "Expense request fully approved, payment details saved, and recorded under Accounts Expenses (Variable)!";
         }
 
         return redirect()
@@ -597,6 +645,185 @@ class ExpenseRequestController extends Controller
             });
         } catch (\Throwable $e) {
             \Log::error('Expense applicant status email failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Automatically synchronize an approved HRMS Expense Request into the Accounts Module (AccountExpense).
+     */
+    private function syncToAccountExpense(
+        ExpenseRequest $expenseRequest,
+        User $approver,
+        string $approvalRemarks,
+        $paidAmount,
+        $paidDate,
+        ?int $selectedCategoryId = null,
+        ?int $selectedSubcategoryId = null,
+        ?string $receiptPath = null
+    ): ?AccountExpense {
+        try {
+            $companyId = $expenseRequest->company_id ?: ($expenseRequest->user?->company_id ?: $approver->company_id);
+            $applicant = $expenseRequest->user;
+            $applicantName = $applicant ? $applicant->name : 'Employee';
+            $applicantEmail = $applicant?->email;
+
+            // 1. Resolve Account Expense Category
+            $accCategory = null;
+            if ($selectedCategoryId) {
+                $accCategory = AccountExpenseCategory::withoutGlobalScopes()->find($selectedCategoryId);
+            }
+
+            if (! $accCategory) {
+                $categoryName = $expenseRequest->category ? trim($expenseRequest->category->name) : 'Reimbursement';
+                if (empty($categoryName)) {
+                    $categoryName = 'Employee Reimbursement';
+                }
+
+                $accCategory = AccountExpenseCategory::withoutGlobalScopes()
+                    ->where(function ($q) use ($companyId) {
+                        if ($companyId) {
+                            $q->where('company_id', $companyId)->orWhereNull('company_id');
+                        }
+                    })
+                    ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($categoryName)])
+                    ->first();
+
+                if (! $accCategory) {
+                    $code = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $categoryName), 0, 4));
+                    if (empty($code)) {
+                        $code = 'EXP';
+                    }
+
+                    $accCategory = AccountExpenseCategory::create([
+                        'company_id'  => $companyId,
+                        'name'        => $categoryName,
+                        'code'        => $code,
+                        'status'      => 'active',
+                        'description' => 'Auto-created from HRMS Expense Category: ' . $categoryName,
+                        'created_by'  => $approver->id,
+                    ]);
+                }
+            }
+
+            // 2. Resolve Account Expense Subcategory
+            $accSubcategory = null;
+            if ($selectedSubcategoryId) {
+                $accSubcategory = AccountExpenseSubcategory::withoutGlobalScopes()->find($selectedSubcategoryId);
+            }
+
+            if (! $accSubcategory) {
+                $accSubcategory = AccountExpenseSubcategory::withoutGlobalScopes()
+                    ->where('account_expense_category_id', $accCategory->id)
+                    ->where('status', 'active')
+                    ->first();
+
+                if (! $accSubcategory) {
+                    $accSubcategory = AccountExpenseSubcategory::create([
+                        'company_id'                  => $companyId,
+                        'account_expense_category_id' => $accCategory->id,
+                        'name'                        => 'General Reimbursement',
+                        'code'                        => 'REIMB',
+                        'status'                      => 'active',
+                        'description'                 => 'Auto-created subcategory for ' . $accCategory->name,
+                        'created_by'                  => $approver->id,
+                    ]);
+                }
+            }
+
+            // 3. Format Attachments (Approver payment receipt + applicant receipts)
+            $accAttachments = [];
+            if (!empty($receiptPath)) {
+                $cleanReceipt = ltrim($receiptPath, '/');
+                $fullReceipt = public_path($cleanReceipt);
+                $exists = file_exists($fullReceipt);
+                $accAttachments[] = [
+                    'path'      => $cleanReceipt,
+                    'name'      => basename($cleanReceipt),
+                    'size'      => $exists ? @filesize($fullReceipt) : null,
+                    'mime_type' => $exists ? @mime_content_type($fullReceipt) : null,
+                ];
+            }
+
+            if (!empty($expenseRequest->attachments_list)) {
+                foreach ($expenseRequest->attachments_list as $path) {
+                    if (empty($path)) {
+                        continue;
+                    }
+                    $cleanPath = ltrim($path, '/');
+                    $fullPath = public_path($cleanPath);
+                    $exists = file_exists($fullPath);
+                    $accAttachments[] = [
+                        'path'      => $cleanPath,
+                        'name'      => basename($cleanPath),
+                        'size'      => $exists ? @filesize($fullPath) : null,
+                        'mime_type' => $exists ? @mime_content_type($fullPath) : null,
+                    ];
+                }
+            }
+
+            // 4. Build rich remarks
+            $effectiveAmount = (float) ($paidAmount ?: ($expenseRequest->paid_amount ?: $expenseRequest->amount));
+            $effectiveDate = $paidDate ?: ($expenseRequest->paid_date ? $expenseRequest->paid_date->toDateString() : now()->toDateString());
+
+            $remarksLines = [];
+            $remarksLines[] = "[HRMS Expense Request #{$expenseRequest->id}]";
+            $remarksLines[] = "Applicant: {$applicantName}" . ($applicantEmail ? " ({$applicantEmail})" : '');
+            $remarksLines[] = "Category: {$accCategory->name}" . ($accSubcategory ? " / {$accSubcategory->name}" : '');
+            if (!empty($expenseRequest->description)) {
+                $remarksLines[] = "Request Description: " . trim($expenseRequest->description);
+            }
+            if (!empty($approvalRemarks)) {
+                $remarksLines[] = "Approver Remarks: " . trim($approvalRemarks);
+            }
+            $remarksLines[] = "Approved By: {$approver->name} on " . now()->format('d M Y, h:i A');
+            $remarksLines[] = "Approved Paid Amount: ₹" . number_format($effectiveAmount, 2);
+
+            $finalRemarks = implode("\n", $remarksLines);
+            $invoiceRef = "HRMS-REQ-{$expenseRequest->id}";
+
+            // 5. Check for existing Accounts Expense to prevent duplication
+            $accountExpense = AccountExpense::withoutGlobalScopes()
+                ->where(function ($q) use ($invoiceRef, $expenseRequest) {
+                    $q->where('invoice_no', $invoiceRef)
+                      ->orWhere('remarks', 'like', "%[HRMS Expense Request #{$expenseRequest->id}]%");
+                })
+                ->first();
+
+            if ($accountExpense) {
+                $accountExpense->update([
+                    'company_id'                     => $companyId,
+                    'expense_date'                   => $effectiveDate,
+                    'account_expense_category_id'    => $accCategory->id,
+                    'account_expense_subcategory_id' => $accSubcategory?->id,
+                    'amount'                         => $effectiveAmount,
+                    'expense_type'                   => 'Variable',
+                    'remarks'                        => $finalRemarks,
+                    'attachments'                    => !empty($accAttachments) ? $accAttachments : $accountExpense->attachments,
+                    'updated_by'                     => $approver->id,
+                ]);
+            } else {
+                $accountExpense = AccountExpense::create([
+                    'company_id'                     => $companyId,
+                    'expense_date'                   => $effectiveDate,
+                    'account_expense_category_id'    => $accCategory->id,
+                    'account_expense_subcategory_id' => $accSubcategory?->id,
+                    'amount'                         => $effectiveAmount,
+                    'expense_type'                   => 'Variable',
+                    'is_recurring'                   => false,
+                    'invoice_no'                     => $invoiceRef,
+                    'remarks'                        => $finalRemarks,
+                    'attachments'                    => $accAttachments,
+                    'created_by'                     => $approver->id,
+                    'updated_by'                     => $approver->id,
+                ]);
+            }
+
+            return $accountExpense;
+        } catch (\Throwable $e) {
+            Log::error("Failed to sync ExpenseRequest #{$expenseRequest->id} to AccountExpense: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return null;
         }
     }
 }

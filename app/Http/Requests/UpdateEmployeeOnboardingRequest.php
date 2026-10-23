@@ -19,6 +19,13 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('employee_id')) {
+            $this->merge(['employee_id' => trim((string) $this->input('employee_id'))]);
+        }
+    }
+
     public function rules(): array
     {
         $fileRules = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];
@@ -34,6 +41,7 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
             'branches' => ['nullable', 'array'],
             'branches.*' => ['exists:branches,id'],
             'tl_user_id' => ['nullable', 'exists:users,id', $this->validTeamLeadRule()],
+            'employee_id' => ['required', 'string', 'max:50', Rule::unique('employee_onboardings', 'employee_id')->ignore($employee?->id)],
             'name' => ['required', 'string', 'max:150'],
             'father_name' => ['nullable', 'string', 'max:150'],
             'correspondence_address' => ['nullable', 'string', 'max:2000'],

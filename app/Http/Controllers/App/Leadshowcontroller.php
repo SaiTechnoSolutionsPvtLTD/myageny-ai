@@ -1424,38 +1424,25 @@ class LeadShowController extends Controller
                 'defaultFont' => 'DejaVu Sans',
                 'isHtml5ParserEnabled' => true,
                 'isRemoteEnabled' => true,
+                'isPhpEnabled' => true,
             ]);
     }
 
     private function quotationSettingsFor(Quotation $quotation): array
     {
-        $branchId = auth()->user()?->branch_id
+        $branchId = $quotation->lead?->branch_id
+            ?? auth()->user()?->branch_id
             ?? $quotation->lead?->createdBy?->branch_id;
 
-        $settings = QuotationSetting::where('branch_id', $branchId)->get();
+        $settings = QuotationSetting::allSettings($branchId);
 
-        return [
-            'logo' => $settings->where('key', 'logo')->first()?->value,
-            'theme_color' => $settings->where('key', 'theme_color')->first()?->value,
-            'secondary_color' => $settings->where('key', 'secondary_color')->first()?->value,
-            'header_text_color' => $settings->where('key', 'header_text_color')->first()?->value,
-            'prefix' => $settings->where('key', 'prefix')->first()?->value,
-            'number_padding' => $settings->where('key', 'number_padding')->first()?->value,
-            'terms' => $settings->where('key', 'terms')->first()?->value,
-            'company_address' => $settings->where('key', 'company_address')->first()?->value,
-            'company_name' => $settings->where('key', 'company_name')->first()?->value,
-            'company_phone' => $settings->where('key', 'company_phone')->first()?->value,
-            'company_email' => $settings->where('key', 'company_email')->first()?->value,
-            'company_gstin' => $settings->where('key', 'company_gstin')->first()?->value,
-            'bank_name' => $settings->where('key', 'bank_name')->first()?->value,
-            'bank_account' => $settings->where('key', 'bank_account')->first()?->value,
-            'bank_ifsc' => $settings->where('key', 'bank_ifsc')->first()?->value,
-            'watermark_text' => $settings->where('key', 'watermark_text')->first()?->value,
-            'signature' => $settings->where('key', 'signature')->first()?->value,
-            'account_name' => $settings->where('key', 'account_name')->first()?->value,
-            'bank_branch' => $settings->where('key', 'bank_branch')->first()?->value,
-            'bank_upi' => $settings->where('key', 'bank_upi')->first()?->value,
-        ];
+        foreach (['logo', 'signature'] as $fileKey) {
+            if (!empty($settings[$fileKey]) && is_string($settings[$fileKey]) && str_starts_with($settings[$fileKey], '/storage/')) {
+                $settings[$fileKey] = substr($settings[$fileKey], 9);
+            }
+        }
+
+        return $settings;
     }
 
     private function quotationPdfFilename(Quotation $quotation): string

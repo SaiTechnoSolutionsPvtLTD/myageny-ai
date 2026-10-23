@@ -18,37 +18,9 @@ class QuotationSettingsController extends Controller
      */
     public function index()
     {
-
         $branchId = auth()->user()->branch_id;
-
-        $settings = QuotationSetting::where('branch_id', $branchId)->get();
-        $globalSettings = QuotationSetting::whereNull('branch_id')->get();
-        $val = fn($k) => $settings->where('key', $k)->first()?->value ?? $globalSettings->where('key', $k)->first()?->value;
-
-        $data = [
-            'logo' => $val('logo'),
-            'theme_color' => $val('theme_color'),
-            'secondary_color' => $val('secondary_color'),
-            'header_text_color' => $val('header_text_color'),
-            'prefix' => $val('prefix'),
-            'number_padding' => $val('number_padding'),
-            'terms' => $val('terms'),
-            'company_address' => $val('company_address'),
-            'company_name' => $val('company_name'),
-            'company_phone' => $val('company_phone'),
-            'company_email' => $val('company_email'),
-            'company_gstin' => $val('company_gstin'),
-            'bank_name' => $val('bank_name'),
-            'account_name' => $val('account_name'),
-            'bank_account' => $val('bank_account'),
-            'bank_ifsc' => $val('bank_ifsc'),
-            'bank_branch' => $val('bank_branch'),
-            'bank_upi' => $val('bank_upi'),
-            'watermark_text' => $val('watermark_text'),
-            'show_watermark' => (bool) $val('show_watermark'),
-            'signature' => $val('signature'),
-        ];
-
+        $data = QuotationSetting::allSettings($branchId);
+        $settings = QuotationSetting::withoutGlobalScopes()->where('branch_id', $branchId)->get();
 
         return view('pages.settings.quotation-setting.index', compact('settings', 'branchId', 'data'));
     }

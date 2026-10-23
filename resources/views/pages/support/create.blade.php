@@ -4,12 +4,125 @@
 
 @push('styles')
 <style>
+/* ── Corporate Page Layout & Topbar ── */
+.sup-page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    background: #f4f5f7;
+    font-family: 'Inter', sans-serif;
+}
+.sup-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 0 28px;
+    min-height: 60px;
+    background: #fff;
+    border-bottom: 1px solid #e1dee3;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+}
+.sup-topbar-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.sup-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #121212;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.2;
+}
+.sup-breadcrumbs {
+    font-size: 12px;
+    color: #9e9e9e;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+}
+.sup-breadcrumbs a {
+    color: #9e9e9e;
+    text-decoration: none;
+    transition: color .15s;
+}
+.sup-breadcrumbs a:hover {
+    color: #fe5f04;
+}
+.sup-breadcrumbs .sep {
+    color: #ccc;
+}
+.sup-breadcrumbs .current {
+    color: #424242;
+    font-weight: 600;
+}
+.sup-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.sup-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    transition: all .15s;
+    border: none;
+}
+.sup-btn-primary {
+    background: linear-gradient(135deg, #fe5f04, #ff7c30);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(254, 95, 4, 0.25);
+}
+.sup-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(254, 95, 4, 0.35);
+    color: #fff;
+}
+.sup-btn-outline {
+    background: #fff;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+}
+.sup-btn-outline:hover {
+    border-color: #fe5f04;
+    color: #fe5f04;
+}
+.sup-body {
+    padding: 22px 28px 34px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    flex: 1;
+}
+@media (max-width: 900px) {
+    .sup-topbar {
+        padding: 14px 20px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        min-height: auto;
+    }
+    .sup-body {
+        padding: 16px 20px 24px;
+    }
+}
+
 .support-create-page {
     min-height: 100%;
-    padding: 28px;
-    background:
-        radial-gradient(circle at top left, rgba(254, 95, 4, 0.08), transparent 35%),
-        linear-gradient(180deg, #f8f6f2 0%, #f3f5f8 100%);
 }
 
 .create-header {
@@ -519,25 +632,30 @@
 @endpush
 
 @section('content')
-<div class="support-create-page">
-
-    {{-- Header Banner --}}
-    <div class="create-header">
-        <div>
-            <div class="create-kicker">
-                <i class="bi bi-ticket-perforated-fill"></i> New Request
+<div class="sup-page">
+    {{-- Sticky Corporate Topbar --}}
+    <div class="sup-topbar">
+        <div class="sup-topbar-left">
+            <div class="sup-title">
+                <i class="bi bi-ticket-perforated" style="color: #fe5f04;"></i>
+                <span>Create Support Ticket</span>
             </div>
-            <h1 class="create-title">Create Support Ticket</h1>
-            <p class="create-subtitle">
-                Select your category and subcategory, then provide the details of your request or issue.
-            </p>
+            <div class="sup-breadcrumbs">
+                <a href="{{ route('dashboard') }}">Dashboard</a>
+                <span class="sep">/</span>
+                <a href="{{ route('support.index') }}">Support Tickets</a>
+                <span class="sep">/</span>
+                <span class="current">New Ticket</span>
+            </div>
         </div>
-
-        <a href="{{ route('support.index') }}" class="btn-back">
-            <i class="bi bi-arrow-left"></i> Back to Tickets
-        </a>
+        <div class="sup-topbar-actions">
+            <a href="{{ route('support.index') }}" class="sup-btn sup-btn-outline">
+                <i class="bi bi-arrow-left"></i> Back to Tickets
+            </a>
+        </div>
     </div>
 
+    <div class="sup-body">
     {{-- Main Form Card --}}
     <form id="createTicketForm" method="POST" action="{{ route('support.store') }}" enctype="multipart/form-data">
         @csrf
@@ -698,6 +816,7 @@
 
         </div>
     </form>
+    </div>
 </div>
 
 {{-- Submission Progress Overlay --}}

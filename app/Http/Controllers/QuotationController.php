@@ -3,6 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\QuotationCollection;
+use App\Models\CustomerMaster;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
+use App\Models\InvoiceSetting;
+use App\Models\ItemMaster;
 use App\Models\Lead;
 use App\Models\Product;
 use App\Models\Quotation;
@@ -11,6 +16,7 @@ use App\Models\QuotationSetting;
 use App\Models\User;
 use App\Services\DataVisibilityService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -247,9 +253,20 @@ class QuotationController extends Controller
     {
         abort_unless($this->visibility->canAccessQuotation($quotation), 403);
 
-        $quotation->load(['lead', 'items.product', 'approver']);
+        $quotation->load(['lead', 'items.product', 'approver', 'createdBy', 'lead.createdBy', 'lead.assignedTo']);
+        $quoteSetting = $this->quotationSettingsFor($quotation);
 
-        return view('pages.quotations.show', compact('quotation'));
+        return view('pages.quotations.show', compact('quotation', 'quoteSetting'));
+    }
+
+    public function print(Quotation $quotation): View
+    {
+        abort_unless($this->visibility->canAccessQuotation($quotation), 403);
+
+        $quotation->load(['lead', 'items.product', 'approver', 'createdBy', 'lead.createdBy', 'lead.assignedTo']);
+        $quoteSetting = $this->quotationSettingsFor($quotation);
+
+        return view('pages.quotations.print', compact('quotation', 'quoteSetting'));
     }
 
     // ── Edit & Update ─────────────────────────────────────────────────────────
@@ -390,6 +407,200 @@ class QuotationController extends Controller
         ]);
 
         return back()->with('success', 'Quotation approved successfully.');
+    }
+
+    // ── Convert to Invoice ────────────────────────────────────────────────────
+
+    public function convertToInvoice(Request $request, Quotation $quotation): RedirectResponse
+    {
+        abort_unless($this->visibility->canAccessQuotation($quotation), 403);
+
+        $quotation->load(['lead', 'items.product']);
+        $companyId = $quotation->company_id ?: auth()->user()?->company_id;
+        $userId    = auth()->id();
+        $lead      = $quotation->lead;
+
+        // 1. Resolve or create CustomerMaster
+        $customer = null;
+        if ($lead) {
+            $customer = CustomerMaster::where('lead_id', $lead->id)->first();
+            if (! $customer && ! empty($lead->company_name)) {
+                $customer = CustomerMaster::where(function ($q) use ($companyId) {
+                    if ($companyId) {
+                        $q->where('company_id', $companyId)->orWhereNull('company_id');
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(company_name)) = ?', [strtolower(trim($lead->company_name))])
+                ->first();
+            }
+        }
+
+        if (! $customer) {
+            $customerName = $lead?->contact_name ?: ($lead?->company_name ?: 'Valued Customer');
+            $customer = CustomerMaster::create([
+                'company_id'                => $companyId,
+                'lead_id'                   => $lead?->id,
+                'customer_name'             => $customerName,
+                'company_name'              => $lead?->company_name ?: $customerName,
+                'mobile_number'             => $lead?->mobile_number,
+                'email'                     => $lead?->email,
+                'gst_number'                => $quotation->gst_number,
+                'payment_terms'             => $request->input('payment_terms', 'Due on Receipt'),
+                'billing_attention'         => $customerName,
+                'billing_country'           => 'India',
+                'billing_address_street_1'  => $quotation->bill_to_address,
+                'billing_state'             => $quotation->customer_state ?: 'Tamil Nadu',
+                'shipping_attention'        => $customerName,
+                'shipping_country'          => 'India',
+                'shipping_address_street_1' => $quotation->ship_to_address ?: $quotation->bill_to_address,
+                'shipping_state'            => $quotation->customer_state ?: 'Tamil Nadu',
+                'status'                    => 'active',
+                'created_by'                => $userId,
+            ]);
+        }
+
+        // 2. Resolve place of supply
+        $placeOfSupply = '[33] Tamil Nadu';
+        if (! empty($quotation->customer_state)) {
+            foreach (InvoiceController::$indianStates as $codeName => $stateName) {
+                if (strcasecmp($stateName, trim($quotation->customer_state)) === 0 || stripos($codeName, trim($quotation->customer_state)) !== false) {
+                    $placeOfSupply = $codeName;
+                    break;
+                }
+            }
+        }
+
+        // 3. Resolve terms & conditions
+        $setting = InvoiceSetting::forCompany($companyId);
+        $terms   = $setting?->terms_conditions ?: InvoiceSetting::defaultTerms();
+
+        // 4. Generate next invoice number
+        $invoiceNumber = Invoice::generateNextInvoiceNumber($companyId);
+
+        $invoiceDate   = $request->input('invoice_date', now()->toDateString());
+        $dueDate       = $request->input('due_date', ($quotation->valid_until ? Carbon::parse($quotation->valid_until)->toDateString() : now()->addDays(7)->toDateString()));
+        $paymentTerms  = $request->input('payment_terms', 'Due on Receipt');
+
+        DB::beginTransaction();
+        try {
+            $invoice = Invoice::create([
+                'company_id'         => $companyId,
+                'branch_id'          => $lead?->branch_id,
+                'customer_id'        => $customer->id,
+                'sales_person_id'    => $lead?->assigned_to ?: ($lead?->created_by ?: $userId),
+                'invoice_number'     => $invoiceNumber,
+                'invoice_date'       => $invoiceDate,
+                'due_date'           => $dueDate,
+                'payment_terms'      => $paymentTerms,
+                'place_of_supply'    => $placeOfSupply,
+                'customer_name'      => $customer->customer_name,
+                'company_name'       => $customer->company_name,
+                'customer_email'     => $customer->email,
+                'customer_phone'     => $customer->mobile_number,
+                'customer_gstin'     => $quotation->gst_number ?: $customer->gst_number,
+                'customer_pan'       => $customer->pan_number,
+                'billing_attention'  => $customer->customer_name,
+                'billing_address'    => $quotation->bill_to_address ?: $customer->billing_address_street_1,
+                'billing_city'       => $customer->billing_city,
+                'billing_state'      => $quotation->customer_state ?: $customer->billing_state,
+                'billing_pincode'    => $customer->billing_pin_code,
+                'billing_country'    => 'India',
+                'billing_gstin'      => $quotation->gst_number ?: $customer->gst_number,
+                'shipping_attention' => $customer->customer_name,
+                'shipping_address'   => $quotation->ship_to_address ?: $quotation->bill_to_address,
+                'shipping_city'      => $customer->shipping_city ?: $customer->billing_city,
+                'shipping_state'     => $quotation->customer_state ?: $customer->shipping_state,
+                'shipping_pincode'   => $customer->shipping_pin_code ?: $customer->billing_pin_code,
+                'shipping_country'   => 'India',
+                'shipping_gstin'     => $quotation->gst_number ?: $customer->gst_number,
+                'subtotal'           => (float) $quotation->subtotal,
+                'total_cgst'         => (float) $quotation->cgst_amount,
+                'total_sgst'         => (float) $quotation->sgst_amount,
+                'total_igst'         => (float) $quotation->igst_amount,
+                'total_tax'          => (float) $quotation->tax_amount,
+                'round_off'          => 0.00,
+                'total_amount'       => (float) $quotation->total_amount,
+                'paid_amount'        => 0.00,
+                'total_tds'          => 0.00,
+                'total_credited'     => 0.00,
+                'balance_due'        => (float) $quotation->total_amount,
+                'customer_notes'     => "Converted from Quotation #{$quotation->quotation_no}." . ($quotation->notes ? "\n" . $quotation->notes : ''),
+                'terms_conditions'   => $terms,
+                'status'             => 'draft',
+                'created_by'         => $userId,
+                'updated_by'         => $userId,
+            ]);
+
+            // Create items
+            $cgstPct = (float) ($quotation->cgst_rate ?: 0);
+            $sgstPct = (float) ($quotation->sgst_rate ?: 0);
+            $igstPct = (float) ($quotation->igst_rate ?: 0);
+
+            foreach ($quotation->items as $index => $qItem) {
+                $rate   = (float) $qItem->unit_price;
+                $qty    = (float) ($qItem->qty ?: 1);
+                $amount = (float) ($qItem->total ?: ($rate * $qty));
+
+                $lineCgst  = round(($amount * $cgstPct) / 100, 2);
+                $lineSgst  = round(($amount * $sgstPct) / 100, 2);
+                $lineIgst  = round(($amount * $igstPct) / 100, 2);
+                $lineTotal = $amount + $lineCgst + $lineSgst + $lineIgst;
+
+                $itemName = $qItem->product?->product_name ?: ($qItem->product?->package_name ?: ($qItem->description ?: 'Product / Service'));
+
+                $itemMaster = ItemMaster::where(function ($q) use ($companyId) {
+                    if ($companyId) {
+                        $q->where('company_id', $companyId)->orWhereNull('company_id');
+                    }
+                })
+                ->whereRaw('LOWER(TRIM(item_name)) = ?', [strtolower(trim($itemName))])
+                ->first();
+
+                if (! $itemMaster) {
+                    $itemMaster = ItemMaster::create([
+                        'company_id'   => $companyId,
+                        'item_name'    => $itemName,
+                        'description'  => $qItem->description ?: ($qItem->product?->description ?: null),
+                        'hsn_sac_code' => null,
+                        'rate'         => $rate,
+                        'gst'          => $cgstPct + $sgstPct + $igstPct,
+                        'status'       => 'active',
+                        'created_by'   => $userId,
+                    ]);
+                }
+
+                InvoiceItem::create([
+                    'invoice_id'    => $invoice->id,
+                    'item_id'       => $itemMaster?->id,
+                    'item_name'     => $itemName,
+                    'description'   => $qItem->description,
+                    'hsn_sac_code'  => $itemMaster?->hsn_sac_code,
+                    'qty'           => $qty,
+                    'rate'          => $rate,
+                    'amount'        => $amount,
+                    'cgst_percent'  => $cgstPct,
+                    'cgst_amount'   => $lineCgst,
+                    'sgst_percent'  => $sgstPct,
+                    'sgst_amount'   => $lineSgst,
+                    'igst_percent'  => $igstPct,
+                    'igst_amount'   => $lineIgst,
+                    'total_amount'  => $lineTotal,
+                    'sort_order'    => $index + 1,
+                ]);
+            }
+
+            DB::commit();
+
+            return redirect()->route('accounts.sales.invoices.show', $invoice->id)
+                ->with('success', "Quotation #{$quotation->quotation_no} was successfully converted to Invoice #{$invoice->invoice_number}!");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to convert quotation #{$quotation->id} to invoice: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return redirect()->back()->with('error', 'Failed to convert quotation to invoice: ' . $e->getMessage());
+        }
     }
 
     public function sendEmail(Quotation $quotation): RedirectResponse
@@ -725,51 +936,13 @@ class QuotationController extends Controller
                 'defaultFont' => 'DejaVu Sans',
                 'isHtml5ParserEnabled' => true,
                 'isRemoteEnabled' => true,
+                'isPhpEnabled' => true,
             ]);
     }
 
     private function quotationSettingsFor(Quotation $quotation): array
     {
-        $branchId = $quotation->lead?->branch_id
-            ?? auth()->user()?->branch_id
-            ?? $quotation->lead?->createdBy?->branch_id;
-
-        $branchSettings = QuotationSetting::where('branch_id', $branchId)->get();
-        $globalSettings = QuotationSetting::whereNull('branch_id')->get();
-
-        $getVal = function($key) use ($branchSettings, $globalSettings) {
-            $val = $branchSettings->where('key', $key)->first()?->value
-                ?? $globalSettings->where('key', $key)->first()?->value
-                ?? QuotationSetting::$defaults[$key] ?? null;
-
-            if (is_string($val) && str_starts_with($val, '/storage/')) {
-                return substr($val, 9);
-            }
-            return $val;
-        };
-
-        return [
-            'logo' => $getVal('logo'),
-            'theme_color' => $getVal('theme_color') ?? '#fe5f04',
-            'secondary_color' => $getVal('secondary_color') ?? '#fe5f04',
-            'header_text_color' => $getVal('header_text_color') ?? '#ffffff',
-            'prefix' => $getVal('prefix') ?? 'QUO-',
-            'number_padding' => $getVal('number_padding') ?? 5,
-            'terms' => $getVal('terms'),
-            'company_address' => $getVal('company_address') ?? '',
-            'company_name' => $getVal('company_name') ?? '',
-            'company_phone' => $getVal('company_phone') ?? '',
-            'company_email' => $getVal('company_email') ?? '',
-            'company_gstin' => $getVal('company_gstin') ?? '',
-            'bank_name' => $getVal('bank_name') ?? '',
-            'bank_account' => $getVal('bank_account') ?? '',
-            'bank_ifsc' => $getVal('bank_ifsc') ?? '',
-            'watermark_text' => $getVal('watermark_text') ?? '',
-            'signature' => $getVal('signature'),
-            'account_name' => $getVal('account_name') ?? '',
-            'bank_branch' => $getVal('bank_branch') ?? '',
-            'bank_upi' => $getVal('bank_upi') ?? '',
-        ];
+        return QuotationSetting::forQuotation($quotation);
     }
 
     private function quotationPdfFilename(Quotation $quotation): string

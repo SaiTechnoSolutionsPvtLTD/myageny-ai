@@ -43,6 +43,8 @@
                         <label class="crm-label">Description</label>
                         <textarea name="description" class="crm-textarea" placeholder="Optional asset category description">{{ old('description') }}</textarea>
                     </div>
+
+                    @include('pages.settings.asset-category.partials.custom-fields-builder', ['assetCategory' => null])
                 </div>
                 <div class="crm-form-foot">
                     <a href="{{ route('hrms.masters.asset-categories.index') }}" class="crm-btn crm-btn-ghost">Cancel</a>
