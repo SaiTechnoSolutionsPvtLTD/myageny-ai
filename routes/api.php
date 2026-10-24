@@ -900,4 +900,28 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::get('/reports/expense-subcategory-wise', [AccountsApiController::class, 'reportExpenseSubcategoryWise'])->name('reports.expense-subcategory-wise');
     Route::get('/reports/customer-balance-sheet', [AccountsApiController::class, 'reportCustomerBalanceSheet'])->name('reports.customer-balance-sheet');
     Route::get('/reports/profit-and-loss', [AccountsApiController::class, 'reportProfitAndLoss'])->name('reports.profit-and-loss');
+
+    // Accounts Purchase Orders (PO Orders)
+    Route::get('/purchase-orders', [AccountsApiController::class, 'purchaseOrders'])->name('purchase-orders.index');
+    Route::get('/purchase-orders/meta', [AccountsApiController::class, 'purchaseOrderMeta'])->name('purchase-orders.meta');
+    Route::post('/purchase-orders', [AccountsApiController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
+    Route::get('/purchase-orders/{id}', [AccountsApiController::class, 'showPurchaseOrder'])->name('purchase-orders.show');
+    Route::put('/purchase-orders/{id}', [AccountsApiController::class, 'updatePurchaseOrder'])->name('purchase-orders.update');
+    Route::patch('/purchase-orders/{id}/status', [AccountsApiController::class, 'updatePurchaseOrderStatus'])->name('purchase-orders.update-status');
+    Route::delete('/purchase-orders/{id}', [AccountsApiController::class, 'destroyPurchaseOrder'])->name('purchase-orders.destroy');
+    Route::get('/purchase-orders/{id}/pdf', [AccountsApiController::class, 'purchaseOrderPdf'])->name('purchase-orders.pdf');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Mobile Support Ticket Routes
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth:sanctum')->prefix('mobile/support-tickets')->name('mobile.support-tickets.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\App\SupportTicketApiController::class, 'index'])->name('index');
+    Route::get('/meta', [\App\Http\Controllers\App\SupportTicketApiController::class, 'meta'])->name('meta');
+    Route::get('/{id}', [\App\Http\Controllers\App\SupportTicketApiController::class, 'show'])->name('show');
+    Route::post('/', [\App\Http\Controllers\App\SupportTicketApiController::class, 'store'])->name('store');
+    Route::post('/{id}/status', [\App\Http\Controllers\App\SupportTicketApiController::class, 'updateStatus'])->name('update-status');
+});
+

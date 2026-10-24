@@ -29,6 +29,9 @@ use App\Models\InvoicePayment;
 use App\Models\InvoiceSetting;
 use App\Models\ItemMaster;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
+use App\Models\SupplierMaster;
+use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\CustomerMasterController;
 use App\Console\Commands\GenerateRecurringAccountExpensesCommand;
@@ -694,6 +697,20 @@ class AccountsApiController extends Controller
 
             $paginated = $query->latest()->paginate($perPage);
 
+            $now = Carbon::now('Asia/Kolkata');
+            $requestCutoff = $now->copy()->setTime(11, 30, 0);
+            $isRequestAllowed = $now->lessThan($requestCutoff);
+            $approvalCutoff = $now->copy()->setTime(12, 30, 0);
+            $isApprovalAllowed = $now->lessThan($approvalCutoff);
+
+            $cutoffInfo = [
+                'is_request_allowed'   => $isRequestAllowed,
+                'request_cutoff_time'  => '11:30 AM',
+                'is_approval_allowed'  => $isApprovalAllowed,
+                'approval_cutoff_time' => '12:30 PM',
+                'current_time'         => $now->format('h:i A'),
+            ];
+
             // Active Ad Accounts list for dropdown picker
             $adAccounts = AdAccountMaster::when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->active()
@@ -724,6 +741,7 @@ class AccountsApiController extends Controller
                         'pending_acc_count'=> $pendingAccCount,
                         'status_counts'    => $statusCounts,
                     ],
+                    'cutoff_info'  => $cutoffInfo,
                     'ad_accounts'  => $adAccounts,
                 ],
             ]);
@@ -771,8 +789,11 @@ class AccountsApiController extends Controller
         $user = $request->user();
         $initialStatus = ($user->hasAdminLikeRole() || $user->hasTlLikeRole()) ? 'accounts_pending' : 'tl_pending';
 
-        $validated['selected_dates'] = $dates;
-        $validated['type']           = 'client';
+        $numDays = count($dates);
+        $validated['selected_dates']         = $dates;
+        $validated['number_of_days']         = $numDays;
+        $validated['average_per_day_budget'] = $numDays > 0 ? round($validated['amount'] / $numDays, 2) : 0;
+        $validated['type']                   = 'client';
         $validated['requested_by']   = $user->id;
         $validated['company_id']     = $user?->company_id;
         $validated['branch_id']      = $user?->branch_id;
@@ -2330,32 +2351,47 @@ class AccountsApiController extends Controller
 
     private function formatBudgetRequest(AdBudgetRequest $item): array
     {
+        $numDays = $item->number_of_days ?: (is_array($item->selected_dates) ? count($item->selected_dates) : 0);
+        $avgBudget = $item->average_per_day_budget ?: (($numDays > 0) ? ($item->amount / $numDays) : 0);
+
         return [
-            'id'               => $item->id,
-            'type'             => $item->type,
-            'ad_account_id'    => $item->ad_account_id,
-            'ad_account'       => $item->adAccount ? [
+            'id'                     => $item->id,
+            'type'                   => $item->type,
+            'ad_account_id'          => $item->ad_account_id,
+            'ad_account'             => $item->adAccount ? [
                 'id'           => $item->adAccount->id,
                 'account_name' => $item->adAccount->account_name,
                 'account_id'   => $item->adAccount->account_id,
                 'platform'     => $item->adAccount->platform,
             ] : null,
-            'amount'           => (float) $item->amount,
-            'approved_amount'  => (float) $item->approved_amount,
-            'selected_dates'   => $item->selected_dates ?? [],
-            'client_name'      => $item->client_name,
-            'remarks'          => $item->remarks,
-            'status'           => $item->status,
-            'requested_by'     => $item->requester?->name,
-            'tl_approved_by'   => $item->tlApprover?->name,
-            'tl_approved_at'   => $item->tl_approved_at?->format('Y-m-d H:i:s'),
-            'tl_remarks'       => $item->tl_remarks,
-            'approved_by'      => $item->approver?->name,
-            'approved_at'      => $item->approved_at?->format('Y-m-d H:i:s'),
-            'payment_date'     => $item->payment_date?->format('Y-m-d'),
-            'accounts_remarks' => $item->accounts_remarks,
-            'attachments'      => $item->attachments ?? [],
-            'created_at'       => $item->created_at?->format('Y-m-d H:i:s'),
+            'amount'                 => (float) $item->amount,
+            'approved_amount'        => (float) $item->approved_amount,
+            'selected_dates'         => $item->selected_dates ?? [],
+            'number_of_days'         => (int) $numDays,
+            'average_per_day_budget' => (float) round($avgBudget, 2),
+            'client_name'            => $item->client_name,
+            'remarks'                => $item->remarks,
+            'status'                 => $item->status,
+            'requested_by'           => $item->requester?->name,
+            'tl_approved_by'         => $item->tlApprover?->name,
+            'tl_approver'            => $item->tlApprover ? [
+                'id'    => $item->tlApprover->id,
+                'name'  => $item->tlApprover->name,
+                'email' => $item->tlApprover->email,
+            ] : null,
+            'tl_approved_at'         => $item->tl_approved_at?->format('Y-m-d H:i:s'),
+            'tl_remarks'             => $item->tl_remarks,
+            'approved_by'            => $item->approver?->name,
+            'approver'               => $item->approver ? [
+                'id'    => $item->approver->id,
+                'name'  => $item->approver->name,
+                'email' => $item->approver->email,
+            ] : null,
+            'approved_at'            => $item->approved_at?->format('Y-m-d H:i:s'),
+            'payment_date'           => $item->payment_date?->format('Y-m-d'),
+            'accounts_remarks'       => $item->accounts_remarks,
+            'attachments'            => $item->attachments ?? [],
+            'created_at'             => $item->created_at?->format('Y-m-d H:i:s'),
         ];
     }
 
@@ -3535,9 +3571,21 @@ class AccountsApiController extends Controller
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->findOrFail($id);
 
+            $invoiceData = $invoice->toArray();
+            if ($invoice->payments) {
+                $invoiceData['payments'] = $invoice->payments->map(function ($p) {
+                    $arr = $p->toArray();
+                    $arr['recorded_by_name'] = $p->recordedBy?->name ?: 'System';
+                    $arr['recorded_at'] = $p->created_at?->format('Y-m-d H:i:s');
+                    $arr['payment_mode_label'] = $p->payment_mode_label;
+                    $arr['attachment_url'] = $p->attachment_url;
+                    return $arr;
+                })->values()->toArray();
+            }
+
             return response()->json([
                 'status' => true,
-                'data'   => $invoice,
+                'data'   => $invoiceData,
             ]);
         } catch (Throwable $e) {
             return response()->json([
@@ -4064,10 +4112,19 @@ class AccountsApiController extends Controller
 
             $payments = $query->paginate($perPage);
 
+            $formattedItems = collect($payments->items())->map(function ($p) {
+                $arr = $p->toArray();
+                $arr['recorded_by_name'] = $p->recordedBy?->name ?: 'System';
+                $arr['recorded_at'] = $p->created_at?->format('Y-m-d H:i:s');
+                $arr['payment_mode_label'] = $p->payment_mode_label;
+                $arr['attachment_url'] = $p->attachment_url;
+                return $arr;
+            })->values()->all();
+
             return response()->json([
                 'status' => true,
                 'stats'  => $stats,
-                'data'   => $payments->items(),
+                'data'   => $formattedItems,
                 'meta'   => [
                     'current_page' => $payments->currentPage(),
                     'last_page'    => $payments->lastPage(),
@@ -5832,6 +5889,674 @@ class AccountsApiController extends Controller
                 'status'  => false,
                 'message' => 'Failed to load Profit & Loss report: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  PURCHASE ORDERS (PO ORDERS)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /api/mobile/accounts/purchase-orders
+     * List purchase orders with KPI summary cards, filters, and pagination.
+     */
+    public function purchaseOrders(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+            $query = PurchaseOrder::query()
+                ->with(['supplier', 'creator', 'items'])
+                ->forCompany($companyId)
+                ->latest('po_date')
+                ->latest('id');
+
+            // Search
+            if ($search = trim((string) $request->input('search'))) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('po_number', 'LIKE', "%{$search}%")
+                      ->orWhere('supplier_name', 'LIKE', "%{$search}%")
+                      ->orWhere('company_name', 'LIKE', "%{$search}%")
+                      ->orWhere('supplier_email', 'LIKE', "%{$search}%")
+                      ->orWhere('supplier_phone', 'LIKE', "%{$search}%")
+                      ->orWhere('supplier_gstin', 'LIKE', "%{$search}%");
+                });
+            }
+
+            // Status Filter
+            if ($status = $request->input('status')) {
+                $query->where('status', strtolower($status));
+            }
+
+            // Date Range
+            if ($from = $request->input('from_date')) {
+                $query->whereDate('po_date', '>=', $from);
+            }
+            if ($to = $request->input('to_date')) {
+                $query->whereDate('po_date', '<=', $to);
+            }
+
+            // KPI aggregates
+            $baseQuery = PurchaseOrder::query()->forCompany($companyId);
+            $allPos = (clone $baseQuery)->get();
+            $stats = [
+                'total_count'    => $allPos->count(),
+                'total_amount'   => (float) $allPos->sum('total_amount'),
+                'issued_count'   => $allPos->where('status', 'issued')->count(),
+                'approved_count' => $allPos->where('status', 'approved')->count(),
+                'received_count' => $allPos->where('status', 'received')->count(),
+                'draft_count'    => $allPos->where('status', 'draft')->count(),
+            ];
+
+            $perPage = max(1, min(50, (int) $request->input('per_page', 15)));
+            $paginator = $query->paginate($perPage);
+
+            $purchaseOrders = collect($paginator->items())->map(function ($po) {
+                return [
+                    'id'               => $po->id,
+                    'po_number'        => $po->po_number,
+                    'po_date'          => $po->po_date?->format('Y-m-d'),
+                    'po_date_formatted'=> $po->po_date?->format('d M Y'),
+                    'delivery_date'    => $po->delivery_date?->format('Y-m-d'),
+                    'delivery_date_formatted' => $po->delivery_date?->format('d M Y'),
+                    'payment_terms'    => $po->payment_terms,
+                    'delivery_terms'   => $po->delivery_terms,
+                    'place_of_supply'  => $po->place_of_supply,
+                    'supplier_id'      => $po->supplier_id,
+                    'supplier_name'    => $po->supplier_name,
+                    'company_name'     => $po->company_name,
+                    'supplier_email'   => $po->supplier_email,
+                    'supplier_phone'   => $po->supplier_phone,
+                    'supplier_gstin'   => $po->supplier_gstin,
+                    'supplier_pan'     => $po->supplier_pan,
+                    'supplier_address' => $po->supplier_address,
+                    'supplier_city'    => $po->supplier_city,
+                    'supplier_state'   => $po->supplier_state,
+                    'supplier_pincode' => $po->supplier_pincode,
+                    'supplier_country' => $po->supplier_country,
+                    'subtotal'         => (float) $po->subtotal,
+                    'total_cgst'       => (float) $po->total_cgst,
+                    'total_sgst'       => (float) $po->total_sgst,
+                    'total_igst'       => (float) $po->total_igst,
+                    'total_tax'        => (float) $po->total_tax,
+                    'round_off'        => (float) $po->round_off,
+                    'total_amount'     => (float) $po->total_amount,
+                    'notes'            => $po->notes,
+                    'terms_conditions' => $po->terms_conditions,
+                    'status'           => strtolower((string) $po->status),
+                    'items_count'      => $po->items->count(),
+                    'created_at'       => $po->created_at?->toIso8601String(),
+                    'creator'          => $po->creator ? [
+                        'id'    => $po->creator->id,
+                        'name'  => $po->creator->name,
+                        'email' => $po->creator->email,
+                    ] : null,
+                ];
+            });
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'purchase_orders' => $purchaseOrders,
+                    'stats'           => $stats,
+                    'pagination'      => [
+                        'current_page' => $paginator->currentPage(),
+                        'last_page'    => $paginator->lastPage(),
+                        'per_page'     => $paginator->perPage(),
+                        'total'        => $paginator->total(),
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts purchaseOrders error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load purchase orders: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/mobile/accounts/purchase-orders/meta
+     * Metadata for creating and editing purchase orders.
+     */
+    public function purchaseOrderMeta(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+            $nextPoNumber = PurchaseOrder::generateNextPoNumber($companyId);
+            $setting      = InvoiceSetting::forCompany($companyId);
+
+            // Fetch suppliers
+            $suppliers = SupplierMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($sq) => $sq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('supplier_name')
+                ->get()
+                ->map(fn($s) => [
+                    'id'               => $s->id,
+                    'name'             => $s->supplier_name,
+                    'company_name'     => $s->company_name,
+                    'email'            => $s->email,
+                    'phone'            => $s->phone,
+                    'gstin'            => $s->gst_number,
+                    'pan'              => $s->pan_number,
+                    'address'          => $s->address,
+                    'city'             => $s->city,
+                    'state'            => $s->state,
+                    'pincode'          => $s->pincode,
+                    'country'          => $s->country ?? 'India',
+                ]);
+
+            // Fetch vendors as fallback suppliers
+            $vendors = VendorMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($vq) => $vq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('vendor_name')
+                ->get()
+                ->map(fn($v) => [
+                    'id'               => $v->id,
+                    'name'             => $v->vendor_name,
+                    'company_name'     => $v->company_name ?? $v->vendor_name,
+                    'email'            => $v->email,
+                    'phone'            => $v->phone,
+                    'gstin'            => $v->gst_number,
+                    'pan'              => $v->pan_number,
+                    'address'          => $v->address,
+                    'city'             => $v->city,
+                    'state'            => $v->state,
+                    'pincode'          => $v->pincode,
+                    'country'          => 'India',
+                ]);
+
+            // Combine unique suppliers
+            $allSuppliers = $suppliers->concat($vendors)->unique(function ($item) {
+                return strtolower(trim($item['name'] . $item['phone']));
+            })->values();
+
+            // Catalog Items
+            $items = ItemMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($iq) => $iq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('item_name')
+                ->get()
+                ->map(fn($item) => [
+                    'id'           => $item->id,
+                    'name'         => $item->item_name,
+                    'description'  => $item->description,
+                    'hsn_sac_code' => $item->hsn_sac_code,
+                    'rate'         => (float) ($item->selling_price ?? $item->cost_price ?? 0),
+                    'cost_price'   => (float) ($item->cost_price ?? 0),
+                    'tax_rate'     => (float) ($item->tax_rate ?? 18),
+                ]);
+
+            $states = collect(PurchaseOrderController::$indianStates)->map(function ($name, $code) {
+                return ['code' => $code, 'name' => $name];
+            })->values();
+
+            $paymentTerms = [
+                'Net 15 (15 Days)',
+                'Net 30 (30 Days)',
+                'Net 45 (45 Days)',
+                'Net 60 (60 Days)',
+                'Due on Receipt',
+                'Advance (100% Upfront)',
+                '50% Advance, 50% on Delivery',
+            ];
+
+            $defaultTerms = "1. Goods/Services must be delivered in accordance with the specifications in this Purchase Order.\n" .
+                            "2. Invoices must quote this Purchase Order number.\n" .
+                            "3. Payment will be released as per agreed payment terms after inspection and acceptance.\n" .
+                            "4. Damaged or non-conforming items will be rejected and must be replaced at supplier's expense.";
+
+            $companySetting = [
+                'company_name'    => $setting->company_name ?? config('app.name'),
+                'address'         => $setting->address,
+                'city'            => $setting->city,
+                'state'           => $setting->state,
+                'pincode'         => $setting->pincode,
+                'gst_number'      => $setting->gst_number,
+                'phone'           => $setting->phone,
+                'email'           => $setting->email,
+                'place_of_supply' => $setting->state ? "[33] {$setting->state}" : '[33] Tamil Nadu',
+            ];
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'next_po_number'  => $nextPoNumber,
+                    'suppliers'       => $allSuppliers,
+                    'items'           => $items,
+                    'states'          => $states,
+                    'payment_terms'   => $paymentTerms,
+                    'default_terms'   => $defaultTerms,
+                    'company_setting' => $companySetting,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts purchaseOrderMeta error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load purchase order metadata: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/mobile/accounts/purchase-orders/{id}
+     * Show single purchase order details.
+     */
+    public function showPurchaseOrder(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+            $po = PurchaseOrder::with(['items.itemMaster', 'supplier', 'creator', 'updater'])
+                ->forCompany($companyId)
+                ->findOrFail($id);
+
+            $setting = InvoiceSetting::forCompany($companyId);
+
+            $items = $po->items->map(fn($item) => [
+                'id'           => $item->id,
+                'item_id'      => $item->item_id,
+                'item_name'    => $item->item_name,
+                'description'  => $item->description,
+                'hsn_sac_code' => $item->hsn_sac_code,
+                'qty'          => (float) $item->qty,
+                'rate'         => (float) $item->rate,
+                'amount'       => (float) $item->amount,
+                'cgst_percent' => (float) $item->cgst_percent,
+                'cgst_amount'  => (float) $item->cgst_amount,
+                'sgst_percent' => (float) $item->sgst_percent,
+                'sgst_amount'  => (float) $item->sgst_amount,
+                'igst_percent' => (float) $item->igst_percent,
+                'igst_amount'  => (float) $item->igst_amount,
+                'total_amount' => (float) $item->total_amount,
+                'sort_order'   => $item->sort_order,
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'id'                 => $po->id,
+                    'po_number'          => $po->po_number,
+                    'po_date'            => $po->po_date?->format('Y-m-d'),
+                    'po_date_formatted'  => $po->po_date?->format('d M Y'),
+                    'delivery_date'      => $po->delivery_date?->format('Y-m-d'),
+                    'delivery_date_formatted' => $po->delivery_date?->format('d M Y'),
+                    'payment_terms'      => $po->payment_terms,
+                    'delivery_terms'     => $po->delivery_terms,
+                    'place_of_supply'    => $po->place_of_supply,
+                    'supplier_id'        => $po->supplier_id,
+                    'supplier_name'      => $po->supplier_name,
+                    'company_name'       => $po->company_name,
+                    'supplier_email'     => $po->supplier_email,
+                    'supplier_phone'     => $po->supplier_phone,
+                    'supplier_gstin'     => $po->supplier_gstin,
+                    'supplier_pan'       => $po->supplier_pan,
+                    'supplier_address'   => $po->supplier_address,
+                    'supplier_city'      => $po->supplier_city,
+                    'supplier_state'     => $po->supplier_state,
+                    'supplier_pincode'   => $po->supplier_pincode,
+                    'supplier_country'   => $po->supplier_country,
+                    'shipping_attention' => $po->shipping_attention,
+                    'shipping_address'   => $po->shipping_address,
+                    'shipping_city'      => $po->shipping_city,
+                    'shipping_state'     => $po->shipping_state,
+                    'shipping_pincode'   => $po->shipping_pincode,
+                    'shipping_country'   => $po->shipping_country,
+                    'subtotal'           => (float) $po->subtotal,
+                    'total_cgst'         => (float) $po->total_cgst,
+                    'total_sgst'         => (float) $po->total_sgst,
+                    'total_igst'         => (float) $po->total_igst,
+                    'total_tax'          => (float) $po->total_tax,
+                    'round_off'          => (float) $po->round_off,
+                    'total_amount'       => (float) $po->total_amount,
+                    'amount_in_words'    => $po->amount_in_words,
+                    'notes'              => $po->notes,
+                    'terms_conditions'   => $po->terms_conditions,
+                    'status'             => strtolower((string) $po->status),
+                    'created_at'         => $po->created_at?->toIso8601String(),
+                    'created_at_formatted'=> $po->created_at?->format('d M Y, h:i A'),
+                    'updated_at'         => $po->updated_at?->toIso8601String(),
+                    'updated_at_formatted'=> $po->updated_at?->format('d M Y, h:i A'),
+                    'creator'            => $po->creator ? [
+                        'id'    => $po->creator->id,
+                        'name'  => $po->creator->name,
+                        'email' => $po->creator->email,
+                    ] : null,
+                    'updater'            => $po->updater ? [
+                        'id'    => $po->updater->id,
+                        'name'  => $po->updater->name,
+                        'email' => $po->updater->email,
+                    ] : null,
+                    'items'              => $items,
+                    'company_setting'    => [
+                        'company_name' => $setting->company_name ?? config('app.name'),
+                        'address'      => $setting->address,
+                        'city'         => $setting->city,
+                        'state'        => $setting->state,
+                        'pincode'      => $setting->pincode,
+                        'gst_number'   => $setting->gst_number,
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts showPurchaseOrder error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Purchase order not found: ' . $e->getMessage(),
+            ], 404);
+        }
+    }
+
+    /**
+     * POST /api/mobile/accounts/purchase-orders
+     * Store newly created purchase order.
+     */
+    public function storePurchaseOrder(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'supplier_id'        => 'nullable|integer',
+            'supplier_name'      => 'required|string|max:255',
+            'company_name'       => 'nullable|string|max:255',
+            'supplier_email'     => 'nullable|email|max:255',
+            'supplier_phone'     => 'nullable|string|max:50',
+            'supplier_gstin'     => 'nullable|string|max:50',
+            'supplier_pan'       => 'nullable|string|max:30',
+            'supplier_address'   => 'nullable|string',
+            'supplier_city'      => 'nullable|string|max:100',
+            'supplier_state'     => 'nullable|string|max:100',
+            'supplier_pincode'   => 'nullable|string|max:20',
+            'supplier_country'   => 'nullable|string|max:100',
+
+            'po_number'          => 'required|string|max:100',
+            'po_date'            => 'required|date',
+            'delivery_date'      => 'nullable|date',
+            'payment_terms'      => 'nullable|string|max:100',
+            'delivery_terms'     => 'nullable|string|max:150',
+            'place_of_supply'    => 'nullable|string|max:100',
+
+            // Shipping
+            'shipping_attention' => 'nullable|string|max:255',
+            'shipping_address'   => 'nullable|string',
+            'shipping_city'      => 'nullable|string|max:100',
+            'shipping_state'     => 'nullable|string|max:100',
+            'shipping_pincode'   => 'nullable|string|max:20',
+            'shipping_country'   => 'nullable|string|max:100',
+
+            // Line Items
+            'items'              => 'required|array|min:1',
+            'items.*.item_id'    => 'nullable|integer',
+            'items.*.item_name'  => 'required|string|max:255',
+            'items.*.description'=> 'nullable|string',
+            'items.*.hsn_sac_code'=> 'nullable|string|max:50',
+            'items.*.qty'        => 'required|numeric|min:0.01',
+            'items.*.rate'       => 'required|numeric|min:0',
+            'items.*.amount'     => 'required|numeric|min:0',
+            'items.*.cgst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.cgst_amount'  => 'nullable|numeric|min:0',
+            'items.*.sgst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.sgst_amount'  => 'nullable|numeric|min:0',
+            'items.*.igst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.igst_amount'  => 'nullable|numeric|min:0',
+            'items.*.total_amount' => 'nullable|numeric|min:0',
+
+            // Calculations
+            'subtotal'           => 'required|numeric|min:0',
+            'total_cgst'         => 'nullable|numeric|min:0',
+            'total_sgst'         => 'nullable|numeric|min:0',
+            'total_igst'         => 'nullable|numeric|min:0',
+            'total_tax'          => 'nullable|numeric|min:0',
+            'round_off'          => 'nullable|numeric',
+            'total_amount'       => 'required|numeric|min:0',
+
+            'notes'              => 'nullable|string',
+            'terms_conditions'   => 'nullable|string',
+            'status'             => 'nullable|string|in:draft,issued,approved,received,cancelled',
+        ]);
+
+        $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+        DB::beginTransaction();
+        try {
+            $poData = collect($validated)->except(['items'])->toArray();
+            $poData['company_id'] = $companyId;
+            $poData['status']     = strtolower($validated['status'] ?? 'issued');
+            $poData['created_by'] = $request->user()?->id ?: auth()->id();
+            $poData['updated_by'] = $request->user()?->id ?: auth()->id();
+
+            $po = PurchaseOrder::create($poData);
+
+            foreach ($validated['items'] as $index => $itemRow) {
+                $itemRow['purchase_order_id'] = $po->id;
+                $itemRow['sort_order']        = $index + 1;
+                $itemRow['total_amount']      = !empty($itemRow['total_amount']) ? $itemRow['total_amount'] : ($itemRow['amount'] ?? 0);
+                $itemRow['cgst_percent']      = $itemRow['cgst_percent'] ?? 0;
+                $itemRow['cgst_amount']       = $itemRow['cgst_amount'] ?? 0;
+                $itemRow['sgst_percent']      = $itemRow['sgst_percent'] ?? 0;
+                $itemRow['sgst_amount']       = $itemRow['sgst_amount'] ?? 0;
+                $itemRow['igst_percent']      = $itemRow['igst_percent'] ?? 0;
+                $itemRow['igst_amount']       = $itemRow['igst_amount'] ?? 0;
+
+                PurchaseOrderItem::create($itemRow);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Purchase Order #{$po->po_number} created successfully!",
+                'data'    => ['id' => $po->id, 'po_number' => $po->po_number],
+            ], 201);
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Mobile Accounts storePurchaseOrder error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to create Purchase Order: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * PUT /api/mobile/accounts/purchase-orders/{id}
+     * Update existing purchase order.
+     */
+    public function updatePurchaseOrder(int $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'supplier_id'        => 'nullable|integer',
+            'supplier_name'      => 'required|string|max:255',
+            'company_name'       => 'nullable|string|max:255',
+            'supplier_email'     => 'nullable|email|max:255',
+            'supplier_phone'     => 'nullable|string|max:50',
+            'supplier_gstin'     => 'nullable|string|max:50',
+            'supplier_pan'       => 'nullable|string|max:30',
+            'supplier_address'   => 'nullable|string',
+            'supplier_city'      => 'nullable|string|max:100',
+            'supplier_state'     => 'nullable|string|max:100',
+            'supplier_pincode'   => 'nullable|string|max:20',
+            'supplier_country'   => 'nullable|string|max:100',
+
+            'po_number'          => 'required|string|max:100',
+            'po_date'            => 'required|date',
+            'delivery_date'      => 'nullable|date',
+            'payment_terms'      => 'nullable|string|max:100',
+            'delivery_terms'     => 'nullable|string|max:150',
+            'place_of_supply'    => 'nullable|string|max:100',
+
+            'shipping_attention' => 'nullable|string|max:255',
+            'shipping_address'   => 'nullable|string',
+            'shipping_city'      => 'nullable|string|max:100',
+            'shipping_state'     => 'nullable|string|max:100',
+            'shipping_pincode'   => 'nullable|string|max:20',
+            'shipping_country'   => 'nullable|string|max:100',
+
+            'items'              => 'required|array|min:1',
+            'items.*.item_id'    => 'nullable|integer',
+            'items.*.item_name'  => 'required|string|max:255',
+            'items.*.description'=> 'nullable|string',
+            'items.*.hsn_sac_code'=> 'nullable|string|max:50',
+            'items.*.qty'        => 'required|numeric|min:0.01',
+            'items.*.rate'       => 'required|numeric|min:0',
+            'items.*.amount'     => 'required|numeric|min:0',
+            'items.*.cgst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.cgst_amount'  => 'nullable|numeric|min:0',
+            'items.*.sgst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.sgst_amount'  => 'nullable|numeric|min:0',
+            'items.*.igst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.igst_amount'  => 'nullable|numeric|min:0',
+            'items.*.total_amount' => 'nullable|numeric|min:0',
+
+            'subtotal'           => 'required|numeric|min:0',
+            'total_cgst'         => 'nullable|numeric|min:0',
+            'total_sgst'         => 'nullable|numeric|min:0',
+            'total_igst'         => 'nullable|numeric|min:0',
+            'total_tax'          => 'nullable|numeric|min:0',
+            'round_off'          => 'nullable|numeric',
+            'total_amount'       => 'required|numeric|min:0',
+
+            'notes'              => 'nullable|string',
+            'terms_conditions'   => 'nullable|string',
+            'status'             => 'nullable|string|in:draft,issued,approved,received,cancelled',
+        ]);
+
+        $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+        $po = PurchaseOrder::forCompany($companyId)->findOrFail($id);
+
+        DB::beginTransaction();
+        try {
+            $poData = collect($validated)->except(['items'])->toArray();
+            $poData['status']     = strtolower($validated['status'] ?? $po->status);
+            $poData['updated_by'] = $request->user()?->id ?: auth()->id();
+
+            $po->update($poData);
+
+            // Re-sync items
+            $po->items()->delete();
+            foreach ($validated['items'] as $index => $itemRow) {
+                $itemRow['purchase_order_id'] = $po->id;
+                $itemRow['sort_order']        = $index + 1;
+                $itemRow['total_amount']      = !empty($itemRow['total_amount']) ? $itemRow['total_amount'] : ($itemRow['amount'] ?? 0);
+                $itemRow['cgst_percent']      = $itemRow['cgst_percent'] ?? 0;
+                $itemRow['cgst_amount']       = $itemRow['cgst_amount'] ?? 0;
+                $itemRow['sgst_percent']      = $itemRow['sgst_percent'] ?? 0;
+                $itemRow['sgst_amount']       = $itemRow['sgst_amount'] ?? 0;
+                $itemRow['igst_percent']      = $itemRow['igst_percent'] ?? 0;
+                $itemRow['igst_amount']       = $itemRow['igst_amount'] ?? 0;
+
+                PurchaseOrderItem::create($itemRow);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Purchase Order #{$po->po_number} updated successfully!",
+                'data'    => ['id' => $po->id, 'po_number' => $po->po_number],
+            ]);
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Mobile Accounts updatePurchaseOrder error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to update Purchase Order: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * PATCH /api/mobile/accounts/purchase-orders/{id}/status
+     * Quick status update for Purchase Order.
+     */
+    public function updatePurchaseOrderStatus(int $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'status' => 'required|string|in:draft,issued,approved,received,cancelled',
+        ]);
+
+        $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+        $po = PurchaseOrder::forCompany($companyId)->findOrFail($id);
+
+        $po->update([
+            'status'     => strtolower($validated['status']),
+            'updated_by' => $request->user()?->id ?: auth()->id(),
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => "PO #{$po->po_number} status updated to " . ucfirst($validated['status']) . ".",
+            'data'    => ['id' => $po->id, 'status' => $po->status],
+        ]);
+    }
+
+    /**
+     * DELETE /api/mobile/accounts/purchase-orders/{id}
+     * Delete a Purchase Order.
+     */
+    public function destroyPurchaseOrder(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+            $po = PurchaseOrder::forCompany($companyId)->findOrFail($id);
+
+            $poNumber = $po->po_number;
+            $po->items()->delete();
+            $po->delete();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Purchase Order #{$poNumber} deleted successfully.",
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts destroyPurchaseOrder error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete Purchase Order: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/mobile/accounts/purchase-orders/{id}/pdf
+     * Generate & stream Purchase Order PDF.
+     */
+    public function purchaseOrderPdf(int $id, Request $request)
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+            $purchaseOrder = PurchaseOrder::with(['items.itemMaster', 'supplier', 'creator'])
+                ->forCompany($companyId)
+                ->findOrFail($id);
+
+            $setting     = InvoiceSetting::forCompany($companyId);
+            $companyName = $setting->company_name ?: config('app.name');
+            $filename    = 'PurchaseOrder_' . str_replace(['/', '\\'], '_', $purchaseOrder->po_number) . '.pdf';
+
+            $pdf = Pdf::loadView('pages.accounts.purchase_orders.pdf', [
+                'purchaseOrder' => $purchaseOrder,
+                'setting'       => $setting,
+                'companyName'   => $companyName,
+            ])
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'defaultFont'          => 'DejaVu Sans',
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled'      => true,
+                'isPhpEnabled'         => true,
+            ]);
+
+            return $pdf->stream($filename);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts purchaseOrderPdf error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Purchase Order not found or failed to generate PDF: ' . $e->getMessage(),
+            ], 404);
         }
     }
 }

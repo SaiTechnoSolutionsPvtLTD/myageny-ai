@@ -36,20 +36,8 @@ class OutsideOfficeAttendanceRequest extends Model
                 $isBranchManager = $user->isBranchManager() || app(\App\Services\DataVisibilityService::class)->hasBranchManagerRole($user);
                 if ($isBranchManager) {
                     $defaultBranchIds = Branch::where('is_default', true)->pluck('id')->map(fn ($id) => (int) $id)->toArray() ?: [1];
-                    $buBranchIds = \Illuminate\Support\Facades\DB::table('branch_user')
-                        ->where('user_id', $user->id)
-                        ->pluck('branch_id')
-                        ->map(fn ($id) => (int) $id)
-                        ->all();
-                    $mgrBranchIds = \Illuminate\Support\Facades\DB::table('branches')
-                        ->where('manager_id', $user->id)
-                        ->pluck('id')
-                        ->map(fn ($id) => (int) $id)
-                        ->all();
-                    $explicitBranchIds = array_values(array_unique(array_merge($buBranchIds, $mgrBranchIds)));
-                    $uBranchId = $user->branch_id ? (int) $user->branch_id : null;
-                    $nonDefaultBranch = ($uBranchId && ! in_array($uBranchId, $defaultBranchIds, true)) ? [$uBranchId] : [];
-                    $branchIds = array_values(array_unique(array_merge($explicitBranchIds, $nonDefaultBranch)));
+                    $allBranchIds = array_map('intval', $user->getMyBranchIds());
+                    $branchIds = array_values(array_filter($allBranchIds, fn ($id) => ! in_array((int) $id, $defaultBranchIds, true)));
                 } else {
                     $branchIds = $user->getMyBranchIds();
                 }
