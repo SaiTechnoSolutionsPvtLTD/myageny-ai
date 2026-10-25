@@ -1101,7 +1101,7 @@ class QuotationController extends Controller
         $lead = Lead::findOrFail($leadId);
         abort_unless($this->visibility->canAccessLead($lead), 403);
 
-        $getQuotations = Quotation::with('items')->where('lead_id', $leadId)->get();
+        $getQuotations = Quotation::with(['items', 'lead', 'approver'])->where('lead_id', $leadId)->latest()->get();
 
         return new QuotationCollection($getQuotations);
     }

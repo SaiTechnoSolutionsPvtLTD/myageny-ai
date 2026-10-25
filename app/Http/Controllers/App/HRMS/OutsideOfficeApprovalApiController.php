@@ -51,8 +51,8 @@ class OutsideOfficeApprovalApiController extends Controller
         $isTlOrManager  = $hasTeamMembers || $user->hasTlLikeRole() || $isBranchManager;
         $isAdminOrHr    = $isSuperAdmin || $isCompanyAdmin || $isHr || $isBranchAdmin;
 
-        // Assigned branches for branch manager — excludes the default main branch
-        // unless explicitly assigned via branch_user or branches.manager_id
+        // Assigned branches for branch manager — strictly excludes the default main branch
+        // to match DataVisibilityService::visibleUserIds() and PermissionRequestApiController conventions.
         $assignedBranchIds = [];
         if ($isBranchManager) {
             $defaultBranchIds = Branch::withoutGlobalScopes()->where('is_default', true)->pluck('id')->map(fn ($id) => (int) $id)->toArray();
@@ -60,24 +60,8 @@ class OutsideOfficeApprovalApiController extends Controller
                 $defaultBranchIds = [1];
             }
 
-            $buBranchIds = DB::table('branch_user')
-                ->where('user_id', $user->id)
-                ->pluck('branch_id')
-                ->map(fn ($id) => (int) $id)
-                ->all();
-
-            $mgrBranchIds = DB::table('branches')
-                ->where('manager_id', $user->id)
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->all();
-
-            $explicitBranchIds = array_values(array_unique(array_merge($buBranchIds, $mgrBranchIds)));
-
-            $uBranchId = $user->branch_id ? (int) $user->branch_id : null;
-            $nonDefaultBranch = ($uBranchId && ! in_array($uBranchId, $defaultBranchIds, true)) ? [$uBranchId] : [];
-
-            $assignedBranchIds = array_values(array_unique(array_merge($explicitBranchIds, $nonDefaultBranch)));
+            $allBranchIds = array_map('intval', $user->getMyBranchIds());
+            $assignedBranchIds = array_values(array_filter($allBranchIds, fn ($id) => ! in_array((int) $id, $defaultBranchIds, true)));
         }
 
         return [
@@ -175,6 +159,20 @@ class OutsideOfficeApprovalApiController extends Controller
                 $reqId = (int) $requestedBranchId;
                 if (in_array($reqId, $assignedBranchIds, true)) {
                     $assignedBranchIds = [$reqId];
+                    $branchUserIds = User::withoutGlobalScope('branch')
+                        ->where('is_active', true)
+                        ->where(function ($bQuery) use ($reqId) {
+                            $bQuery->where('branch_id', $reqId)
+                                  ->orWhereExists(function ($sub) use ($reqId) {
+                                      $sub->select(DB::raw(1))
+                                          ->from('branch_user')
+                                          ->whereColumn('branch_user.user_id', 'users.id')
+                                          ->where('branch_user.branch_id', $reqId);
+                                  });
+                        })
+                        ->pluck('id')
+                        ->all();
+                    $visibleUserIds = array_values(array_intersect($visibleUserIds, $branchUserIds));
                 } else {
                     $query->whereRaw('1 = 0');
                     return;
@@ -186,63 +184,53 @@ class OutsideOfficeApprovalApiController extends Controller
                 return;
             }
 
-            $query->where(function (Builder $q) use ($assignedBranchIds, $visibleUserIds) {
-                $q->whereHas('employee', function (Builder $eq) use ($assignedBranchIds, $visibleUserIds) {
-                    $eq->where(function (Builder $eqSub) use ($assignedBranchIds, $visibleUserIds) {
-                        $eqSub->whereHas('portalUser', function (Builder $pu) use ($assignedBranchIds, $visibleUserIds) {
-                            $pu->where(function (Builder $puSub) use ($assignedBranchIds, $visibleUserIds) {
-                                if (! empty($visibleUserIds)) {
-                                    $puSub->whereIn('id', $visibleUserIds);
-                                }
-                                if (! empty($assignedBranchIds)) {
-                                    $puSub->orWhereIn('branch_id', $assignedBranchIds)
-                                          ->orWhereExists(function ($sub) use ($assignedBranchIds) {
-                                              $sub->select(DB::raw(1))
-                                                  ->from('branch_user')
-                                                  ->whereColumn('branch_user.user_id', 'users.id')
-                                                  ->whereIn('branch_user.branch_id', $assignedBranchIds);
-                                          });
-                                }
-                            });
-                        });
+            $branchCodes = [];
+            if (! empty($assignedBranchIds)) {
+                $defaultBranchIds = Branch::withoutGlobalScopes()->where('is_default', true)->pluck('id')->map(fn ($id) => (int) $id)->toArray() ?: [1];
+                $nonDefaultAssigned = array_values(array_filter($assignedBranchIds, fn ($id) => ! in_array((int) $id, $defaultBranchIds, true)));
+                if (! empty($nonDefaultAssigned)) {
+                    $codes = Branch::withoutGlobalScopes()->whereIn('id', $nonDefaultAssigned)->whereNotNull('code')->pluck('code')->filter()->all();
+                    $branchCodes = array_values(array_filter($codes, fn ($c) => $c && $c !== 'STS'));
+                }
+            }
 
-                        if (! empty($assignedBranchIds)) {
-                            $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $assignedBranchIds)->whereNotNull('code')->pluck('code')->all();
-                            foreach ($branchCodes as $code) {
-                                if ($code && $code !== 'STS') {
-                                    $eqSub->orWhere('employee_id', 'like', $code . '%');
-                                }
-                            }
-                        }
-                    });
-                })->orWhereHas('intern', function (Builder $iq) use ($assignedBranchIds, $visibleUserIds) {
-                    $iq->where(function (Builder $iqSub) use ($assignedBranchIds, $visibleUserIds) {
-                        $iqSub->whereHas('portalUser', function (Builder $pu) use ($assignedBranchIds, $visibleUserIds) {
-                            $pu->where(function (Builder $puSub) use ($assignedBranchIds, $visibleUserIds) {
-                                if (! empty($visibleUserIds)) {
-                                    $puSub->whereIn('id', $visibleUserIds);
-                                }
-                                if (! empty($assignedBranchIds)) {
-                                    $puSub->orWhereIn('branch_id', $assignedBranchIds)
-                                          ->orWhereExists(function ($sub) use ($assignedBranchIds) {
-                                              $sub->select(DB::raw(1))
-                                                  ->from('branch_user')
-                                                  ->whereColumn('branch_user.user_id', 'users.id')
-                                                  ->whereIn('branch_user.branch_id', $assignedBranchIds);
-                                          });
-                                }
-                            });
+            $query->where(function (Builder $q) use ($visibleUserIds, $branchCodes) {
+                $q->where(function (Builder $eq) use ($visibleUserIds, $branchCodes) {
+                    $eq->where('attendee_type', 'employee')
+                        ->whereHas('employee', function (Builder $empQuery) use ($visibleUserIds, $branchCodes) {
+                            $empQuery->withoutGlobalScope('branch')
+                                ->where(function (Builder $eSub) use ($visibleUserIds, $branchCodes) {
+                                    if (! empty($visibleUserIds)) {
+                                        $eSub->whereIn('portal_user_id', $visibleUserIds);
+                                    }
+                                    if (! empty($branchCodes)) {
+                                        foreach ($branchCodes as $code) {
+                                            $eSub->orWhere('employee_id', 'like', $code . '%');
+                                        }
+                                    }
+                                    if (empty($visibleUserIds) && empty($branchCodes)) {
+                                        $eSub->whereRaw('1 = 0');
+                                    }
+                                });
                         });
-
-                        if (! empty($assignedBranchIds)) {
-                            $branchCodes = Branch::withoutGlobalScopes()->whereIn('id', $assignedBranchIds)->whereNotNull('code')->pluck('code')->all();
-                            foreach ($branchCodes as $code) {
-                                if ($code && $code !== 'STS') {
-                                    $iqSub->orWhere('intern_id', 'like', $code . '%');
-                                }
-                            }
-                        }
-                    });
+                })->orWhere(function (Builder $iq) use ($visibleUserIds, $branchCodes) {
+                    $iq->where('attendee_type', 'intern')
+                        ->whereHas('intern', function (Builder $intQuery) use ($visibleUserIds, $branchCodes) {
+                            $intQuery->withoutGlobalScope('branch')
+                                ->where(function (Builder $iSub) use ($visibleUserIds, $branchCodes) {
+                                    if (! empty($visibleUserIds)) {
+                                        $iSub->whereIn('portal_user_id', $visibleUserIds);
+                                    }
+                                    if (! empty($branchCodes)) {
+                                        foreach ($branchCodes as $code) {
+                                            $iSub->orWhere('intern_id', 'like', $code . '%');
+                                        }
+                                    }
+                                    if (empty($visibleUserIds) && empty($branchCodes)) {
+                                        $iSub->whereRaw('1 = 0');
+                                    }
+                                });
+                        });
                 });
             });
 
@@ -375,8 +363,8 @@ class OutsideOfficeApprovalApiController extends Controller
             $assignedBranchIds = $vis['assigned_branch_ids'];
             $visibleUserIds    = $vis['visible_user_ids'];
 
-            if ($portalUser && in_array((int) $portalUser->id, $visibleUserIds, true)) {
-                return true;
+            if ($portalUser) {
+                return in_array((int) $portalUser->id, $visibleUserIds, true);
             }
 
             if ($this->requestBelongsToBranches($request, $assignedBranchIds)) {

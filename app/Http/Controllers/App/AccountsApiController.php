@@ -8,7 +8,10 @@ use App\Models\AdBudgetRequest;
 use App\Models\AdSpend;
 use App\Models\Branch;
 use App\Models\DomainRecord;
+use App\Models\DomainRenewal;
 use App\Models\HostingRecord;
+use App\Models\HostingRenewal;
+use App\Models\Lead;
 use App\Models\LeadProductPayment;
 use App\Models\User;
 use App\Mail\AdBudgetNotificationMail;
@@ -17,17 +20,27 @@ use App\Models\AccountExpenseCategory;
 use App\Models\AccountExpenseSubcategory;
 use App\Models\VendorMaster;
 use App\Models\CustomerMaster;
+use App\Models\CreditNote;
+use App\Models\CreditNoteItem;
 use App\Models\Department;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\InvoicePayment;
 use App\Models\InvoiceSetting;
 use App\Models\ItemMaster;
+use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
+use App\Models\SupplierMaster;
+use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\CustomerMasterController;
 use App\Console\Commands\GenerateRecurringAccountExpensesCommand;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -53,6 +66,234 @@ class AccountsApiController extends Controller
             $user = $request->user();
             $companyId = $user?->company_id;
 
+            // Table availability checks for environment safety
+            $hasInvoices        = false;
+            $hasPurchaseOrders  = false;
+            $hasInvoicePayments = false;
+            $hasExpenses        = false;
+            try {
+                $hasInvoices        = Schema::hasTable('invoices');
+                $hasPurchaseOrders  = Schema::hasTable('purchase_orders');
+                $hasInvoicePayments = Schema::hasTable('invoice_payments');
+                $hasExpenses        = Schema::hasTable('account_expenses');
+            } catch (Throwable) {}
+
+            // 1. Receivables (Customer Invoices)
+            $totalReceivables    = 0.0;
+            $overdueReceivables  = 0.0;
+            $unpaidInvoicesCount = 0;
+            $receivablesInvoices = collect();
+
+            if ($hasInvoices) {
+                $totalReceivables = (float) Invoice::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled'])
+                    ->sum('balance_due');
+
+                $overdueReceivables = (float) Invoice::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled', 'paid'])
+                    ->where('balance_due', '>', 0)
+                    ->whereDate('due_date', '<', today())
+                    ->sum('balance_due');
+
+                $unpaidInvoicesCount = Invoice::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled', 'paid'])
+                    ->where('balance_due', '>', 0)
+                    ->count();
+
+                $receivablesInvoices = Invoice::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled', 'paid'])
+                    ->where('balance_due', '>', 0)
+                    ->with('customer')
+                    ->orderBy('due_date')
+                    ->take(20)
+                    ->get()
+                    ->map(fn($inv) => [
+                        'id'             => $inv->id,
+                        'invoice_number' => $inv->invoice_number,
+                        'customer_name'  => $inv->customer_name ?: ($inv->customer?->display_name ?? '—'),
+                        'customer_phone' => $inv->customer_phone,
+                        'invoice_date'   => $inv->invoice_date?->format('Y-m-d'),
+                        'due_date'       => $inv->due_date?->format('Y-m-d'),
+                        'total_amount'   => (float) $inv->total_amount,
+                        'paid_amount'    => (float) $inv->paid_amount,
+                        'balance_due'    => (float) $inv->balance_due,
+                        'status'         => $inv->status,
+                        'is_overdue'     => $inv->due_date && Carbon::parse($inv->due_date)->isPast(),
+                        'overdue_days'   => ($inv->due_date && Carbon::parse($inv->due_date)->isPast()) ? (int) now()->diffInDays(Carbon::parse($inv->due_date)) : 0,
+                    ]);
+            }
+
+            // 2. Payables (Vendor / Supplier Purchase Orders)
+            $totalPayables          = 0.0;
+            $pendingPoCount         = 0;
+            $payablesPurchaseOrders = collect();
+
+            if ($hasPurchaseOrders) {
+                $totalPayables = (float) PurchaseOrder::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled'])
+                    ->sum('total_amount');
+
+                $pendingPoCount = PurchaseOrder::forCompany($companyId)
+                    ->whereIn('status', ['draft', 'issued'])
+                    ->count();
+
+                $payablesPurchaseOrders = PurchaseOrder::forCompany($companyId)
+                    ->whereNotIn('status', ['cancelled'])
+                    ->with('supplier')
+                    ->latest('po_date')
+                    ->take(20)
+                    ->get()
+                    ->map(fn($po) => [
+                        'id'             => $po->id,
+                        'po_number'      => $po->po_number,
+                        'supplier_name'  => $po->supplier_name ?: ($po->supplier?->vendor_name ?? '—'),
+                        'po_date'        => $po->po_date?->format('Y-m-d'),
+                        'delivery_date'  => $po->delivery_date?->format('Y-m-d'),
+                        'total_amount'   => (float) $po->total_amount,
+                        'status'         => $po->status,
+                    ]);
+            }
+
+            // 3. Current Month Income & Expenses
+            $currentMonthStart = now()->startOfMonth();
+            $currentMonthEnd   = now()->endOfMonth();
+            $lastMonthStart    = now()->copy()->subMonth()->startOfMonth();
+            $lastMonthEnd      = now()->copy()->subMonth()->endOfMonth();
+
+            $incomeThisMonth     = 0.0;
+            $incomeLastMonth     = 0.0;
+            $incomePaymentsCount = 0;
+            $thisMonthPayments   = collect();
+
+            if ($hasInvoicePayments) {
+                $incomeThisMonth = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$currentMonthStart, $currentMonthEnd])
+                    ->sum('amount_received');
+
+                $incomeLastMonth = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$lastMonthStart, $lastMonthEnd])
+                    ->sum('amount_received');
+
+                $incomePaymentsCount = InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$currentMonthStart, $currentMonthEnd])
+                    ->count();
+
+                $thisMonthPayments = InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$currentMonthStart, $currentMonthEnd])
+                    ->with(['customer', 'invoice.customer'])
+                    ->latest('payment_date')
+                    ->take(50)
+                    ->get()
+                    ->map(fn($p) => [
+                        'id'                     => $p->id,
+                        'invoice_id'             => $p->invoice_id ? (int) $p->invoice_id : ($p->invoice?->id ? (int) $p->invoice?->id : null),
+                        'payment_number'         => $p->payment_number,
+                        'payment_date'           => $p->payment_date?->format('Y-m-d'),
+                        'payment_date_formatted' => $p->payment_date?->format('d M Y'),
+                        'customer_name'          => $p->customer?->display_name ?: ($p->invoice?->customer_name ?: ($p->invoice?->customer?->display_name ?? '—')),
+                        'invoice_number'         => $p->invoice?->invoice_number ?? '—',
+                        'invoice_date'           => $p->invoice?->invoice_date?->format('Y-m-d'),
+                        'invoice_date_formatted' => $p->invoice?->invoice_date?->format('d M Y'),
+                        'payment_mode'           => $p->payment_mode,
+                        'payment_mode_label'     => $p->payment_mode_label,
+                        'reference_number'       => $p->reference_number ?: '—',
+                        'amount_received'        => (float) $p->amount_received,
+                    ]);
+            }
+
+            $expenseThisMonth    = 0.0;
+            $expenseLastMonth    = 0.0;
+            $expenseEntriesCount = 0;
+            $thisMonthExpenses   = collect();
+
+            if ($hasExpenses) {
+                $expenseThisMonth = (float) AccountExpense::forCompany($companyId)
+                    ->whereBetween('expense_date', [$currentMonthStart, $currentMonthEnd])
+                    ->sum('amount');
+
+                $expenseLastMonth = (float) AccountExpense::forCompany($companyId)
+                    ->whereBetween('expense_date', [$lastMonthStart, $lastMonthEnd])
+                    ->sum('amount');
+
+                $expenseEntriesCount = AccountExpense::forCompany($companyId)
+                    ->whereBetween('expense_date', [$currentMonthStart, $currentMonthEnd])
+                    ->count();
+
+                $thisMonthExpenses = AccountExpense::forCompany($companyId)
+                    ->whereBetween('expense_date', [$currentMonthStart, $currentMonthEnd])
+                    ->with(['category', 'subcategory', 'vendor'])
+                    ->latest('expense_date')
+                    ->take(50)
+                    ->get()
+                    ->map(fn($exp) => [
+                        'id'                     => $exp->id,
+                        'expense_number'         => $exp->expense_number ?: ('EXP-' . str_pad($exp->id, 5, '0', STR_PAD_LEFT)),
+                        'expense_date'           => $exp->expense_date?->format('Y-m-d'),
+                        'expense_date_formatted' => $exp->expense_date?->format('d M Y'),
+                        'title'                  => $exp->title,
+                        'category_name'          => $exp->category?->name ?? '—',
+                        'subcategory_name'       => $exp->subcategory?->name,
+                        'vendor_name'            => $exp->vendor?->vendor_name ?: ($exp->vendor_name ?? '—'),
+                        'expense_type'           => $exp->expense_type ?? 'Fixed',
+                        'invoice_no'             => $exp->invoice_no ?: '—',
+                        'amount'                 => (float) $exp->amount,
+                        'payment_method'         => $exp->payment_method,
+                        'remarks'                => $exp->remarks ?: '—',
+                        'status'                 => $exp->status,
+                    ]);
+            }
+
+            // 4. Chart 1: Income vs Expense Breakdown (Default: Current Financial Year)
+            $currentFyStartYear = now()->month >= 4 ? now()->year : now()->year - 1;
+            $initialIncomeExpense = $this->calculateIncomeExpenseData($companyId, 'fy', $currentFyStartYear);
+
+            $fyYears = [
+                $currentFyStartYear,
+                $currentFyStartYear - 1,
+                $currentFyStartYear - 2,
+            ];
+            $cyYears = [
+                now()->year,
+                now()->year - 1,
+                now()->year - 2,
+            ];
+
+            // 5. Chart 2: Top Expenses by Category (Default: Month)
+            $initialTopExpenses = $this->calculateTopExpensesData($companyId, 'month');
+
+            // 6. Recent Sales Invoices & Recent Purchase Orders (5 Latest)
+            $recentInvoices = Invoice::forCompany($companyId)
+                ->with('customer')
+                ->latest('invoice_date')
+                ->latest('id')
+                ->take(5)
+                ->get()
+                ->map(fn($inv) => [
+                    'id'             => $inv->id,
+                    'invoice_number' => $inv->invoice_number,
+                    'customer_name'  => $inv->customer_name ?: ($inv->customer?->display_name ?? '—'),
+                    'invoice_date'   => $inv->invoice_date?->format('Y-m-d'),
+                    'total_amount'   => (float) $inv->total_amount,
+                    'balance_due'    => (float) $inv->balance_due,
+                    'status'         => $inv->status,
+                ]);
+
+            $recentPurchaseOrders = PurchaseOrder::forCompany($companyId)
+                ->with('supplier')
+                ->latest('po_date')
+                ->latest('id')
+                ->take(5)
+                ->get()
+                ->map(fn($po) => [
+                    'id'            => $po->id,
+                    'po_number'     => $po->po_number,
+                    'supplier_name' => $po->supplier_name ?: ($po->supplier?->vendor_name ?? '—'),
+                    'po_date'       => $po->po_date?->format('Y-m-d'),
+                    'total_amount'  => (float) $po->total_amount,
+                    'status'        => $po->status,
+                ]);
+
+            // 7. Retain Ad Budget & Accounts Stats
             $activeAdAccountsCount = AdAccountMaster::when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->where('status', 'active')
                 ->count();
@@ -83,6 +324,12 @@ class AccountsApiController extends Controller
                 ->whereYear('created_at', now()->year)
                 ->sum('amount');
 
+            $totalPartnerBudgetAmount = (float) AdBudgetRequest::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->where('type', 'partner')
+                ->whereMonth('created_at', now()->month)
+                ->whereYear('created_at', now()->year)
+                ->sum('amount');
+
             $recentRequests = AdBudgetRequest::with(['adAccount', 'requester', 'tlApprover', 'approver'])
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->latest()
@@ -93,12 +340,71 @@ class AccountsApiController extends Controller
             return response()->json([
                 'status' => true,
                 'data'   => [
+                    // Financial Overview
+                    'financial_overview' => [
+                        'total_receivables'        => $totalReceivables,
+                        'overdue_receivables'      => $overdueReceivables,
+                        'unpaid_invoices_count'    => $unpaidInvoicesCount,
+                        'receivables_invoices'     => $receivablesInvoices,
+
+                        'total_payables'           => $totalPayables,
+                        'pending_po_count'         => $pendingPoCount,
+                        'payables_purchase_orders' => $payablesPurchaseOrders,
+
+                        'income_this_month'        => $incomeThisMonth,
+                        'income_last_month'        => $incomeLastMonth,
+                        'income_payments_count'    => $incomePaymentsCount,
+                        'this_month_payments'      => $thisMonthPayments,
+
+                        'expense_this_month'       => $expenseThisMonth,
+                        'expense_last_month'       => $expenseLastMonth,
+                        'expense_entries_count'    => $expenseEntriesCount,
+                        'this_month_expenses'      => $thisMonthExpenses,
+                    ],
+
+                    // Charts
+                    'income_expense_chart' => [
+                        'chart_type'  => 'fy',
+                        'chart_year'  => $currentFyStartYear,
+                        'labels'      => $initialIncomeExpense['labels'],
+                        'full_labels' => $initialIncomeExpense['fullLabels'],
+                        'income'      => $initialIncomeExpense['income'],
+                        'expenses'    => $initialIncomeExpense['expenses'],
+                        'fy_years'    => $fyYears,
+                        'cy_years'    => $cyYears,
+                    ],
+
+                    'top_expenses_chart' => [
+                        'period' => 'month',
+                        'labels' => $initialTopExpenses['labels'],
+                        'values' => $initialTopExpenses['values'],
+                        'total'  => $initialTopExpenses['total'],
+                    ],
+
+                    // Recent Invoices & POs
+                    'recent_invoices'        => $recentInvoices,
+                    'recent_purchase_orders' => $recentPurchaseOrders,
+
+                    // Ad Budget Section
+                    'ad_budget' => [
+                        'active_ad_accounts_count'    => $activeAdAccountsCount,
+                        'client_requests_count'       => $clientRequestsCount,
+                        'partner_requests_count'      => $partnerRequestsCount,
+                        'pending_approvals_count'     => $pendingApprovalsCount,
+                        'pending_accounts_count'      => $pendingAccountsCount,
+                        'total_client_budget_amount'  => $totalClientBudgetAmount,
+                        'total_partner_budget_amount' => $totalPartnerBudgetAmount,
+                        'recent_requests'             => $recentRequests,
+                    ],
+
+                    // Backward compatibility fields
                     'active_ad_accounts_count'    => $activeAdAccountsCount,
                     'client_requests_count'       => $clientRequestsCount,
                     'partner_requests_count'      => $partnerRequestsCount,
                     'pending_approvals_count'     => $pendingApprovalsCount,
                     'pending_accounts_count'      => $pendingAccountsCount,
                     'total_client_budget_amount'  => $totalClientBudgetAmount,
+                    'total_partner_budget_amount' => $totalPartnerBudgetAmount,
                     'recent_requests'             => $recentRequests,
                 ],
             ]);
@@ -109,6 +415,231 @@ class AccountsApiController extends Controller
                 'message' => 'Failed to load Accounts dashboard data: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Dedicated chart endpoint for Income & Expense monthly breakdown.
+     */
+    public function dashboardIncomeExpenseChart(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+            $chartType = $request->query('chart_type', 'fy');
+            $currentFyStartYear = now()->month >= 4 ? now()->year : now()->year - 1;
+            $year = (int) $request->query('chart_year', $chartType === 'fy' ? $currentFyStartYear : now()->year);
+
+            $data = $this->calculateIncomeExpenseData($companyId, $chartType, $year);
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'chart_type'  => $chartType,
+                    'chart_year'  => $year,
+                    'labels'      => $data['labels'],
+                    'full_labels' => $data['fullLabels'],
+                    'income'      => $data['income'],
+                    'expenses'    => $data['expenses'],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts income/expense chart error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load chart data: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Dedicated chart endpoint for Top Expenses by category.
+     */
+    public function dashboardTopExpensesChart(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+            $period = $request->query('expense_period', 'month');
+
+            $data = $this->calculateTopExpensesData($companyId, $period);
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'period' => $period,
+                    'labels' => $data['labels'],
+                    'values' => $data['values'],
+                    'total'  => $data['total'],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts top expenses chart error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load top expenses: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Helper to compute Income & Expense monthly breakdown for FY or CY.
+     */
+    private function calculateIncomeExpenseData(?int $companyId, string $chartType, int $year): array
+    {
+        $hasInvoicePayments = false;
+        $hasExpenses = false;
+        try {
+            $hasInvoicePayments = Schema::hasTable('invoice_payments');
+            $hasExpenses = Schema::hasTable('account_expenses');
+        } catch (Throwable) {}
+
+        $labels = [];
+        $fullLabels = [];
+        $income = [];
+        $expenses = [];
+
+        if ($chartType === 'fy') {
+            // April ($year) to March ($year + 1)
+            for ($m = 4; $m <= 12; $m++) {
+                $dt = Carbon::create($year, $m, 1);
+                $labels[] = $dt->format('M');
+                $fullLabels[] = $dt->format('M Y');
+                $mStart = $dt->copy()->startOfMonth();
+                $mEnd   = $dt->copy()->endOfMonth();
+
+                $inc = 0.0;
+                if ($hasInvoicePayments) {
+                    $inc = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                        ->whereBetween('payment_date', [$mStart, $mEnd])
+                        ->sum('amount_received');
+                }
+                $exp = 0.0;
+                if ($hasExpenses) {
+                    $exp = (float) AccountExpense::forCompany($companyId)
+                        ->whereBetween('expense_date', [$mStart, $mEnd])
+                        ->sum('amount');
+                }
+
+                $income[]   = round($inc, 2);
+                $expenses[] = round($exp, 2);
+            }
+            for ($m = 1; $m <= 3; $m++) {
+                $dt = Carbon::create($year + 1, $m, 1);
+                $labels[] = $dt->format('M');
+                $fullLabels[] = $dt->format('M Y');
+                $mStart = $dt->copy()->startOfMonth();
+                $mEnd   = $dt->copy()->endOfMonth();
+
+                $inc = 0.0;
+                if ($hasInvoicePayments) {
+                    $inc = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                        ->whereBetween('payment_date', [$mStart, $mEnd])
+                        ->sum('amount_received');
+                }
+                $exp = 0.0;
+                if ($hasExpenses) {
+                    $exp = (float) AccountExpense::forCompany($companyId)
+                        ->whereBetween('expense_date', [$mStart, $mEnd])
+                        ->sum('amount');
+                }
+
+                $income[]   = round($inc, 2);
+                $expenses[] = round($exp, 2);
+            }
+        } else {
+            // Calendar Year: January ($year) to December ($year)
+            for ($m = 1; $m <= 12; $m++) {
+                $dt = Carbon::create($year, $m, 1);
+                $labels[] = $dt->format('M');
+                $fullLabels[] = $dt->format('M Y');
+                $mStart = $dt->copy()->startOfMonth();
+                $mEnd   = $dt->copy()->endOfMonth();
+
+                $inc = 0.0;
+                if ($hasInvoicePayments) {
+                    $inc = (float) InvoicePayment::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                        ->whereBetween('payment_date', [$mStart, $mEnd])
+                        ->sum('amount_received');
+                }
+                $exp = 0.0;
+                if ($hasExpenses) {
+                    $exp = (float) AccountExpense::forCompany($companyId)
+                        ->whereBetween('expense_date', [$mStart, $mEnd])
+                        ->sum('amount');
+                }
+
+                $income[]   = round($inc, 2);
+                $expenses[] = round($exp, 2);
+            }
+        }
+
+        return [
+            'labels'     => $labels,
+            'fullLabels' => $fullLabels,
+            'income'     => $income,
+            'expenses'   => $expenses,
+        ];
+    }
+
+    /**
+     * Helper to compute Top Expenses category breakdown for Today, Month, Quarter, Year.
+     */
+    private function calculateTopExpensesData(?int $companyId, string $period): array
+    {
+        $query = AccountExpense::forCompany($companyId);
+
+        if ($period === 'today') {
+            $query->whereDate('expense_date', today());
+        } elseif ($period === 'month') {
+            $query->whereBetween('expense_date', [now()->startOfMonth(), now()->endOfMonth()]);
+        } elseif ($period === 'quarter') {
+            $query->whereBetween('expense_date', [now()->startOfQuarter(), now()->endOfQuarter()]);
+        } elseif ($period === 'year') {
+            // Current Financial Year
+            $fyStart = now()->month >= 4 ? Carbon::create(now()->year, 4, 1)->startOfDay() : Carbon::create(now()->year - 1, 4, 1)->startOfDay();
+            $fyEnd   = $fyStart->copy()->addYear()->subDay()->endOfDay();
+            $query->whereBetween('expense_date', [$fyStart, $fyEnd]);
+        }
+
+        $categoryExpenses = $query->with('category')
+            ->select('account_expense_category_id', DB::raw('SUM(amount) as total'))
+            ->groupBy('account_expense_category_id')
+            ->orderByDesc('total')
+            ->get();
+
+        $topExpenseLabels = [];
+        $topExpenseValues = [];
+        $otherExpenseTotal = 0;
+        $grandTotal = 0;
+
+        foreach ($categoryExpenses as $index => $item) {
+            $catName = $item->category?->name ?? 'Uncategorized';
+            $val = round((float) $item->total, 2);
+            $grandTotal += $val;
+
+            if ($index < 5) {
+                $topExpenseLabels[] = $catName;
+                $topExpenseValues[] = $val;
+            } else {
+                $otherExpenseTotal += $val;
+            }
+        }
+
+        if ($otherExpenseTotal > 0) {
+            $topExpenseLabels[] = 'Others';
+            $topExpenseValues[] = round($otherExpenseTotal, 2);
+        }
+
+        if (empty($topExpenseLabels)) {
+            $topExpenseLabels = ['No Expenses'];
+            $topExpenseValues = [0.0];
+        }
+
+        return [
+            'labels' => $topExpenseLabels,
+            'values' => $topExpenseValues,
+            'total'  => $grandTotal,
+        ];
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -166,6 +697,20 @@ class AccountsApiController extends Controller
 
             $paginated = $query->latest()->paginate($perPage);
 
+            $now = Carbon::now('Asia/Kolkata');
+            $requestCutoff = $now->copy()->setTime(11, 30, 0);
+            $isRequestAllowed = $now->lessThan($requestCutoff);
+            $approvalCutoff = $now->copy()->setTime(12, 30, 0);
+            $isApprovalAllowed = $now->lessThan($approvalCutoff);
+
+            $cutoffInfo = [
+                'is_request_allowed'   => $isRequestAllowed,
+                'request_cutoff_time'  => '11:30 AM',
+                'is_approval_allowed'  => $isApprovalAllowed,
+                'approval_cutoff_time' => '12:30 PM',
+                'current_time'         => $now->format('h:i A'),
+            ];
+
             // Active Ad Accounts list for dropdown picker
             $adAccounts = AdAccountMaster::when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->active()
@@ -196,6 +741,7 @@ class AccountsApiController extends Controller
                         'pending_acc_count'=> $pendingAccCount,
                         'status_counts'    => $statusCounts,
                     ],
+                    'cutoff_info'  => $cutoffInfo,
                     'ad_accounts'  => $adAccounts,
                 ],
             ]);
@@ -243,8 +789,11 @@ class AccountsApiController extends Controller
         $user = $request->user();
         $initialStatus = ($user->hasAdminLikeRole() || $user->hasTlLikeRole()) ? 'accounts_pending' : 'tl_pending';
 
-        $validated['selected_dates'] = $dates;
-        $validated['type']           = 'client';
+        $numDays = count($dates);
+        $validated['selected_dates']         = $dates;
+        $validated['number_of_days']         = $numDays;
+        $validated['average_per_day_budget'] = $numDays > 0 ? round($validated['amount'] / $numDays, 2) : 0;
+        $validated['type']                   = 'client';
         $validated['requested_by']   = $user->id;
         $validated['company_id']     = $user?->company_id;
         $validated['branch_id']      = $user?->branch_id;
@@ -1293,6 +1842,368 @@ class AccountsApiController extends Controller
         ]);
     }
 
+    public function showDomain(DomainRecord $domain): JsonResponse
+    {
+        try {
+            $domain->load(['lead', 'creator', 'renewals.creator']);
+            $renewalsCount = $domain->renewals->count();
+            $totalRenewalSpend = (float) $domain->renewals->sum('amount');
+            $days = $domain->days_until_expiration;
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'domain' => [
+                        'id'                    => $domain->id,
+                        'domain_name'           => $domain->domain_name,
+                        'registrar'             => $domain->registrar,
+                        'status'                => $domain->status,
+                        'expires_at'            => $domain->expires_at?->format('Y-m-d'),
+                        'auto_renew'            => (bool) $domain->auto_renew,
+                        'privacy'               => (bool) $domain->privacy,
+                        'client_name'           => $domain->client_name,
+                        'lead_id'               => $domain->lead_id,
+                        'notes'                 => $domain->notes,
+                        'godaddy_domain_id'     => $domain->godaddy_domain_id,
+                        'days_until_expiration' => $days,
+                        'created_by'            => $domain->creator?->name,
+                        'created_at'            => $domain->created_at?->format('Y-m-d H:i:s'),
+                    ],
+                    'stats' => [
+                        'renewals_count'        => $renewalsCount,
+                        'total_renewal_spend'   => $totalRenewalSpend,
+                        'days_until_expiration' => $days,
+                        'is_expired'            => ($days !== null && $days < 0),
+                        'is_expiring'           => ($days !== null && $days >= 0 && $days <= 30),
+                    ],
+                    'lead' => $domain->lead ? [
+                        'id'            => $domain->lead->id,
+                        'contact_name'  => $domain->lead->contact_name,
+                        'company_name'  => $domain->lead->company_name,
+                        'mobile_number' => $domain->lead->mobile_number,
+                        'email'         => $domain->lead->email,
+                        'lead_status'   => $domain->lead->lead_status ?? 'Active',
+                    ] : null,
+                    'renewals' => $domain->renewals->map(fn($r) => [
+                        'id'           => $r->id,
+                        'renewal_date' => $r->renewal_date?->format('Y-m-d'),
+                        'expires_at'   => $r->expires_at?->format('Y-m-d'),
+                        'amount'       => $r->amount !== null ? (float) $r->amount : null,
+                        'notes'        => $r->notes,
+                        'created_by'   => $r->creator?->name ?? 'Admin',
+                        'created_at'   => $r->created_at?->format('Y-m-d H:i:s'),
+                    ]),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Domain Details error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load domain details: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function storeDomainRenewal(Request $request, DomainRecord $domain): JsonResponse
+    {
+        $validated = $request->validate([
+            'renewal_date' => 'required|date',
+            'expires_at'   => 'required|date|after_or_equal:renewal_date',
+            'amount'       => 'nullable|numeric|min:0',
+            'notes'        => 'nullable|string|max:1000',
+        ]);
+
+        $user = $request->user();
+
+        $renewal = $domain->renewals()->create([
+            'company_id'   => $user?->company_id,
+            'renewal_date' => $validated['renewal_date'],
+            'expires_at'   => $validated['expires_at'],
+            'amount'       => $validated['amount'] ?? null,
+            'notes'        => $validated['notes'] ?? null,
+            'created_by'   => $user?->id,
+        ]);
+
+        $domain->expires_at = $validated['expires_at'];
+        if ($domain->status === 'EXPIRED' && Carbon::parse($validated['expires_at'])->isFuture()) {
+            $domain->status = 'ACTIVE';
+        }
+        $domain->save();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Domain renewal entry recorded successfully!',
+            'data'    => $renewal,
+        ]);
+    }
+
+    public function destroyDomainRenewal(DomainRecord $domain, DomainRenewal $renewal): JsonResponse
+    {
+        if ($renewal->domain_record_id !== $domain->id) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unauthorized renewal action.',
+            ], 403);
+        }
+
+        $renewal->delete();
+
+        $latest = $domain->renewals()->orderBy('expires_at', 'desc')->first();
+        if ($latest) {
+            $domain->expires_at = $latest->expires_at;
+            $domain->save();
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Renewal record deleted successfully!',
+        ]);
+    }
+
+    public function migrateDomainLead(Request $request, DomainRecord $domain): JsonResponse
+    {
+        $validated = $request->validate([
+            'lead_id' => 'required|exists:leads,id',
+        ]);
+
+        $lead = Lead::findOrFail($validated['lead_id']);
+
+        $domain->lead_id = $lead->id;
+        $displayName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #'.$lead->id);
+        $domain->client_name = $displayName;
+        $domain->save();
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Domain '{$domain->domain_name}' successfully migrated to lead: {$displayName}!",
+            'data'    => $domain->load('lead'),
+        ]);
+    }
+
+    public function unlinkDomainLead(DomainRecord $domain): JsonResponse
+    {
+        $domain->lead_id = null;
+        $domain->save();
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Lead unlinked from domain '{$domain->domain_name}'.",
+        ]);
+    }
+
+    public function showHosting(HostingRecord $hosting): JsonResponse
+    {
+        try {
+            $hosting->load(['lead', 'creator', 'renewals.creator']);
+            $renewalsCount = $hosting->renewals->count();
+            $totalRenewalSpend = (float) $hosting->renewals->sum('amount');
+            if ($totalRenewalSpend <= 0 && $hosting->renewal_amount !== null) {
+                $totalRenewalSpend = (float) $hosting->renewal_amount;
+            }
+            $days = $hosting->days_until_renewal;
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'hosting' => [
+                        'id'                 => $hosting->id,
+                        'hosting_name'       => $hosting->hosting_name,
+                        'provider'           => $hosting->provider,
+                        'ip_address'         => $hosting->ip_address,
+                        'plan_type'          => $hosting->plan_type,
+                        'status'             => $hosting->status,
+                        'renewal_date'       => $hosting->renewal_date?->format('Y-m-d'),
+                        'renewal_amount'     => (float) $hosting->renewal_amount,
+                        'client_name'        => $hosting->client_name,
+                        'lead_id'            => $hosting->lead_id,
+                        'notes'              => $hosting->notes,
+                        'days_until_renewal' => $days,
+                        'created_by'         => $hosting->creator?->name,
+                        'created_at'         => $hosting->created_at?->format('Y-m-d H:i:s'),
+                    ],
+                    'stats' => [
+                        'renewals_count'      => $renewalsCount,
+                        'total_renewal_spend' => $totalRenewalSpend,
+                        'days_until_renewal'  => $days,
+                        'is_expired'          => ($days !== null && $days < 0),
+                        'is_expiring'         => ($days !== null && $days >= 0 && $days <= 30),
+                    ],
+                    'lead' => $hosting->lead ? [
+                        'id'            => $hosting->lead->id,
+                        'contact_name'  => $hosting->lead->contact_name,
+                        'company_name'  => $hosting->lead->company_name,
+                        'mobile_number' => $hosting->lead->mobile_number,
+                        'email'         => $hosting->lead->email,
+                        'lead_status'   => $hosting->lead->lead_status ?? 'Active',
+                    ] : null,
+                    'renewals' => $hosting->renewals->map(fn($r) => [
+                        'id'           => $r->id,
+                        'renewal_date' => $r->renewal_date?->format('Y-m-d'),
+                        'expires_at'   => $r->expires_at?->format('Y-m-d'),
+                        'amount'       => $r->amount !== null ? (float) $r->amount : null,
+                        'notes'        => $r->notes,
+                        'created_by'   => $r->creator?->name ?? 'Admin',
+                        'created_at'   => $r->created_at?->format('Y-m-d H:i:s'),
+                    ]),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Hosting Details error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load hosting details: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function storeHostingRenewal(Request $request, HostingRecord $hosting): JsonResponse
+    {
+        $validated = $request->validate([
+            'renewal_date' => 'required|date',
+            'expires_at'   => 'required|date|after_or_equal:renewal_date',
+            'amount'       => 'nullable|numeric|min:0',
+            'notes'        => 'nullable|string|max:1000',
+        ]);
+
+        $user = $request->user();
+
+        $renewal = $hosting->renewals()->create([
+            'company_id'   => $user?->company_id,
+            'renewal_date' => $validated['renewal_date'],
+            'expires_at'   => $validated['expires_at'],
+            'amount'       => $validated['amount'] ?? null,
+            'notes'        => $validated['notes'] ?? null,
+            'created_by'   => $user?->id,
+        ]);
+
+        $hosting->renewal_date = $validated['expires_at'];
+        if (isset($validated['amount']) && $validated['amount'] !== null) {
+            $hosting->renewal_amount = $validated['amount'];
+        }
+        if ($hosting->status === 'EXPIRED' && Carbon::parse($validated['expires_at'])->isFuture()) {
+            $hosting->status = 'ACTIVE';
+        }
+        $hosting->save();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Hosting renewal entry recorded successfully!',
+            'data'    => $renewal,
+        ]);
+    }
+
+    public function destroyHostingRenewal(HostingRecord $hosting, HostingRenewal $renewal): JsonResponse
+    {
+        if ($renewal->hosting_record_id !== $hosting->id) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unauthorized renewal action.',
+            ], 403);
+        }
+
+        $renewal->delete();
+
+        $latest = $hosting->renewals()->orderBy('expires_at', 'desc')->first();
+        if ($latest) {
+            $hosting->renewal_date = $latest->expires_at;
+            if ($latest->amount !== null) {
+                $hosting->renewal_amount = $latest->amount;
+            }
+            $hosting->save();
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Renewal record deleted successfully!',
+        ]);
+    }
+
+    public function migrateHostingLead(Request $request, HostingRecord $hosting): JsonResponse
+    {
+        $validated = $request->validate([
+            'lead_id' => 'required|exists:leads,id',
+        ]);
+
+        $lead = Lead::findOrFail($validated['lead_id']);
+
+        $hosting->lead_id = $lead->id;
+        $displayName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #'.$lead->id);
+        $hosting->client_name = $displayName;
+        $hosting->save();
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Hosting '{$hosting->hosting_name}' successfully migrated to lead: {$displayName}!",
+            'data'    => $hosting->load('lead'),
+        ]);
+    }
+
+    public function unlinkHostingLead(HostingRecord $hosting): JsonResponse
+    {
+        $hosting->lead_id = null;
+        $hosting->save();
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Lead unlinked from hosting '{$hosting->hosting_name}'.",
+        ]);
+    }
+
+    public function domainsHostingLeads(Request $request): JsonResponse
+    {
+        try {
+            $search = trim($request->input('search', $request->input('q', '')));
+            $companyId = $request->user()?->company_id;
+
+            $query = Lead::query()
+                ->when($companyId, fn ($q) => $q->where(function ($cq) use ($companyId) {
+                    $cq->where('company_id', $companyId)->orWhereNull('company_id');
+                }));
+
+            if (!empty($search)) {
+                $query->where(function ($sub) use ($search) {
+                    $sub->where('contact_name', 'like', "%{$search}%")
+                        ->orWhere('company_name', 'like', "%{$search}%")
+                        ->orWhere('mobile_number', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+
+                    $cleanId = ltrim($search, '#');
+                    if (is_numeric($cleanId)) {
+                        $sub->orWhere('id', (int) $cleanId);
+                    }
+                });
+            }
+
+            $leads = $query->latest('id')->limit(50)->get(['id', 'contact_name', 'company_name', 'mobile_number', 'email', 'lead_status']);
+
+            $results = $leads->map(function ($l) {
+                $primary = $l->contact_name ?: ($l->company_name ?: 'Unnamed Lead');
+                $secondary = ($l->company_name && $l->company_name !== $primary) ? " ({$l->company_name})" : '';
+                $phone = $l->mobile_number ? " • {$l->mobile_number}" : '';
+                return [
+                    'id'            => $l->id,
+                    'display_text'  => "#{$l->id} - {$primary}{$secondary}{$phone}",
+                    'contact_name'  => $l->contact_name,
+                    'company_name'  => $l->company_name,
+                    'mobile_number' => $l->mobile_number,
+                    'email'         => $l->email,
+                    'lead_status'   => $l->lead_status ?? 'Active',
+                ];
+            });
+
+            return response()->json([
+                'status' => true,
+                'data'   => $results,
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile DomainsHostingLeads error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load leads: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  7. AD ACCOUNTS MASTER
     // ─────────────────────────────────────────────────────────────────────────
@@ -1440,32 +2351,47 @@ class AccountsApiController extends Controller
 
     private function formatBudgetRequest(AdBudgetRequest $item): array
     {
+        $numDays = $item->number_of_days ?: (is_array($item->selected_dates) ? count($item->selected_dates) : 0);
+        $avgBudget = $item->average_per_day_budget ?: (($numDays > 0) ? ($item->amount / $numDays) : 0);
+
         return [
-            'id'               => $item->id,
-            'type'             => $item->type,
-            'ad_account_id'    => $item->ad_account_id,
-            'ad_account'       => $item->adAccount ? [
+            'id'                     => $item->id,
+            'type'                   => $item->type,
+            'ad_account_id'          => $item->ad_account_id,
+            'ad_account'             => $item->adAccount ? [
                 'id'           => $item->adAccount->id,
                 'account_name' => $item->adAccount->account_name,
                 'account_id'   => $item->adAccount->account_id,
                 'platform'     => $item->adAccount->platform,
             ] : null,
-            'amount'           => (float) $item->amount,
-            'approved_amount'  => (float) $item->approved_amount,
-            'selected_dates'   => $item->selected_dates ?? [],
-            'client_name'      => $item->client_name,
-            'remarks'          => $item->remarks,
-            'status'           => $item->status,
-            'requested_by'     => $item->requester?->name,
-            'tl_approved_by'   => $item->tlApprover?->name,
-            'tl_approved_at'   => $item->tl_approved_at?->format('Y-m-d H:i:s'),
-            'tl_remarks'       => $item->tl_remarks,
-            'approved_by'      => $item->approver?->name,
-            'approved_at'      => $item->approved_at?->format('Y-m-d H:i:s'),
-            'payment_date'     => $item->payment_date?->format('Y-m-d'),
-            'accounts_remarks' => $item->accounts_remarks,
-            'attachments'      => $item->attachments ?? [],
-            'created_at'       => $item->created_at?->format('Y-m-d H:i:s'),
+            'amount'                 => (float) $item->amount,
+            'approved_amount'        => (float) $item->approved_amount,
+            'selected_dates'         => $item->selected_dates ?? [],
+            'number_of_days'         => (int) $numDays,
+            'average_per_day_budget' => (float) round($avgBudget, 2),
+            'client_name'            => $item->client_name,
+            'remarks'                => $item->remarks,
+            'status'                 => $item->status,
+            'requested_by'           => $item->requester?->name,
+            'tl_approved_by'         => $item->tlApprover?->name,
+            'tl_approver'            => $item->tlApprover ? [
+                'id'    => $item->tlApprover->id,
+                'name'  => $item->tlApprover->name,
+                'email' => $item->tlApprover->email,
+            ] : null,
+            'tl_approved_at'         => $item->tl_approved_at?->format('Y-m-d H:i:s'),
+            'tl_remarks'             => $item->tl_remarks,
+            'approved_by'            => $item->approver?->name,
+            'approver'               => $item->approver ? [
+                'id'    => $item->approver->id,
+                'name'  => $item->approver->name,
+                'email' => $item->approver->email,
+            ] : null,
+            'approved_at'            => $item->approved_at?->format('Y-m-d H:i:s'),
+            'payment_date'           => $item->payment_date?->format('Y-m-d'),
+            'accounts_remarks'       => $item->accounts_remarks,
+            'attachments'            => $item->attachments ?? [],
+            'created_at'             => $item->created_at?->format('Y-m-d H:i:s'),
         ];
     }
 
@@ -2641,18 +3567,66 @@ class AccountsApiController extends Controller
     {
         try {
             $companyId = auth()->user()?->company_id;
-            $invoice = Invoice::with(['items.itemMaster', 'customer', 'salesPerson', 'creator', 'payments.recordedBy'])
+            $invoice = Invoice::with(['items.itemMaster', 'customer', 'salesPerson', 'creator', 'payments.recordedBy', 'creditNotes.creator'])
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->findOrFail($id);
 
+            $invoiceData = $invoice->toArray();
+            if ($invoice->payments) {
+                $invoiceData['payments'] = $invoice->payments->map(function ($p) {
+                    $arr = $p->toArray();
+                    $arr['recorded_by_name'] = $p->recordedBy?->name ?: 'System';
+                    $arr['recorded_at'] = $p->created_at?->format('Y-m-d H:i:s');
+                    $arr['payment_mode_label'] = $p->payment_mode_label;
+                    $arr['attachment_url'] = $p->attachment_url;
+                    return $arr;
+                })->values()->toArray();
+            }
+
             return response()->json([
                 'status' => true,
-                'data'   => $invoice,
+                'data'   => $invoiceData,
             ]);
         } catch (Throwable $e) {
             return response()->json([
                 'status'  => false,
                 'message' => 'Invoice not found: ' . $e->getMessage(),
+            ], 404);
+        }
+    }
+
+    public function salesInvoicePdf(int $id, Request $request)
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+            $invoice = Invoice::with(['items.itemMaster', 'customer', 'salesPerson', 'creator'])
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($id);
+
+            $setting     = InvoiceSetting::forCompany($companyId);
+            $companyName = $setting->company_name ?: config('app.name');
+            $filename    = 'Invoice_' . str_replace(['/', '\\'], '_', $invoice->invoice_number) . '.pdf';
+
+            $pdf = Pdf::loadView('pages.accounts.sales.invoices.pdf', [
+                'invoice'     => $invoice,
+                'setting'     => $setting,
+                'companyName' => $companyName,
+            ])
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'defaultFont'          => 'DejaVu Sans',
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled'      => true,
+                'isPhpEnabled'         => true,
+            ]);
+
+            return $pdf->stream($filename);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts salesInvoicePdf error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Invoice not found or failed to generate PDF: ' . $e->getMessage(),
             ], 404);
         }
     }
@@ -2719,7 +3693,7 @@ class AccountsApiController extends Controller
                 'round_off'          => 'nullable|numeric',
                 'total_amount'       => 'required|numeric|min:0',
                 'paid_amount'        => 'nullable|numeric|min:0',
-                'balance_due'        => 'required|numeric',
+                'balance_due'        => 'nullable|numeric',
 
                 'customer_notes'     => 'nullable|string',
                 'terms_conditions'   => 'nullable|string',
@@ -2858,6 +3832,8 @@ class AccountsApiController extends Controller
                 'total_tax'          => 'nullable|numeric|min:0',
                 'round_off'          => 'nullable|numeric',
                 'total_amount'       => 'required|numeric|min:0',
+                'paid_amount'        => 'nullable|numeric|min:0',
+                'balance_due'        => 'nullable|numeric',
 
                 'customer_notes'     => 'nullable|string',
                 'terms_conditions'   => 'nullable|string',
@@ -3136,10 +4112,19 @@ class AccountsApiController extends Controller
 
             $payments = $query->paginate($perPage);
 
+            $formattedItems = collect($payments->items())->map(function ($p) {
+                $arr = $p->toArray();
+                $arr['recorded_by_name'] = $p->recordedBy?->name ?: 'System';
+                $arr['recorded_at'] = $p->created_at?->format('Y-m-d H:i:s');
+                $arr['payment_mode_label'] = $p->payment_mode_label;
+                $arr['attachment_url'] = $p->attachment_url;
+                return $arr;
+            })->values()->all();
+
             return response()->json([
                 'status' => true,
                 'stats'  => $stats,
-                'data'   => $payments->items(),
+                'data'   => $formattedItems,
                 'meta'   => [
                     'current_page' => $payments->currentPage(),
                     'last_page'    => $payments->lastPage(),
@@ -3184,6 +4169,2394 @@ class AccountsApiController extends Controller
                 'status'  => false,
                 'message' => 'Failed to delete payment: ' . $e->getMessage(),
             ], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 14. ACCOUNTS SALES - CREDIT NOTES
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function salesCreditNotes(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $perPage   = (int) $request->query('per_page', 15);
+
+            $query = CreditNote::with(['invoice', 'customer', 'creator'])
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId));
+
+            if ($search = trim((string) $request->query('search'))) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('credit_note_number', 'LIKE', "%{$search}%")
+                      ->orWhere('reason', 'LIKE', "%{$search}%")
+                      ->orWhereHas('invoice', function ($iq) use ($search) {
+                          $iq->where('invoice_number', 'LIKE', "%{$search}%");
+                      })
+                      ->orWhereHas('customer', function ($cq) use ($search) {
+                          $cq->where('customer_name', 'LIKE', "%{$search}%")
+                             ->orWhere('company_name', 'LIKE', "%{$search}%");
+                      });
+                });
+            }
+
+            if ($reason = $request->query('reason')) {
+                if ($reason !== 'all' && $reason !== '') {
+                    $query->where('reason', $reason);
+                }
+            }
+
+            if ($status = $request->query('status')) {
+                if ($status !== 'all' && $status !== '') {
+                    $query->where('status', $status);
+                }
+            }
+
+            if ($dateFrom = $request->query('date_from')) {
+                $query->whereDate('credit_note_date', '>=', $dateFrom);
+            }
+            if ($dateTo = $request->query('date_to')) {
+                $query->whereDate('credit_note_date', '<=', $dateTo);
+            }
+
+            // Summary stats matching Screenshot 1
+            $allForCompany = CreditNote::query()->when($companyId, fn($q) => $q->where('company_id', $companyId));
+            $totalCredited = (float) (clone $allForCompany)->where('status', '!=', 'void')->sum('total_amount');
+            $totalCnsIssued = (clone $allForCompany)->count();
+            $activeApplied = (clone $allForCompany)->where('status', 'issued')->count();
+            $voidedCns = (clone $allForCompany)->where('status', 'void')->count();
+
+            $stats = [
+                'total_credited'   => $totalCredited,
+                'total_cns_issued' => $totalCnsIssued,
+                'active_applied'   => $activeApplied,
+                'voided_cns'       => $voidedCns,
+            ];
+
+            $paginated = $query->orderBy('credit_note_date', 'desc')
+                               ->orderBy('id', 'desc')
+                               ->paginate($perPage);
+
+            $data = collect($paginated->items())->map(function ($cn) {
+                return [
+                    'id'                 => $cn->id,
+                    'credit_note_number' => $cn->credit_note_number,
+                    'credit_note_date'   => $cn->credit_note_date?->format('Y-m-d'),
+                    'invoice_id'         => $cn->invoice_id,
+                    'invoice_number'     => $cn->invoice?->invoice_number,
+                    'invoice_total'      => (float) ($cn->invoice?->total_amount ?? 0),
+                    'customer_id'        => $cn->customer_id,
+                    'customer_name'      => $cn->customer?->customer_name ?: ($cn->invoice?->customer_name ?: 'Valued Customer'),
+                    'company_name'       => $cn->customer?->company_name ?: $cn->invoice?->company_name,
+                    'reason'             => $cn->reason,
+                    'reason_label'       => CreditNote::REASONS[$cn->reason] ?? $cn->reason,
+                    'subtotal'           => (float) $cn->subtotal,
+                    'cgst_amount'        => (float) $cn->cgst_amount,
+                    'sgst_amount'        => (float) $cn->sgst_amount,
+                    'igst_amount'        => (float) $cn->igst_amount,
+                    'total_tax'          => (float) $cn->total_tax,
+                    'total_amount'       => (float) $cn->total_amount,
+                    'status'             => $cn->status, // 'issued' | 'void'
+                    'notes'              => $cn->notes,
+                    'attachment_path'    => $cn->attachment_path,
+                    'attachment_url'     => $cn->attachment_url,
+                    'attachment_name'    => $cn->attachment_name,
+                    'created_by'         => $cn->created_by,
+                    'creator_name'       => $cn->creator?->name,
+                    'created_at'         => $cn->created_at?->toIso8601String(),
+                    'created_at_human'   => $cn->created_at?->diffForHumans(),
+                ];
+            });
+
+            return response()->json([
+                'status'  => true,
+                'stats'   => $stats,
+                'reasons' => CreditNote::REASONS,
+                'data'    => $data,
+                'meta'    => [
+                    'current_page' => $paginated->currentPage(),
+                    'last_page'    => $paginated->lastPage(),
+                    'per_page'     => $paginated->perPage(),
+                    'total'        => $paginated->total(),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts salesCreditNotes error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load credit notes: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function salesCreditNoteMeta(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $nextCnNumber = CreditNote::generateNextNumber($companyId);
+
+            $invoices = Invoice::query()
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->whereNotIn('status', ['cancelled'])
+                ->orderBy('invoice_date', 'desc')
+                ->get()
+                ->map(function ($inv) {
+                    $existingCredits = (float) $inv->creditNotes()->where('status', '!=', 'void')->sum('total_amount');
+                    $maxCreditable   = max(0, round((float) $inv->total_amount - $existingCredits, 2));
+                    return [
+                        'id'                   => $inv->id,
+                        'invoice_number'       => $inv->invoice_number,
+                        'customer_id'          => $inv->customer_id,
+                        'customer_name'        => $inv->customer_name,
+                        'company_name'         => $inv->company_name,
+                        'total_amount'         => (float) $inv->total_amount,
+                        'balance_due'          => (float) $inv->balance_due,
+                        'invoice_date'         => $inv->invoice_date?->format('Y-m-d'),
+                        'existing_credit'      => $existingCredits,
+                        'max_allowable_credit' => $maxCreditable,
+                    ];
+                });
+
+            $selectedInvoice = null;
+            if ($invoiceId = $request->query('invoice_id')) {
+                $inv = Invoice::with(['items', 'customer'])
+                    ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                    ->find($invoiceId);
+
+                if ($inv) {
+                    $existingCredits = (float) $inv->creditNotes()->where('status', '!=', 'void')->sum('total_amount');
+                    $maxCreditable   = max(0, round((float) $inv->total_amount - $existingCredits, 2));
+                    $selectedInvoice = [
+                        'id'                   => $inv->id,
+                        'invoice_number'       => $inv->invoice_number,
+                        'customer_id'          => $inv->customer_id,
+                        'customer_name'        => $inv->customer_name,
+                        'company_name'         => $inv->company_name,
+                        'total_amount'         => (float) $inv->total_amount,
+                        'balance_due'          => (float) $inv->balance_due,
+                        'invoice_date'         => $inv->invoice_date?->format('Y-m-d'),
+                        'existing_credit'      => $existingCredits,
+                        'max_allowable_credit' => $maxCreditable,
+                        'items'                => $inv->items->map(fn($item) => [
+                            'id'           => $item->id,
+                            'item_name'    => $item->item_name,
+                            'description'  => $item->description,
+                            'hsn_sac_code' => $item->hsn_sac_code,
+                            'qty'          => (float) $item->qty,
+                            'rate'         => (float) $item->rate,
+                            'amount'       => (float) $item->amount,
+                            'cgst_percent' => (float) $item->cgst_percent,
+                            'sgst_percent' => (float) $item->sgst_percent,
+                            'igst_percent' => (float) $item->igst_percent,
+                            'total_amount' => (float) $item->total_amount,
+                        ]),
+                    ];
+                }
+            }
+
+            return response()->json([
+                'status'           => true,
+                'next_cn_number'   => $nextCnNumber,
+                'reasons'          => CreditNote::REASONS,
+                'invoices'         => $invoices,
+                'selected_invoice' => $selectedInvoice,
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts salesCreditNoteMeta error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load credit note meta: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function storeSalesCreditNote(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $userId    = $request->user()?->id;
+
+            $request->validate([
+                'invoice_id'       => 'required|integer|exists:invoices,id',
+                'credit_note_date' => 'required|date',
+                'reason'           => 'required|string|max:100',
+                'total_amount'     => 'required|numeric|min:0.01',
+                'notes'            => 'nullable|string',
+                'attachment'       => 'nullable|file|max:10240',
+                'items'            => 'nullable|array',
+            ]);
+
+            $invoice = Invoice::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($request->input('invoice_id'));
+
+            $creditAmount = round((float) $request->input('total_amount'), 2);
+
+            // Calculate maximum allowable credit
+            $existingCredits = (float) $invoice->creditNotes()->where('status', '!=', 'void')->sum('total_amount');
+            $maxAllowable    = max(0, round((float) $invoice->total_amount - $existingCredits, 2));
+
+            if ($creditAmount > ($maxAllowable + 0.05)) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => "Credit amount (₹" . number_format($creditAmount, 2) . ") exceeds maximum allowable creditable balance of ₹" . number_format($maxAllowable, 2) . " for Invoice #{$invoice->invoice_number}.",
+                ], 422);
+            }
+
+            // Handle attachment
+            $attachmentPath = null;
+            $attachmentName = null;
+            if ($request->hasFile('attachment')) {
+                $file = $request->file('attachment');
+                $filename = time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
+                $destination = public_path('uploads/credit_notes');
+                if (!file_exists($destination)) {
+                    mkdir($destination, 0755, true);
+                }
+                $file->move($destination, $filename);
+                $attachmentPath = 'uploads/credit_notes/' . $filename;
+                $attachmentName = $file->getClientOriginalName();
+            }
+
+            DB::beginTransaction();
+
+            $cnNumber = CreditNote::generateNextNumber($companyId);
+
+            // Compute proportionate tax breakdown
+            $invTotal = (float) $invoice->total_amount;
+            $ratio    = $invTotal > 0 ? ($creditAmount / $invTotal) : 1;
+
+            $subtotal   = round((float) $invoice->subtotal * $ratio, 2);
+            $cgstAmount = round((float) $invoice->total_cgst * $ratio, 2);
+            $sgstAmount = round((float) $invoice->total_sgst * $ratio, 2);
+            $igstAmount = round((float) $invoice->total_igst * $ratio, 2);
+            $totalTax   = $cgstAmount + $sgstAmount + $igstAmount;
+
+            $creditNote = CreditNote::create([
+                'company_id'         => $companyId,
+                'invoice_id'         => $invoice->id,
+                'customer_id'        => $invoice->customer_id,
+                'credit_note_number' => $cnNumber,
+                'credit_note_date'   => $request->input('credit_note_date'),
+                'reason'             => $request->input('reason'),
+                'subtotal'           => $subtotal,
+                'cgst_amount'        => $cgstAmount,
+                'sgst_amount'        => $sgstAmount,
+                'igst_amount'        => $igstAmount,
+                'total_tax'          => $totalTax,
+                'total_amount'       => $creditAmount,
+                'status'             => 'issued',
+                'notes'              => $request->input('notes'),
+                'attachment_path'    => $attachmentPath,
+                'attachment_name'    => $attachmentName,
+                'created_by'         => $userId,
+            ]);
+
+            // Save items if passed
+            $items = $request->input('items', []);
+            if (is_array($items) && !empty($items)) {
+                foreach ($items as $it) {
+                    if (empty($it['item_name']) && empty($it['amount'])) {
+                        continue;
+                    }
+                    $invItem = !empty($it['item_id']) ? $invoice->items()->find($it['item_id']) : null;
+                    CreditNoteItem::create([
+                        'credit_note_id'  => $creditNote->id,
+                        'invoice_item_id' => $invItem?->id,
+                        'item_name'       => $it['item_name'] ?? ($invItem?->item_name ?: 'Credit Item'),
+                        'description'     => $invItem?->description,
+                        'hsn_sac_code'    => $invItem?->hsn_sac_code,
+                        'qty'             => (float) ($it['qty'] ?? 1),
+                        'rate'            => (float) ($it['rate'] ?? $it['amount'] ?? 0),
+                        'amount'          => (float) ($it['amount'] ?? 0),
+                        'cgst_percent'    => (float) ($invItem?->cgst_percent ?? 0),
+                        'cgst_amount'     => (float) ($invItem?->cgst_amount ?? 0),
+                        'sgst_percent'    => (float) ($invItem?->sgst_percent ?? 0),
+                        'sgst_amount'     => (float) ($invItem?->sgst_amount ?? 0),
+                        'igst_percent'    => (float) ($invItem?->igst_percent ?? 0),
+                        'igst_amount'     => (float) ($invItem?->igst_amount ?? 0),
+                        'total_amount'    => (float) ($it['amount'] ?? 0),
+                    ]);
+                }
+            }
+
+            // Sync invoice status and balance due
+            $invoice->recalculatePaymentStatus();
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Credit Note #{$creditNote->credit_note_number} of ₹" . number_format($creditAmount, 2) . " applied successfully to Invoice #{$invoice->invoice_number}!",
+                'data'    => $creditNote,
+            ]);
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Mobile Accounts storeSalesCreditNote error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Error creating Credit Note: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function showSalesCreditNote(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $creditNote = CreditNote::with(['invoice.items', 'customer', 'creator', 'items'])
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($id);
+
+            $setting = InvoiceSetting::forCompany($companyId);
+
+            return response()->json([
+                'status'  => true,
+                'data'    => [
+                    'credit_note' => [
+                        'id'                 => $creditNote->id,
+                        'credit_note_number' => $creditNote->credit_note_number,
+                        'credit_note_date'   => $creditNote->credit_note_date?->format('Y-m-d'),
+                        'invoice_id'         => $creditNote->invoice_id,
+                        'customer_id'        => $creditNote->customer_id,
+                        'reason'             => $creditNote->reason,
+                        'reason_label'       => CreditNote::REASONS[$creditNote->reason] ?? $creditNote->reason,
+                        'subtotal'           => (float) $creditNote->subtotal,
+                        'cgst_amount'        => (float) $creditNote->cgst_amount,
+                        'sgst_amount'        => (float) $creditNote->sgst_amount,
+                        'igst_amount'        => (float) $creditNote->igst_amount,
+                        'total_tax'          => (float) $creditNote->total_tax,
+                        'total_amount'       => (float) $creditNote->total_amount,
+                        'status'             => $creditNote->status,
+                        'notes'              => $creditNote->notes,
+                        'attachment_path'    => $creditNote->attachment_path,
+                        'attachment_url'     => $creditNote->attachment_url,
+                        'attachment_name'    => $creditNote->attachment_name,
+                        'created_by'         => $creditNote->created_by,
+                        'creator_name'       => $creditNote->creator?->name,
+                        'created_at'         => $creditNote->created_at?->toIso8601String(),
+                        'items'              => $creditNote->items->map(fn($it) => [
+                            'id'           => $it->id,
+                            'item_name'    => $it->item_name,
+                            'description'  => $it->description,
+                            'hsn_sac_code' => $it->hsn_sac_code,
+                            'qty'          => (float) $it->qty,
+                            'rate'         => (float) $it->rate,
+                            'amount'       => (float) $it->amount,
+                            'total_amount' => (float) $it->total_amount,
+                        ]),
+                    ],
+                    'invoice' => $creditNote->invoice ? [
+                        'id'              => $creditNote->invoice->id,
+                        'invoice_number'  => $creditNote->invoice->invoice_number,
+                        'invoice_date'    => $creditNote->invoice->invoice_date?->format('Y-m-d'),
+                        'total_amount'    => (float) $creditNote->invoice->total_amount,
+                        'balance_due'     => (float) $creditNote->invoice->balance_due,
+                        'status'          => $creditNote->invoice->status,
+                        'billing_address' => $creditNote->invoice->billing_address,
+                        'billing_gstin'   => $creditNote->invoice->billing_gstin,
+                    ] : null,
+                    'customer' => [
+                        'customer_name' => $creditNote->customer?->customer_name ?: ($creditNote->invoice?->customer_name ?: 'Valued Customer'),
+                        'company_name'  => $creditNote->customer?->company_name ?: $creditNote->invoice?->company_name,
+                        'address'       => $creditNote->invoice?->billing_address,
+                        'gstin'         => $creditNote->invoice?->billing_gstin ?: $creditNote->customer?->gst_number,
+                    ],
+                    'company_setting' => [
+                        'company_name'   => $setting?->company_name ?: 'Sai Techno Solutions Private Limited',
+                        'full_address'   => $setting?->full_address ?: 'Plot No 8, Sai Nagar, Thoraipakkam, Chennai - 600097',
+                        'company_gstin'  => $setting?->company_gstin ?: '33ABPCS7671C1Z3',
+                        'logo_url'       => $setting?->logo_url,
+                        'signature_url'  => $setting?->signature_url,
+                        'signatory_name' => $setting?->signatory_name ?: ('FOR ' . strtoupper($setting?->company_name ?: 'Sai Techno Solutions Private Limited')),
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts showSalesCreditNote error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Credit note not found: ' . $e->getMessage(),
+            ], 404);
+        }
+    }
+
+    public function salesCreditNotePdf(int $id, Request $request)
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $creditNote = CreditNote::with(['invoice.items', 'customer', 'creator', 'items'])
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($id);
+
+            $invoice = $creditNote->invoice;
+            $setting = InvoiceSetting::forCompany($companyId);
+            $filename = 'CreditNote_' . str_replace(['/', '\\'], '_', $creditNote->credit_note_number) . '.pdf';
+
+            $pdf = Pdf::loadView('pages.accounts.sales.credit_notes.pdf', compact('creditNote', 'invoice', 'setting'))
+                ->setPaper('a4', 'portrait')
+                ->setOptions([
+                    'defaultFont'          => 'DejaVu Sans',
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled'      => true,
+                    'isPhpEnabled'         => true,
+                ]);
+
+            return $pdf->stream($filename);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts salesCreditNotePdf error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Credit note not found or failed to generate PDF: ' . $e->getMessage(),
+            ], 404);
+        }
+    }
+
+    public function toggleVoidSalesCreditNote(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $creditNote = CreditNote::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($id);
+
+            $newStatus = $creditNote->status === 'void' ? 'issued' : 'void';
+            $creditNote->update(['status' => $newStatus]);
+
+            // Recalculate invoice
+            $creditNote->invoice?->recalculatePaymentStatus();
+
+            $action = $newStatus === 'void' ? 'voided (cancelled)' : 'restored to active';
+
+            return response()->json([
+                'status'       => true,
+                'new_status'   => $newStatus,
+                'message'      => "Credit Note #{$creditNote->credit_note_number} has been {$action}. Invoice balance has been updated.",
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts toggleVoidSalesCreditNote error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to update credit note status: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function destroySalesCreditNote(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $creditNote = CreditNote::when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->findOrFail($id);
+
+            $invoice = $creditNote->invoice;
+            $cnNum   = $creditNote->credit_note_number;
+
+            if ($creditNote->attachment_path && file_exists(public_path($creditNote->attachment_path))) {
+                @unlink(public_path($creditNote->attachment_path));
+            }
+
+            $creditNote->delete();
+
+            // Recalculate invoice
+            $invoice?->recalculatePaymentStatus();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Credit Note #{$cnNum} deleted successfully. Invoice balance has been adjusted.",
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts destroySalesCreditNote error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete credit note: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function storeSalesCustomer(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'customer_name'              => 'required|string|max:255',
+                'company_name'               => 'nullable|string|max:255',
+                'mobile_number'              => 'nullable|string|max:50',
+                'email'                      => 'nullable|email|max:255',
+                'pan_number'                 => 'nullable|string|max:30',
+                'gst_number'                 => 'nullable|string|max:50',
+                'payment_terms'              => 'nullable|string|max:100',
+                'lead_id'                    => 'nullable|integer',
+
+                // Billing Address
+                'billing_attention'          => 'nullable|string|max:255',
+                'billing_country'            => 'nullable|string|max:100',
+                'billing_address_street_1'   => 'nullable|string',
+                'billing_address_street_2'   => 'nullable|string',
+                'billing_city'               => 'nullable|string|max:100',
+                'billing_state'              => 'nullable|string|max:100',
+                'billing_pin_code'           => 'nullable|string|max:20',
+
+                // Shipping Address
+                'shipping_attention'         => 'nullable|string|max:255',
+                'shipping_country'           => 'nullable|string|max:100',
+                'shipping_address_street_1'  => 'nullable|string',
+                'shipping_address_street_2'  => 'nullable|string',
+                'shipping_city'              => 'nullable|string|max:100',
+                'shipping_state'             => 'nullable|string|max:100',
+                'shipping_pin_code'          => 'nullable|string|max:20',
+
+                'remarks'                    => 'nullable|string',
+            ]);
+
+            $companyId = $request->user()?->company_id;
+            $userId    = $request->user()?->id;
+
+            // Prevent duplicate creation within 15 seconds
+            $existingRecent = CustomerMaster::where('company_id', $companyId)
+                ->where('customer_name', trim($validated['customer_name']))
+                ->when(!empty($validated['mobile_number']), function ($q) use ($validated) {
+                    $q->where('mobile_number', trim($validated['mobile_number']));
+                })
+                ->when(!empty($validated['email']), function ($q) use ($validated) {
+                    $q->where('email', trim($validated['email']));
+                })
+                ->where('created_at', '>=', now()->subSeconds(15))
+                ->first();
+
+            $customer = $existingRecent;
+            $message = 'Customer already exists.';
+
+            if (!$customer) {
+                $validated['company_id'] = $companyId;
+                $validated['status']     = 'active';
+                $validated['created_by'] = $userId;
+                $validated['billing_country']  = $validated['billing_country'] ?: 'India';
+                $validated['shipping_country'] = $validated['shipping_country'] ?: 'India';
+
+                $customer = CustomerMaster::create($validated);
+                $message  = 'Customer created successfully!';
+            }
+
+            // Return customer in format matching SalesCustomerOption
+            return response()->json([
+                'status'   => true,
+                'message'  => $message,
+                'customer' => [
+                    'id'                 => $customer->id,
+                    'customer_name'      => $customer->customer_name,
+                    'company_name'       => $customer->company_name,
+                    'mobile_number'      => $customer->mobile_number,
+                    'email'              => $customer->email,
+                    'gst_number'         => $customer->gst_number,
+                    'pan_number'         => $customer->pan_number,
+                    'payment_terms'      => $customer->payment_terms ?: 'Due on Receipt',
+                    'billing_attention'  => $customer->billing_attention ?: $customer->customer_name,
+                    'billing_address'    => trim(($customer->billing_address_street_1 ?? '') . ' ' . ($customer->billing_address_street_2 ?? '')),
+                    'billing_city'       => $customer->billing_city,
+                    'billing_state'      => $customer->billing_state,
+                    'billing_pincode'    => $customer->billing_pin_code,
+                    'billing_country'    => $customer->billing_country ?: 'India',
+                    'shipping_attention' => $customer->shipping_attention ?: ($customer->billing_attention ?: $customer->customer_name),
+                    'shipping_address'   => trim(($customer->shipping_address_street_1 ?? '') . ' ' . ($customer->shipping_address_street_2 ?? '')),
+                    'shipping_city'      => $customer->shipping_city ?: $customer->billing_city,
+                    'shipping_state'     => $customer->shipping_state ?: $customer->billing_state,
+                    'shipping_pincode'   => $customer->shipping_pin_code ?: $customer->billing_pin_code,
+                    'shipping_country'   => $customer->shipping_country ?: ($customer->billing_country ?: 'India'),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts storeSalesCustomer error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to create customer: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function searchSalesConvertedLeads(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+            $q = trim($request->input('q', ''));
+
+            $convertedLeadIds = CustomerMasterController::getConvertedLeadIds($companyId);
+
+            $leads = Lead::whereIn('id', $convertedLeadIds)
+                ->when($q, function ($query) use ($q) {
+                    $query->where(function ($sub) use ($q) {
+                        $sub->where('contact_name', 'like', "%{$q}%")
+                            ->orWhere('mobile_number', 'like', "%{$q}%")
+                            ->orWhere('company_name', 'like', "%{$q}%")
+                            ->orWhere('email', 'like', "%{$q}%");
+                    });
+                })
+                ->latest('id')
+                ->take(30)
+                ->get(['id', 'contact_name', 'company_name', 'mobile_number', 'email']);
+
+            $results = $leads->map(function ($lead) {
+                $displayName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #' . $lead->id);
+                $subText = array_filter([$lead->company_name, $lead->mobile_number, $lead->email]);
+                return [
+                    'id'            => $lead->id,
+                    'name'          => $displayName,
+                    'mobile_number' => $lead->mobile_number,
+                    'company_name'  => $lead->company_name,
+                    'email'         => $lead->email,
+                    'label'         => $displayName . (!empty($subText) ? ' (' . implode(' • ', $subText) . ')' : ''),
+                ];
+            });
+
+            return response()->json([
+                'status' => true,
+                'data'   => $results,
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts searchSalesConvertedLeads error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to search converted leads: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getSalesConvertedLeadDetails(Lead $lead, Request $request): JsonResponse
+    {
+        try {
+            $details = CustomerMasterController::extractLeadDetails($lead);
+            return response()->json([
+                'status' => true,
+                'data'   => $details,
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts getSalesConvertedLeadDetails error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to get converted lead details: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 12. ACCOUNTS REPORTS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Accounts Reports Hub Overview.
+     */
+    public function reportsHub(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $now = Carbon::now();
+            $startOfMonth = $now->copy()->startOfMonth()->toDateString();
+            $endOfMonth = $now->copy()->endOfMonth()->toDateString();
+
+            $expenseBaseQuery = AccountExpense::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')));
+
+            $thisMonthExpenses = (clone $expenseBaseQuery)
+                ->whereBetween('expense_date', [$startOfMonth, $endOfMonth])
+                ->get(['amount', 'expense_type']);
+
+            $totalMonthSpend = (float) $thisMonthExpenses->sum('amount');
+            $fixedMonthSpend = (float) $thisMonthExpenses->where('expense_type', 'Fixed')->sum('amount');
+            $variableMonthSpend = (float) $thisMonthExpenses->where('expense_type', 'Variable')->sum('amount');
+            $monthCount = $thisMonthExpenses->count();
+
+            $totalCategories = AccountExpenseCategory::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->count();
+
+            $totalSubcategories = AccountExpenseSubcategory::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->count();
+
+            $reports = [
+                [
+                    'key'         => 'expense_category_wise',
+                    'title'       => 'Expense Category Wise Report',
+                    'description' => 'Comprehensive breakdown of all agency expenses grouped by category heads. Track fixed vs. variable spending ratios and drill down into individual expense transactions with Excel and PDF export.',
+                    'theme'       => 'category',
+                    'status'      => 'Ready for setup',
+                    'route'       => '/accounts/reports/expense-category-wise',
+                ],
+                [
+                    'key'         => 'expense_subcategory_wise',
+                    'title'       => 'Expense Subcategory Wise Report',
+                    'description' => 'Granular financial breakdown mapped to specific expense subcategories. Filter dynamically across parent categories, subcategories, and custom periods with Excel and PDF export.',
+                    'theme'       => 'subcategory',
+                    'status'      => 'Ready for setup',
+                    'route'       => '/accounts/reports/expense-subcategory-wise',
+                ],
+                [
+                    'key'         => 'customer_balance_sheet',
+                    'title'       => 'Customer Balance Sheet',
+                    'description' => 'Detailed statement of accounts, opening balance, periodic billing, payment collections, credit notes, and running balance ledger with instant printable statement and PDF download.',
+                    'theme'       => 'customer',
+                    'status'      => 'Ready for setup',
+                    'route'       => '/accounts/reports/customer-balance-sheet',
+                ],
+                [
+                    'key'         => 'expense_pivot',
+                    'title'       => 'Expense Pivot Analysis',
+                    'description' => 'Interactive monthly matrix view of expenses cross-tabulated across categories and subcategories with multi-year comparisons and category summaries.',
+                    'theme'       => 'pivot',
+                    'status'      => 'Ready for setup',
+                    'route'       => '/accounts/expenses/pivot',
+                ],
+                [
+                    'key'         => 'profit_and_loss',
+                    'title'       => 'Profit & Loss (P & L) Report',
+                    'description' => 'Executive statement of financial performance comparing invoiced sales revenue against operating fixed & variable expenses with net profit margin analysis and breakdown.',
+                    'theme'       => 'pnl',
+                    'status'      => 'Ready for setup',
+                    'route'       => '/accounts/reports/profit-and-loss',
+                ],
+            ];
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'stats' => [
+                        'live_modules'         => count($reports),
+                        'total_month_spend'    => $totalMonthSpend,
+                        'fixed_month_spend'    => $fixedMonthSpend,
+                        'variable_month_spend' => $variableMonthSpend,
+                        'month_count'          => $monthCount,
+                        'total_categories'     => $totalCategories,
+                        'total_subcategories'  => $totalSubcategories,
+                    ],
+                    'reports' => $reports,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts reportsHub error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load accounts reports hub data: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Expense Category Wise Report.
+     */
+    public function reportExpenseCategoryWise(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $now = Carbon::now();
+            $defaultFrom = $now->copy()->startOfMonth()->toDateString();
+            $defaultTo   = $now->toDateString();
+
+            $dateFrom    = $request->input('date_from', $defaultFrom);
+            $dateTo      = $request->input('date_to', $defaultTo);
+            $categoryId  = $request->input('category_id');
+            $expenseType = $request->input('expense_type', 'all');
+
+            $categories = AccountExpenseCategory::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->orderBy('name')
+                ->get();
+
+            $selectedCategory = null;
+            if (!empty($categoryId) && $categoryId !== 'all') {
+                $selectedCategory = $categories->firstWhere('id', (int) $categoryId)
+                    ?? AccountExpenseCategory::find($categoryId);
+            }
+
+            $query = AccountExpense::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->whereDate('expense_date', '>=', $dateFrom)
+                ->whereDate('expense_date', '<=', $dateTo)
+                ->with(['category', 'subcategory', 'vendor', 'creator']);
+
+            if ($selectedCategory) {
+                $query->where('account_expense_category_id', $selectedCategory->id);
+            }
+
+            if (!empty($expenseType) && $expenseType !== 'all') {
+                $query->where('expense_type', $expenseType);
+            }
+
+            $expenses = $query->orderBy('expense_date', 'desc')->get();
+
+            $grandTotalAmount   = (float) $expenses->sum('amount');
+            $grandTotalFixed    = (float) $expenses->where('expense_type', 'Fixed')->sum('amount');
+            $grandTotalVariable = (float) $expenses->where('expense_type', 'Variable')->sum('amount');
+            $grandTotalCount    = $expenses->count();
+
+            $grouped = $expenses->groupBy('account_expense_category_id');
+
+            $categoryRows = [];
+            $categoriesToIterate = $selectedCategory
+                ? collect([$selectedCategory])
+                : $categories;
+
+            foreach ($categoriesToIterate as $cat) {
+                $catExpenses = $grouped->get($cat->id, collect());
+                $count = $catExpenses->count();
+                $fixed = (float) $catExpenses->where('expense_type', 'Fixed')->sum('amount');
+                $variable = (float) $catExpenses->where('expense_type', 'Variable')->sum('amount');
+                $total = $fixed + $variable;
+                $percentage = $grandTotalAmount > 0 ? round(($total / $grandTotalAmount) * 100, 2) : 0;
+
+                if ($count > 0 || $selectedCategory) {
+                    $categoryRows[] = [
+                        'category_id'   => $cat->id,
+                        'category_name' => $cat->name,
+                        'category_code' => $cat->code,
+                        'count'         => $count,
+                        'fixed'         => $fixed,
+                        'variable'      => $variable,
+                        'total'         => $total,
+                        'percentage'    => $percentage,
+                        'expenses'      => $catExpenses->map(fn ($e) => [
+                            'id'             => $e->id,
+                            'expense_number' => $e->expense_number,
+                            'expense_date'   => $e->expense_date?->format('Y-m-d') ?: (string) $e->created_at?->format('Y-m-d'),
+                            'title'          => $e->title,
+                            'amount'         => (float) $e->amount,
+                            'expense_type'   => $e->expense_type,
+                            'subcategory_name'=> $e->subcategory?->name,
+                            'vendor_name'    => $e->vendor?->vendor_name ?: $e->vendor_name,
+                            'payment_mode'   => $e->payment_mode,
+                            'notes'          => $e->notes,
+                        ])->values(),
+                    ];
+                }
+            }
+
+            // Uncategorized
+            $uncategorized = $expenses->filter(fn ($e) => empty($e->account_expense_category_id) || !$categories->contains('id', $e->account_expense_category_id));
+            if ($uncategorized->isNotEmpty() && !$selectedCategory) {
+                $count = $uncategorized->count();
+                $fixed = (float) $uncategorized->where('expense_type', 'Fixed')->sum('amount');
+                $variable = (float) $uncategorized->where('expense_type', 'Variable')->sum('amount');
+                $total = $fixed + $variable;
+                $percentage = $grandTotalAmount > 0 ? round(($total / $grandTotalAmount) * 100, 2) : 0;
+
+                $categoryRows[] = [
+                    'category_id'   => null,
+                    'category_name' => 'Other / Uncategorized',
+                    'category_code' => null,
+                    'count'         => $count,
+                    'fixed'         => $fixed,
+                    'variable'      => $variable,
+                    'total'         => $total,
+                    'percentage'    => $percentage,
+                    'expenses'      => $uncategorized->map(fn ($e) => [
+                        'id'             => $e->id,
+                        'expense_number' => $e->expense_number,
+                        'expense_date'   => $e->expense_date?->format('Y-m-d') ?: (string) $e->created_at?->format('Y-m-d'),
+                        'title'          => $e->title,
+                        'amount'         => (float) $e->amount,
+                        'expense_type'   => $e->expense_type,
+                        'subcategory_name'=> $e->subcategory?->name,
+                        'vendor_name'    => $e->vendor?->vendor_name ?: $e->vendor_name,
+                        'payment_mode'   => $e->payment_mode,
+                        'notes'          => $e->notes,
+                    ])->values(),
+                ];
+            }
+
+            usort($categoryRows, fn ($a, $b) => $b['total'] <=> $a['total']);
+            $topCategory = !empty($categoryRows) ? $categoryRows[0] : null;
+            $avgExpenseAmount = $grandTotalCount > 0 ? round($grandTotalAmount / $grandTotalCount, 2) : 0;
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'filters' => [
+                        'date_from'    => $dateFrom,
+                        'date_to'      => $dateTo,
+                        'category_id'  => $categoryId ?: 'all',
+                        'expense_type' => $expenseType,
+                    ],
+                    'categories' => $categories->map(fn ($c) => [
+                        'id'   => $c->id,
+                        'name' => $c->name,
+                        'code' => $c->code,
+                    ]),
+                    'selected_category' => $selectedCategory ? [
+                        'id'   => $selectedCategory->id,
+                        'name' => $selectedCategory->name,
+                        'code' => $selectedCategory->code,
+                    ] : null,
+                    'summary' => [
+                        'grand_total_amount'   => $grandTotalAmount,
+                        'grand_total_fixed'    => $grandTotalFixed,
+                        'grand_total_variable' => $grandTotalVariable,
+                        'grand_total_count'    => $grandTotalCount,
+                        'avg_expense_amount'   => $avgExpenseAmount,
+                        'top_category_name'    => $topCategory['category_name'] ?? null,
+                        'top_category_amount'  => $topCategory['total'] ?? 0.0,
+                    ],
+                    'rows' => $categoryRows,
+                    'export_urls' => [
+                        'excel' => url("/accounts/reports/expense-category-wise/export-excel?date_from={$dateFrom}&date_to={$dateTo}&category_id=" . ($categoryId ?: 'all') . "&expense_type={$expenseType}"),
+                        'pdf'   => url("/accounts/reports/expense-category-wise/export-pdf?date_from={$dateFrom}&date_to={$dateTo}&category_id=" . ($categoryId ?: 'all') . "&expense_type={$expenseType}"),
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts reportExpenseCategoryWise error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load expense category report: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Expense Subcategory Wise Report.
+     */
+    public function reportExpenseSubcategoryWise(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $now = Carbon::now();
+            $defaultFrom = $now->copy()->startOfMonth()->toDateString();
+            $defaultTo   = $now->toDateString();
+
+            $dateFrom      = $request->input('date_from', $defaultFrom);
+            $dateTo        = $request->input('date_to', $defaultTo);
+            $categoryId    = $request->input('category_id');
+            $subcategoryId = $request->input('subcategory_id');
+            $expenseType   = $request->input('expense_type', 'all');
+
+            $categories = AccountExpenseCategory::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->orderBy('name')
+                ->get();
+
+            $allSubcategories = AccountExpenseSubcategory::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->orderBy('name')
+                ->get(['id', 'name', 'code', 'account_expense_category_id']);
+
+            $subcategoriesQuery = AccountExpenseSubcategory::active()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')));
+
+            if (!empty($categoryId) && $categoryId !== 'all') {
+                $subcategoriesQuery->where('account_expense_category_id', (int) $categoryId);
+            }
+
+            $subcategories = $subcategoriesQuery->orderBy('name')->get();
+
+            $selectedCategory = null;
+            if (!empty($categoryId) && $categoryId !== 'all') {
+                $selectedCategory = $categories->firstWhere('id', (int) $categoryId)
+                    ?? AccountExpenseCategory::find($categoryId);
+            }
+
+            $selectedSubcategory = null;
+            if (!empty($subcategoryId) && $subcategoryId !== 'all') {
+                $selectedSubcategory = $subcategories->firstWhere('id', (int) $subcategoryId)
+                    ?? AccountExpenseSubcategory::find($subcategoryId);
+            }
+
+            $query = AccountExpense::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->whereDate('expense_date', '>=', $dateFrom)
+                ->whereDate('expense_date', '<=', $dateTo)
+                ->with(['category', 'subcategory', 'vendor', 'creator']);
+
+            if ($selectedCategory) {
+                $query->where('account_expense_category_id', $selectedCategory->id);
+            }
+
+            if ($selectedSubcategory) {
+                $query->where('account_expense_subcategory_id', $selectedSubcategory->id);
+            } elseif ($subcategoryId === 'unassigned') {
+                $query->whereNull('account_expense_subcategory_id');
+            }
+
+            if (!empty($expenseType) && $expenseType !== 'all') {
+                $query->where('expense_type', $expenseType);
+            }
+
+            $expenses = $query->orderBy('expense_date', 'desc')->get();
+
+            $grandTotalAmount   = (float) $expenses->sum('amount');
+            $grandTotalFixed    = (float) $expenses->where('expense_type', 'Fixed')->sum('amount');
+            $grandTotalVariable = (float) $expenses->where('expense_type', 'Variable')->sum('amount');
+            $grandTotalCount    = $expenses->count();
+
+            $subcategoryRows = [];
+            $grouped = $expenses->groupBy(fn ($item) => (string) ($item->account_expense_subcategory_id ?? 'none'));
+
+            foreach ($grouped as $subIdKey => $subExpenses) {
+                $first = $subExpenses->first();
+                $subModel = $first?->subcategory;
+                $catModel = $first?->category;
+
+                $subName = $subModel ? $subModel->name : 'Unassigned / General';
+                $subCode = $subModel ? $subModel->code : '—';
+                $catName = $catModel ? $catModel->name : 'Uncategorized';
+                $catCode = $catModel ? $catModel->code : '—';
+
+                $count = $subExpenses->count();
+                $fixed = (float) $subExpenses->where('expense_type', 'Fixed')->sum('amount');
+                $variable = (float) $subExpenses->where('expense_type', 'Variable')->sum('amount');
+                $total = $fixed + $variable;
+                $percentage = $grandTotalAmount > 0 ? round(($total / $grandTotalAmount) * 100, 2) : 0;
+
+                $subcategoryRows[] = [
+                    'subcategory_id'   => $subModel?->id,
+                    'subcategory_name' => $subName,
+                    'subcategory_code' => $subCode,
+                    'category_id'      => $catModel?->id,
+                    'category_name'    => $catName,
+                    'category_code'    => $catCode,
+                    'count'            => $count,
+                    'fixed'            => $fixed,
+                    'variable'         => $variable,
+                    'total'            => $total,
+                    'percentage'       => $percentage,
+                    'expenses'         => $subExpenses->map(fn ($e) => [
+                        'id'             => $e->id,
+                        'expense_number' => $e->expense_number,
+                        'expense_date'   => $e->expense_date?->format('Y-m-d') ?: (string) $e->created_at?->format('Y-m-d'),
+                        'title'          => $e->title,
+                        'amount'         => (float) $e->amount,
+                        'expense_type'   => $e->expense_type,
+                        'category_name'  => $catName,
+                        'subcategory_name'=> $subName,
+                        'vendor_name'    => $e->vendor?->vendor_name ?: $e->vendor_name,
+                        'payment_mode'   => $e->payment_mode,
+                        'notes'          => $e->notes,
+                    ])->values(),
+                ];
+            }
+
+            usort($subcategoryRows, fn ($a, $b) => $b['total'] <=> $a['total']);
+            $topSubcategory = !empty($subcategoryRows) ? $subcategoryRows[0] : null;
+            $avgExpenseAmount = $grandTotalCount > 0 ? round($grandTotalAmount / $grandTotalCount, 2) : 0;
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'filters' => [
+                        'date_from'      => $dateFrom,
+                        'date_to'        => $dateTo,
+                        'category_id'    => $categoryId ?: 'all',
+                        'subcategory_id' => $subcategoryId ?: 'all',
+                        'expense_type'   => $expenseType,
+                    ],
+                    'categories' => $categories->map(fn ($c) => [
+                        'id'   => $c->id,
+                        'name' => $c->name,
+                        'code' => $c->code,
+                    ]),
+                    'subcategories' => $subcategories->map(fn ($s) => [
+                        'id'          => $s->id,
+                        'name'        => $s->name,
+                        'code'        => $s->code,
+                        'category_id' => $s->account_expense_category_id,
+                    ]),
+                    'all_subcategories' => $allSubcategories->map(fn ($s) => [
+                        'id'          => $s->id,
+                        'name'        => $s->name,
+                        'code'        => $s->code,
+                        'category_id' => $s->account_expense_category_id,
+                    ]),
+                    'selected_category' => $selectedCategory ? [
+                        'id'   => $selectedCategory->id,
+                        'name' => $selectedCategory->name,
+                    ] : null,
+                    'selected_subcategory' => $selectedSubcategory ? [
+                        'id'   => $selectedSubcategory->id,
+                        'name' => $selectedSubcategory->name,
+                    ] : null,
+                    'summary' => [
+                        'grand_total_amount'        => $grandTotalAmount,
+                        'grand_total_fixed'         => $grandTotalFixed,
+                        'grand_total_variable'      => $grandTotalVariable,
+                        'grand_total_count'         => $grandTotalCount,
+                        'avg_expense_amount'        => $avgExpenseAmount,
+                        'active_subcategories_count'=> count($subcategoryRows),
+                        'top_subcategory_name'      => $topSubcategory['subcategory_name'] ?? null,
+                        'top_subcategory_amount'    => $topSubcategory['total'] ?? 0.0,
+                    ],
+                    'rows' => $subcategoryRows,
+                    'export_urls' => [
+                        'excel' => url("/accounts/reports/expense-subcategory-wise/export-excel?date_from={$dateFrom}&date_to={$dateTo}&category_id=" . ($categoryId ?: 'all') . "&subcategory_id=" . ($subcategoryId ?: 'all') . "&expense_type={$expenseType}"),
+                        'pdf'   => url("/accounts/reports/expense-subcategory-wise/export-pdf?date_from={$dateFrom}&date_to={$dateTo}&category_id=" . ($categoryId ?: 'all') . "&subcategory_id=" . ($subcategoryId ?: 'all') . "&expense_type={$expenseType}"),
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts reportExpenseSubcategoryWise error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load expense subcategory report: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Customer Balance Sheet / Statement of Accounts Report.
+     */
+    public function reportCustomerBalanceSheet(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $customers = CustomerMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('customer_name')
+                ->get(['id', 'customer_name', 'company_name', 'mobile_number', 'email', 'gst_number']);
+
+            $now = Carbon::now();
+            $fyStartYear = $now->month >= 4 ? $now->year : $now->year - 1;
+            $defaultFrom = Carbon::create($fyStartYear, 4, 1)->format('Y-m-d');
+            $defaultTo   = $now->format('Y-m-d');
+
+            $dateFrom   = $request->input('date_from', $defaultFrom);
+            $dateTo     = $request->input('date_to', $defaultTo);
+            $customerId = $request->input('customer_id');
+
+            $selectedCustomer = null;
+            if (!empty($customerId) && $customerId !== 'all') {
+                $selectedCustomer = CustomerMaster::query()
+                    ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                    ->find($customerId);
+            }
+
+            if ($selectedCustomer) {
+                $cId = $selectedCustomer->id;
+
+                // 1. Opening Balance
+                $invoicesBefore = (float) Invoice::query()
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereDate('invoice_date', '<', $dateFrom)
+                    ->whereNotIn('status', ['cancelled', 'draft'])
+                    ->sum('total_amount');
+
+                $paymentsBefore = (float) InvoicePayment::query()
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereDate('payment_date', '<', $dateFrom)
+                    ->sum(DB::raw('COALESCE(NULLIF(total_settled_amount, 0), amount_received + tds_amount)'));
+
+                $creditNotesBefore = (float) CreditNote::query()
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereDate('credit_note_date', '<', $dateFrom)
+                    ->where('status', '!=', 'void')
+                    ->sum('total_amount');
+
+                $openingBalance = $invoicesBefore - $paymentsBefore - $creditNotesBefore;
+
+                // 2. Invoices in period
+                $periodInvoices = Invoice::query()
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('invoice_date', [$dateFrom, $dateTo])
+                    ->whereNotIn('status', ['cancelled', 'draft'])
+                    ->orderBy('invoice_date', 'asc')
+                    ->get();
+
+                // 3. Payments in period
+                $periodPayments = InvoicePayment::with('invoice')
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$dateFrom, $dateTo])
+                    ->orderBy('payment_date', 'asc')
+                    ->get();
+
+                // 4. Credit Notes in period
+                $periodCreditNotes = CreditNote::with('invoice')
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('credit_note_date', [$dateFrom, $dateTo])
+                    ->where('status', '!=', 'void')
+                    ->orderBy('credit_note_date', 'asc')
+                    ->get();
+
+                // 5. Build chronological transaction rows
+                $rows = [];
+
+                foreach ($periodInvoices as $inv) {
+                    $invDate = $inv->invoice_date ? Carbon::parse($inv->invoice_date) : Carbon::parse($inv->created_at);
+                    $rows[] = [
+                        'date'         => $invDate->format('Y-m-d'),
+                        'sort_key'     => $invDate->format('Y-m-d') . '_1_' . str_pad($inv->id, 8, '0', STR_PAD_LEFT),
+                        'type'         => 'invoice',
+                        'type_label'   => 'Tax Invoice',
+                        'ref_no'       => $inv->invoice_number,
+                        'particulars'  => 'Tax Invoice #' . $inv->invoice_number . ($inv->due_date ? ' (Due: ' . Carbon::parse($inv->due_date)->format('d M, Y') . ')' : ''),
+                        'details'      => $inv->customer_notes ?: '',
+                        'status'       => $inv->status,
+                        'debit'        => (float) $inv->total_amount,
+                        'credit'       => 0.0,
+                    ];
+                }
+
+                foreach ($periodPayments as $pay) {
+                    $payDate = $pay->payment_date ? Carbon::parse($pay->payment_date) : Carbon::parse($pay->created_at);
+                    $settled = (float) ($pay->total_settled_amount > 0 ? $pay->total_settled_amount : ($pay->amount_received + $pay->tds_amount));
+                    $modeLabel = InvoicePayment::PAYMENT_MODES[$pay->payment_mode] ?? ucfirst($pay->payment_mode ?: 'Payment');
+
+                    $part = 'Payment Received (' . $modeLabel . ')';
+                    if ($pay->reference_number) {
+                        $part .= ' — Ref: ' . $pay->reference_number;
+                    }
+                    if ($pay->bank_name) {
+                        $part .= ' [' . $pay->bank_name . ']';
+                    }
+                    if ($pay->invoice) {
+                        $part .= ' for Inv #' . $pay->invoice->invoice_number;
+                    }
+
+                    $details = '';
+                    if ($pay->is_tds_deducted && (float) $pay->tds_amount > 0) {
+                        $details .= 'TDS: ₹' . number_format($pay->tds_amount, 2) . ' (' . ($pay->tds_percentage ?: '0') . '%) ';
+                    }
+                    if ($pay->notes) {
+                        $details .= ($details ? '| ' : '') . $pay->notes;
+                    }
+
+                    $rows[] = [
+                        'date'         => $payDate->format('Y-m-d'),
+                        'sort_key'     => $payDate->format('Y-m-d') . '_2_' . str_pad($pay->id, 8, '0', STR_PAD_LEFT),
+                        'type'         => 'payment',
+                        'type_label'   => 'Payment',
+                        'ref_no'       => $pay->payment_number ?: ('REC-' . str_pad($pay->id, 5, '0', STR_PAD_LEFT)),
+                        'particulars'  => $part,
+                        'details'      => $details,
+                        'status'       => 'Settled',
+                        'debit'        => 0.0,
+                        'credit'       => $settled,
+                    ];
+                }
+
+                foreach ($periodCreditNotes as $cn) {
+                    $cnDate = $cn->credit_note_date ? Carbon::parse($cn->credit_note_date) : Carbon::parse($cn->created_at);
+                    $part = 'Credit Note (' . ($cn->reason ?: 'Adjustment') . ')';
+                    if ($cn->invoice) {
+                        $part .= ' for Inv #' . $cn->invoice->invoice_number;
+                    }
+
+                    $rows[] = [
+                        'date'         => $cnDate->format('Y-m-d'),
+                        'sort_key'     => $cnDate->format('Y-m-d') . '_3_' . str_pad($cn->id, 8, '0', STR_PAD_LEFT),
+                        'type'         => 'credit_note',
+                        'type_label'   => 'Credit Note',
+                        'ref_no'       => $cn->credit_note_number,
+                        'particulars'  => $part,
+                        'details'      => $cn->notes ?: '',
+                        'status'       => $cn->status ?: 'Issued',
+                        'debit'        => 0.0,
+                        'credit'       => (float) $cn->total_amount,
+                    ];
+                }
+
+                usort($rows, fn ($a, $b) => strcmp($a['sort_key'], $b['sort_key']));
+
+                $runningBalance = $openingBalance;
+                $totalPeriodDebit = 0.0;
+                $totalPeriodCredit = 0.0;
+                $totalPeriodPaid = 0.0;
+                $totalPeriodCredited = 0.0;
+
+                foreach ($rows as &$r) {
+                    $runningBalance += ($r['debit'] - $r['credit']);
+                    $r['running_balance'] = $runningBalance;
+                    $totalPeriodDebit += $r['debit'];
+                    $totalPeriodCredit += $r['credit'];
+
+                    if ($r['type'] === 'payment') {
+                        $totalPeriodPaid += $r['credit'];
+                    } elseif ($r['type'] === 'credit_note') {
+                        $totalPeriodCredited += $r['credit'];
+                    }
+                }
+                unset($r);
+
+                $closingBalance = $runningBalance;
+
+                // Lifetime numbers
+                $lifetimeInvoiced = (float) Invoice::query()
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereNotIn('status', ['cancelled', 'draft'])
+                    ->sum('total_amount');
+
+                $lifetimePaid = (float) InvoicePayment::query()
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->sum(DB::raw('COALESCE(NULLIF(total_settled_amount, 0), amount_received + tds_amount)'));
+
+                $lifetimeCredited = (float) CreditNote::query()
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->where('status', '!=', 'void')
+                    ->sum('total_amount');
+
+                $lifetimeBalanceDue = (float) Invoice::query()
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereNotIn('status', ['cancelled', 'draft'])
+                    ->sum('balance_due');
+
+                $invoiceCount = Invoice::query()
+                    ->where('customer_id', $cId)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereNotIn('status', ['cancelled', 'draft'])
+                    ->count();
+
+                return response()->json([
+                    'status' => true,
+                    'data'   => [
+                        'mode'                => 'single',
+                        'filters'             => [
+                            'customer_id' => $customerId,
+                            'date_from'   => $dateFrom,
+                            'date_to'     => $dateTo,
+                        ],
+                        'customers'           => $customers->map(fn ($c) => [
+                            'id'            => $c->id,
+                            'customer_name' => $c->customer_name,
+                            'company_name'  => $c->company_name,
+                        ]),
+                        'selected_customer'   => [
+                            'id'            => $selectedCustomer->id,
+                            'customer_name' => $selectedCustomer->customer_name,
+                            'company_name'  => $selectedCustomer->company_name,
+                            'mobile_number' => $selectedCustomer->mobile_number,
+                            'email'         => $selectedCustomer->email,
+                            'gst_number'    => $selectedCustomer->gst_number,
+                        ],
+                        'summary' => [
+                            'opening_balance'      => $openingBalance,
+                            'closing_balance'      => $closingBalance,
+                            'total_period_debit'   => $totalPeriodDebit,
+                            'total_period_credit'  => $totalPeriodCredit,
+                            'total_period_paid'    => $totalPeriodPaid,
+                            'total_period_credited'=> $totalPeriodCredited,
+                            'lifetime_invoiced'    => $lifetimeInvoiced,
+                            'lifetime_paid'        => $lifetimePaid,
+                            'lifetime_credited'    => $lifetimeCredited,
+                            'lifetime_balance_due' => $lifetimeBalanceDue,
+                            'invoice_count'        => $invoiceCount,
+                        ],
+                        'rows'                => $rows,
+                        'export_urls'         => [
+                            'pdf'   => url("/accounts/reports/customer-balance-sheet/export-pdf?customer_id={$cId}&date_from={$dateFrom}&date_to={$dateTo}"),
+                            'print' => url("/accounts/reports/customer-balance-sheet/print?customer_id={$cId}&date_from={$dateFrom}&date_to={$dateTo}"),
+                        ],
+                    ],
+                ]);
+            }
+
+            // Mode: ALL Customers Consolidated Summary
+            $customerRows = [];
+            $totalReceivables = 0.0;
+            $totalPeriodInvoiced = 0.0;
+            $totalPeriodCollected = 0.0;
+            $totalPeriodCredited = 0.0;
+            $customersWithBalance = 0;
+
+            foreach ($customers as $c) {
+                $invoicedPeriod = (float) Invoice::query()
+                    ->where('customer_id', $c->id)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('invoice_date', [$dateFrom, $dateTo])
+                    ->whereNotIn('status', ['cancelled', 'draft'])
+                    ->sum('total_amount');
+
+                $collectedPeriod = (float) InvoicePayment::query()
+                    ->where('customer_id', $c->id)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('payment_date', [$dateFrom, $dateTo])
+                    ->sum(DB::raw('COALESCE(NULLIF(total_settled_amount, 0), amount_received + tds_amount)'));
+
+                $creditedPeriod = (float) CreditNote::query()
+                    ->where('customer_id', $c->id)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereBetween('credit_note_date', [$dateFrom, $dateTo])
+                    ->where('status', '!=', 'void')
+                    ->sum('total_amount');
+
+                $currentBalance = (float) Invoice::query()
+                    ->where('customer_id', $c->id)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereNotIn('status', ['cancelled', 'draft'])
+                    ->sum('balance_due');
+
+                $invoiceCount = Invoice::query()
+                    ->where('customer_id', $c->id)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->whereNotIn('status', ['cancelled', 'draft'])
+                    ->count();
+
+                $lastInvoice = Invoice::query()
+                    ->where('customer_id', $c->id)
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->orderBy('invoice_date', 'desc')
+                    ->first(['invoice_date']);
+
+                if ($currentBalance > 0.01) {
+                    $customersWithBalance++;
+                }
+
+                $totalReceivables      += $currentBalance;
+                $totalPeriodInvoiced   += $invoicedPeriod;
+                $totalPeriodCollected  += $collectedPeriod;
+                $totalPeriodCredited   += $creditedPeriod;
+
+                $customerRows[] = [
+                    'customer_id'      => $c->id,
+                    'customer_name'    => $c->customer_name,
+                    'company_name'     => $c->company_name,
+                    'invoiced_period'  => $invoicedPeriod,
+                    'collected_period' => $collectedPeriod,
+                    'credited_period'  => $creditedPeriod,
+                    'current_balance'  => $currentBalance,
+                    'invoice_count'    => $invoiceCount,
+                    'last_invoice_date'=> $lastInvoice?->invoice_date?->format('Y-m-d'),
+                ];
+            }
+
+            usort($customerRows, fn ($a, $b) => $b['current_balance'] <=> $a['current_balance']);
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'mode'                 => 'all',
+                    'filters'              => [
+                        'customer_id' => 'all',
+                        'date_from'   => $dateFrom,
+                        'date_to'     => $dateTo,
+                    ],
+                    'customers'            => $customers->map(fn ($c) => [
+                        'id'            => $c->id,
+                        'customer_name' => $c->customer_name,
+                        'company_name'  => $c->company_name,
+                    ]),
+                    'selected_customer'    => null,
+                    'summary'              => [
+                        'total_receivables'      => $totalReceivables,
+                        'total_period_invoiced'  => $totalPeriodInvoiced,
+                        'total_period_collected' => $totalPeriodCollected,
+                        'total_period_credited'  => $totalPeriodCredited,
+                        'customers_with_balance' => $customersWithBalance,
+                        'total_customers_count'  => count($customers),
+                    ],
+                    'rows'                 => $customerRows,
+                    'export_urls'          => [
+                        'pdf'   => url("/accounts/reports/customer-balance-sheet/export-pdf?customer_id=all&date_from={$dateFrom}&date_to={$dateTo}"),
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts reportCustomerBalanceSheet error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load customer balance sheet report: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Profit & Loss (P & L) Statement Report.
+     */
+    public function reportProfitAndLoss(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id;
+
+            $now = Carbon::now();
+            $fyStartYear = $now->month >= 4 ? $now->year : $now->year - 1;
+            $defaultFrom = Carbon::create($fyStartYear, 4, 1)->format('Y-m-d');
+            $defaultTo   = $now->format('Y-m-d');
+
+            $dateFrom       = $request->input('date_from', $defaultFrom);
+            $dateTo         = $request->input('date_to', $defaultTo);
+            $selectedPeriod = $request->input('period', 'this_fy');
+
+            // Invoices
+            $invoicesQuery = Invoice::query()
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereDate('invoice_date', '>=', $dateFrom)
+                ->whereDate('invoice_date', '<=', $dateTo)
+                ->whereNotIn('status', ['cancelled', 'draft']);
+
+            $invoices = (clone $invoicesQuery)->orderBy('invoice_date', 'desc')->get();
+
+            $grossSales       = (float) $invoices->sum('total_amount');
+            $netSalesSubtotal = (float) $invoices->sum('subtotal');
+            $totalSalesTax    = (float) $invoices->sum('total_tax');
+            $totalPaidAmount  = (float) $invoices->sum('paid_amount');
+            $totalBalanceDue  = (float) $invoices->sum('balance_due');
+            $invoicesCount    = $invoices->count();
+
+            // Credit Notes
+            $creditNotes = CreditNote::query()
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereDate('credit_note_date', '>=', $dateFrom)
+                ->whereDate('credit_note_date', '<=', $dateTo)
+                ->where('status', '!=', 'void')
+                ->get();
+
+            $totalCreditNotes         = (float) $creditNotes->sum('total_amount');
+            $totalCreditNotesSubtotal = (float) $creditNotes->sum('subtotal');
+            $creditNotesCount        = $creditNotes->count();
+
+            $netOperatingRevenue   = max(0, $netSalesSubtotal - $totalCreditNotesSubtotal);
+            $grossOperatingRevenue = max(0, $grossSales - $totalCreditNotes);
+
+            // Expenses
+            $expensesQuery = AccountExpense::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->whereDate('expense_date', '>=', $dateFrom)
+                ->whereDate('expense_date', '<=', $dateTo)
+                ->with(['category', 'subcategory', 'vendor']);
+
+            $expenses = (clone $expensesQuery)->orderBy('expense_date', 'desc')->get();
+
+            $totalExpenses         = (float) $expenses->sum('amount');
+            $totalFixedExpenses    = (float) $expenses->where('expense_type', 'Fixed')->sum('amount');
+            $totalVariableExpenses = (float) $expenses->where('expense_type', 'Variable')->sum('amount');
+            $expensesCount         = $expenses->count();
+
+            $netProfit     = $netOperatingRevenue - $totalExpenses;
+            $grossProfit   = $grossOperatingRevenue - $totalExpenses;
+            $profitMargin  = $netOperatingRevenue > 0 ? round(($netProfit / $netOperatingRevenue) * 100, 2) : 0.0;
+            $expenseRatio  = $netOperatingRevenue > 0 ? round(($totalExpenses / $netOperatingRevenue) * 100, 2) : 0.0;
+            $cashRealized  = $totalPaidAmount;
+            $cashProfit    = $cashRealized - $totalExpenses;
+
+            // Categories breakdown
+            $categoriesBreakdown = [];
+            $groupedByCategory = $expenses->groupBy('account_expense_category_id');
+
+            foreach ($groupedByCategory as $catId => $catExpenses) {
+                $first = $catExpenses->first();
+                $categoryName = $first?->category?->name ?? 'Uncategorized';
+                $categoryCode = $first?->category?->code ?? 'OTHER';
+                $catTotal     = (float) $catExpenses->sum('amount');
+                $catFixed     = (float) $catExpenses->where('expense_type', 'Fixed')->sum('amount');
+                $catVariable  = (float) $catExpenses->where('expense_type', 'Variable')->sum('amount');
+                $catCount     = $catExpenses->count();
+
+                $subBreakdown = [];
+                $groupedBySub = $catExpenses->groupBy('account_expense_subcategory_id');
+                foreach ($groupedBySub as $subId => $subExpenses) {
+                    $subFirst = $subExpenses->first();
+                    $subName  = $subFirst?->subcategory?->name ?? 'General';
+                    $subCode  = $subFirst?->subcategory?->code ?? '-';
+                    $subTotal = (float) $subExpenses->sum('amount');
+                    $subBreakdown[] = [
+                        'id'          => $subId,
+                        'name'        => $subName,
+                        'code'        => $subCode,
+                        'count'       => $subExpenses->count(),
+                        'fixed'       => (float) $subExpenses->where('expense_type', 'Fixed')->sum('amount'),
+                        'variable'    => (float) $subExpenses->where('expense_type', 'Variable')->sum('amount'),
+                        'total'       => $subTotal,
+                        'pct_of_cat'  => $catTotal > 0 ? round(($subTotal / $catTotal) * 100, 1) : 0.0,
+                    ];
+                }
+                usort($subBreakdown, fn ($a, $b) => $b['total'] <=> $a['total']);
+
+                $categoriesBreakdown[] = [
+                    'id'              => $catId,
+                    'name'            => $categoryName,
+                    'code'            => $categoryCode,
+                    'count'           => $catCount,
+                    'fixed'           => $catFixed,
+                    'variable'        => $catVariable,
+                    'total'           => $catTotal,
+                    'pct_of_expenses' => $totalExpenses > 0 ? round(($catTotal / $totalExpenses) * 100, 1) : 0.0,
+                    'pct_of_revenue'  => $netOperatingRevenue > 0 ? round(($catTotal / $netOperatingRevenue) * 100, 1) : 0.0,
+                    'subcategories'   => $subBreakdown,
+                ];
+            }
+            usort($categoriesBreakdown, fn ($a, $b) => $b['total'] <=> $a['total']);
+
+            // Client revenue breakdown
+            $clientRevenue = [];
+            $groupedByClient = $invoices->groupBy(fn ($inv) => $inv->company_name ?: ($inv->customer_name ?: 'Unknown Client'));
+            foreach ($groupedByClient as $clientName => $clientInvoices) {
+                $cTotal = (float) $clientInvoices->sum('subtotal');
+                $cGST   = (float) $clientInvoices->sum('total_tax');
+                $cGross = (float) $clientInvoices->sum('total_amount');
+                $cPaid  = (float) $clientInvoices->sum('paid_amount');
+                $clientRevenue[] = [
+                    'name'           => $clientName,
+                    'count'          => $clientInvoices->count(),
+                    'subtotal'       => $cTotal,
+                    'tax'            => $cGST,
+                    'gross'          => $cGross,
+                    'paid'           => $cPaid,
+                    'pct_of_revenue' => $netOperatingRevenue > 0 ? round(($cTotal / $netOperatingRevenue) * 100, 1) : 0.0,
+                ];
+            }
+            usort($clientRevenue, fn ($a, $b) => $b['subtotal'] <=> $a['subtotal']);
+
+            // Monthly Trend
+            $monthlyTrend = [];
+            try {
+                $startPeriod = Carbon::parse($dateFrom)->startOfMonth();
+                $endPeriod   = Carbon::parse($dateTo)->startOfMonth();
+
+                $safety = 0;
+                $cursor = $startPeriod->copy();
+                while ($cursor->lte($endPeriod) && $safety < 60) {
+                    $monthKey   = $cursor->format('Y-m');
+                    $monthLabel = $cursor->format('M Y');
+
+                    $mInvoices    = $invoices->filter(fn ($inv) => Carbon::parse($inv->invoice_date)->format('Y-m') === $monthKey);
+                    $mExpenses    = $expenses->filter(fn ($exp) => Carbon::parse($exp->expense_date)->format('Y-m') === $monthKey);
+                    $mCreditNotes = $creditNotes->filter(fn ($cn) => Carbon::parse($cn->credit_note_date)->format('Y-m') === $monthKey);
+
+                    $mRevenue   = max(0, (float) $mInvoices->sum('subtotal') - (float) $mCreditNotes->sum('subtotal'));
+                    $mExpense   = (float) $mExpenses->sum('amount');
+                    $mNetProfit = $mRevenue - $mExpense;
+                    $mMargin    = $mRevenue > 0 ? round(($mNetProfit / $mRevenue) * 100, 1) : 0.0;
+
+                    $monthlyTrend[] = [
+                        'month_key'    => $monthKey,
+                        'month_label'  => $monthLabel,
+                        'revenue'      => $mRevenue,
+                        'expense'      => $mExpense,
+                        'net_profit'   => $mNetProfit,
+                        'margin'       => $mMargin,
+                        'invoice_cnt'  => $mInvoices->count(),
+                        'expense_cnt'  => $mExpenses->count(),
+                    ];
+
+                    $cursor->addMonth();
+                    $safety++;
+                }
+            } catch (\Throwable $e) {
+                $monthlyTrend = [];
+            }
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'filters' => [
+                        'date_from'       => $dateFrom,
+                        'date_to'         => $dateTo,
+                        'selected_period' => $selectedPeriod,
+                    ],
+                    'summary' => [
+                        'gross_sales'               => $grossSales,
+                        'net_sales_subtotal'        => $netSalesSubtotal,
+                        'total_sales_tax'           => $totalSalesTax,
+                        'total_paid_amount'         => $totalPaidAmount,
+                        'total_balance_due'         => $totalBalanceDue,
+                        'invoices_count'            => $invoicesCount,
+                        'credit_notes_count'        => $creditNotesCount,
+                        'total_credit_notes'        => $totalCreditNotes,
+                        'total_credit_notes_subtotal'=> $totalCreditNotesSubtotal,
+                        'net_operating_revenue'     => $netOperatingRevenue,
+                        'gross_operating_revenue'   => $grossOperatingRevenue,
+                        'total_expenses'            => $totalExpenses,
+                        'total_fixed_expenses'      => $totalFixedExpenses,
+                        'total_variable_expenses'   => $totalVariableExpenses,
+                        'expenses_count'            => $expensesCount,
+                        'net_profit'                => $netProfit,
+                        'gross_profit'              => $grossProfit,
+                        'profit_margin'             => $profitMargin,
+                        'expense_ratio'             => $expenseRatio,
+                        'cash_realized'             => $cashRealized,
+                        'cash_profit'               => $cashProfit,
+                    ],
+                    'categories_breakdown' => $categoriesBreakdown,
+                    'client_revenue'       => $clientRevenue,
+                    'monthly_trend'        => $monthlyTrend,
+                    'export_urls'          => [
+                        'excel' => url("/accounts/reports/profit-and-loss/export-excel?date_from={$dateFrom}&date_to={$dateTo}&period={$selectedPeriod}"),
+                        'pdf'   => url("/accounts/reports/profit-and-loss/export-pdf?date_from={$dateFrom}&date_to={$dateTo}&period={$selectedPeriod}"),
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts reportProfitAndLoss error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load Profit & Loss report: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  PURCHASE ORDERS (PO ORDERS)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /api/mobile/accounts/purchase-orders
+     * List purchase orders with KPI summary cards, filters, and pagination.
+     */
+    public function purchaseOrders(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+            $query = PurchaseOrder::query()
+                ->with(['supplier', 'creator', 'items'])
+                ->forCompany($companyId)
+                ->latest('po_date')
+                ->latest('id');
+
+            // Search
+            if ($search = trim((string) $request->input('search'))) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('po_number', 'LIKE', "%{$search}%")
+                      ->orWhere('supplier_name', 'LIKE', "%{$search}%")
+                      ->orWhere('company_name', 'LIKE', "%{$search}%")
+                      ->orWhere('supplier_email', 'LIKE', "%{$search}%")
+                      ->orWhere('supplier_phone', 'LIKE', "%{$search}%")
+                      ->orWhere('supplier_gstin', 'LIKE', "%{$search}%");
+                });
+            }
+
+            // Status Filter
+            if ($status = $request->input('status')) {
+                $query->where('status', strtolower($status));
+            }
+
+            // Date Range
+            if ($from = $request->input('from_date')) {
+                $query->whereDate('po_date', '>=', $from);
+            }
+            if ($to = $request->input('to_date')) {
+                $query->whereDate('po_date', '<=', $to);
+            }
+
+            // KPI aggregates
+            $baseQuery = PurchaseOrder::query()->forCompany($companyId);
+            $allPos = (clone $baseQuery)->get();
+            $stats = [
+                'total_count'    => $allPos->count(),
+                'total_amount'   => (float) $allPos->sum('total_amount'),
+                'issued_count'   => $allPos->where('status', 'issued')->count(),
+                'approved_count' => $allPos->where('status', 'approved')->count(),
+                'received_count' => $allPos->where('status', 'received')->count(),
+                'draft_count'    => $allPos->where('status', 'draft')->count(),
+            ];
+
+            $perPage = max(1, min(50, (int) $request->input('per_page', 15)));
+            $paginator = $query->paginate($perPage);
+
+            $purchaseOrders = collect($paginator->items())->map(function ($po) {
+                return [
+                    'id'               => $po->id,
+                    'po_number'        => $po->po_number,
+                    'po_date'          => $po->po_date?->format('Y-m-d'),
+                    'po_date_formatted'=> $po->po_date?->format('d M Y'),
+                    'delivery_date'    => $po->delivery_date?->format('Y-m-d'),
+                    'delivery_date_formatted' => $po->delivery_date?->format('d M Y'),
+                    'payment_terms'    => $po->payment_terms,
+                    'delivery_terms'   => $po->delivery_terms,
+                    'place_of_supply'  => $po->place_of_supply,
+                    'supplier_id'      => $po->supplier_id,
+                    'supplier_name'    => $po->supplier_name,
+                    'company_name'     => $po->company_name,
+                    'supplier_email'   => $po->supplier_email,
+                    'supplier_phone'   => $po->supplier_phone,
+                    'supplier_gstin'   => $po->supplier_gstin,
+                    'supplier_pan'     => $po->supplier_pan,
+                    'supplier_address' => $po->supplier_address,
+                    'supplier_city'    => $po->supplier_city,
+                    'supplier_state'   => $po->supplier_state,
+                    'supplier_pincode' => $po->supplier_pincode,
+                    'supplier_country' => $po->supplier_country,
+                    'subtotal'         => (float) $po->subtotal,
+                    'total_cgst'       => (float) $po->total_cgst,
+                    'total_sgst'       => (float) $po->total_sgst,
+                    'total_igst'       => (float) $po->total_igst,
+                    'total_tax'        => (float) $po->total_tax,
+                    'round_off'        => (float) $po->round_off,
+                    'total_amount'     => (float) $po->total_amount,
+                    'notes'            => $po->notes,
+                    'terms_conditions' => $po->terms_conditions,
+                    'status'           => strtolower((string) $po->status),
+                    'items_count'      => $po->items->count(),
+                    'created_at'       => $po->created_at?->toIso8601String(),
+                    'creator'          => $po->creator ? [
+                        'id'    => $po->creator->id,
+                        'name'  => $po->creator->name,
+                        'email' => $po->creator->email,
+                    ] : null,
+                ];
+            });
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'purchase_orders' => $purchaseOrders,
+                    'stats'           => $stats,
+                    'pagination'      => [
+                        'current_page' => $paginator->currentPage(),
+                        'last_page'    => $paginator->lastPage(),
+                        'per_page'     => $paginator->perPage(),
+                        'total'        => $paginator->total(),
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts purchaseOrders error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load purchase orders: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/mobile/accounts/purchase-orders/meta
+     * Metadata for creating and editing purchase orders.
+     */
+    public function purchaseOrderMeta(Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+            $nextPoNumber = PurchaseOrder::generateNextPoNumber($companyId);
+            $setting      = InvoiceSetting::forCompany($companyId);
+
+            // Fetch suppliers
+            $suppliers = SupplierMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($sq) => $sq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('supplier_name')
+                ->get()
+                ->map(fn($s) => [
+                    'id'               => $s->id,
+                    'name'             => $s->supplier_name,
+                    'company_name'     => $s->company_name,
+                    'email'            => $s->email,
+                    'phone'            => $s->phone,
+                    'gstin'            => $s->gst_number,
+                    'pan'              => $s->pan_number,
+                    'address'          => $s->address,
+                    'city'             => $s->city,
+                    'state'            => $s->state,
+                    'pincode'          => $s->pincode,
+                    'country'          => $s->country ?? 'India',
+                ]);
+
+            // Fetch vendors as fallback suppliers
+            $vendors = VendorMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($vq) => $vq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('vendor_name')
+                ->get()
+                ->map(fn($v) => [
+                    'id'               => $v->id,
+                    'name'             => $v->vendor_name,
+                    'company_name'     => $v->company_name ?? $v->vendor_name,
+                    'email'            => $v->email,
+                    'phone'            => $v->phone,
+                    'gstin'            => $v->gst_number,
+                    'pan'              => $v->pan_number,
+                    'address'          => $v->address,
+                    'city'             => $v->city,
+                    'state'            => $v->state,
+                    'pincode'          => $v->pincode,
+                    'country'          => 'India',
+                ]);
+
+            // Combine unique suppliers
+            $allSuppliers = $suppliers->concat($vendors)->unique(function ($item) {
+                return strtolower(trim($item['name'] . $item['phone']));
+            })->values();
+
+            // Catalog Items
+            $items = ItemMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($iq) => $iq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('item_name')
+                ->get()
+                ->map(fn($item) => [
+                    'id'           => $item->id,
+                    'name'         => $item->item_name,
+                    'description'  => $item->description,
+                    'hsn_sac_code' => $item->hsn_sac_code,
+                    'rate'         => (float) ($item->selling_price ?? $item->cost_price ?? 0),
+                    'cost_price'   => (float) ($item->cost_price ?? 0),
+                    'tax_rate'     => (float) ($item->tax_rate ?? 18),
+                ]);
+
+            $states = collect(PurchaseOrderController::$indianStates)->map(function ($name, $code) {
+                return ['code' => $code, 'name' => $name];
+            })->values();
+
+            $paymentTerms = [
+                'Net 15 (15 Days)',
+                'Net 30 (30 Days)',
+                'Net 45 (45 Days)',
+                'Net 60 (60 Days)',
+                'Due on Receipt',
+                'Advance (100% Upfront)',
+                '50% Advance, 50% on Delivery',
+            ];
+
+            $defaultTerms = "1. Goods/Services must be delivered in accordance with the specifications in this Purchase Order.\n" .
+                            "2. Invoices must quote this Purchase Order number.\n" .
+                            "3. Payment will be released as per agreed payment terms after inspection and acceptance.\n" .
+                            "4. Damaged or non-conforming items will be rejected and must be replaced at supplier's expense.";
+
+            $companySetting = [
+                'company_name'    => $setting->company_name ?? config('app.name'),
+                'address'         => $setting->address,
+                'city'            => $setting->city,
+                'state'           => $setting->state,
+                'pincode'         => $setting->pincode,
+                'gst_number'      => $setting->gst_number,
+                'phone'           => $setting->phone,
+                'email'           => $setting->email,
+                'place_of_supply' => $setting->state ? "[33] {$setting->state}" : '[33] Tamil Nadu',
+            ];
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'next_po_number'  => $nextPoNumber,
+                    'suppliers'       => $allSuppliers,
+                    'items'           => $items,
+                    'states'          => $states,
+                    'payment_terms'   => $paymentTerms,
+                    'default_terms'   => $defaultTerms,
+                    'company_setting' => $companySetting,
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts purchaseOrderMeta error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to load purchase order metadata: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/mobile/accounts/purchase-orders/{id}
+     * Show single purchase order details.
+     */
+    public function showPurchaseOrder(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+            $po = PurchaseOrder::with(['items.itemMaster', 'supplier', 'creator', 'updater'])
+                ->forCompany($companyId)
+                ->findOrFail($id);
+
+            $setting = InvoiceSetting::forCompany($companyId);
+
+            $items = $po->items->map(fn($item) => [
+                'id'           => $item->id,
+                'item_id'      => $item->item_id,
+                'item_name'    => $item->item_name,
+                'description'  => $item->description,
+                'hsn_sac_code' => $item->hsn_sac_code,
+                'qty'          => (float) $item->qty,
+                'rate'         => (float) $item->rate,
+                'amount'       => (float) $item->amount,
+                'cgst_percent' => (float) $item->cgst_percent,
+                'cgst_amount'  => (float) $item->cgst_amount,
+                'sgst_percent' => (float) $item->sgst_percent,
+                'sgst_amount'  => (float) $item->sgst_amount,
+                'igst_percent' => (float) $item->igst_percent,
+                'igst_amount'  => (float) $item->igst_amount,
+                'total_amount' => (float) $item->total_amount,
+                'sort_order'   => $item->sort_order,
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'data'   => [
+                    'id'                 => $po->id,
+                    'po_number'          => $po->po_number,
+                    'po_date'            => $po->po_date?->format('Y-m-d'),
+                    'po_date_formatted'  => $po->po_date?->format('d M Y'),
+                    'delivery_date'      => $po->delivery_date?->format('Y-m-d'),
+                    'delivery_date_formatted' => $po->delivery_date?->format('d M Y'),
+                    'payment_terms'      => $po->payment_terms,
+                    'delivery_terms'     => $po->delivery_terms,
+                    'place_of_supply'    => $po->place_of_supply,
+                    'supplier_id'        => $po->supplier_id,
+                    'supplier_name'      => $po->supplier_name,
+                    'company_name'       => $po->company_name,
+                    'supplier_email'     => $po->supplier_email,
+                    'supplier_phone'     => $po->supplier_phone,
+                    'supplier_gstin'     => $po->supplier_gstin,
+                    'supplier_pan'       => $po->supplier_pan,
+                    'supplier_address'   => $po->supplier_address,
+                    'supplier_city'      => $po->supplier_city,
+                    'supplier_state'     => $po->supplier_state,
+                    'supplier_pincode'   => $po->supplier_pincode,
+                    'supplier_country'   => $po->supplier_country,
+                    'shipping_attention' => $po->shipping_attention,
+                    'shipping_address'   => $po->shipping_address,
+                    'shipping_city'      => $po->shipping_city,
+                    'shipping_state'     => $po->shipping_state,
+                    'shipping_pincode'   => $po->shipping_pincode,
+                    'shipping_country'   => $po->shipping_country,
+                    'subtotal'           => (float) $po->subtotal,
+                    'total_cgst'         => (float) $po->total_cgst,
+                    'total_sgst'         => (float) $po->total_sgst,
+                    'total_igst'         => (float) $po->total_igst,
+                    'total_tax'          => (float) $po->total_tax,
+                    'round_off'          => (float) $po->round_off,
+                    'total_amount'       => (float) $po->total_amount,
+                    'amount_in_words'    => $po->amount_in_words,
+                    'notes'              => $po->notes,
+                    'terms_conditions'   => $po->terms_conditions,
+                    'status'             => strtolower((string) $po->status),
+                    'created_at'         => $po->created_at?->toIso8601String(),
+                    'created_at_formatted'=> $po->created_at?->format('d M Y, h:i A'),
+                    'updated_at'         => $po->updated_at?->toIso8601String(),
+                    'updated_at_formatted'=> $po->updated_at?->format('d M Y, h:i A'),
+                    'creator'            => $po->creator ? [
+                        'id'    => $po->creator->id,
+                        'name'  => $po->creator->name,
+                        'email' => $po->creator->email,
+                    ] : null,
+                    'updater'            => $po->updater ? [
+                        'id'    => $po->updater->id,
+                        'name'  => $po->updater->name,
+                        'email' => $po->updater->email,
+                    ] : null,
+                    'items'              => $items,
+                    'company_setting'    => [
+                        'company_name' => $setting->company_name ?? config('app.name'),
+                        'address'      => $setting->address,
+                        'city'         => $setting->city,
+                        'state'        => $setting->state,
+                        'pincode'      => $setting->pincode,
+                        'gst_number'   => $setting->gst_number,
+                    ],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts showPurchaseOrder error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Purchase order not found: ' . $e->getMessage(),
+            ], 404);
+        }
+    }
+
+    /**
+     * POST /api/mobile/accounts/purchase-orders
+     * Store newly created purchase order.
+     */
+    public function storePurchaseOrder(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'supplier_id'        => 'nullable|integer',
+            'supplier_name'      => 'required|string|max:255',
+            'company_name'       => 'nullable|string|max:255',
+            'supplier_email'     => 'nullable|email|max:255',
+            'supplier_phone'     => 'nullable|string|max:50',
+            'supplier_gstin'     => 'nullable|string|max:50',
+            'supplier_pan'       => 'nullable|string|max:30',
+            'supplier_address'   => 'nullable|string',
+            'supplier_city'      => 'nullable|string|max:100',
+            'supplier_state'     => 'nullable|string|max:100',
+            'supplier_pincode'   => 'nullable|string|max:20',
+            'supplier_country'   => 'nullable|string|max:100',
+
+            'po_number'          => 'required|string|max:100',
+            'po_date'            => 'required|date',
+            'delivery_date'      => 'nullable|date',
+            'payment_terms'      => 'nullable|string|max:100',
+            'delivery_terms'     => 'nullable|string|max:150',
+            'place_of_supply'    => 'nullable|string|max:100',
+
+            // Shipping
+            'shipping_attention' => 'nullable|string|max:255',
+            'shipping_address'   => 'nullable|string',
+            'shipping_city'      => 'nullable|string|max:100',
+            'shipping_state'     => 'nullable|string|max:100',
+            'shipping_pincode'   => 'nullable|string|max:20',
+            'shipping_country'   => 'nullable|string|max:100',
+
+            // Line Items
+            'items'              => 'required|array|min:1',
+            'items.*.item_id'    => 'nullable|integer',
+            'items.*.item_name'  => 'required|string|max:255',
+            'items.*.description'=> 'nullable|string',
+            'items.*.hsn_sac_code'=> 'nullable|string|max:50',
+            'items.*.qty'        => 'required|numeric|min:0.01',
+            'items.*.rate'       => 'required|numeric|min:0',
+            'items.*.amount'     => 'required|numeric|min:0',
+            'items.*.cgst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.cgst_amount'  => 'nullable|numeric|min:0',
+            'items.*.sgst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.sgst_amount'  => 'nullable|numeric|min:0',
+            'items.*.igst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.igst_amount'  => 'nullable|numeric|min:0',
+            'items.*.total_amount' => 'nullable|numeric|min:0',
+
+            // Calculations
+            'subtotal'           => 'required|numeric|min:0',
+            'total_cgst'         => 'nullable|numeric|min:0',
+            'total_sgst'         => 'nullable|numeric|min:0',
+            'total_igst'         => 'nullable|numeric|min:0',
+            'total_tax'          => 'nullable|numeric|min:0',
+            'round_off'          => 'nullable|numeric',
+            'total_amount'       => 'required|numeric|min:0',
+
+            'notes'              => 'nullable|string',
+            'terms_conditions'   => 'nullable|string',
+            'status'             => 'nullable|string|in:draft,issued,approved,received,cancelled',
+        ]);
+
+        $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+        DB::beginTransaction();
+        try {
+            $poData = collect($validated)->except(['items'])->toArray();
+            $poData['company_id'] = $companyId;
+            $poData['status']     = strtolower($validated['status'] ?? 'issued');
+            $poData['created_by'] = $request->user()?->id ?: auth()->id();
+            $poData['updated_by'] = $request->user()?->id ?: auth()->id();
+
+            $po = PurchaseOrder::create($poData);
+
+            foreach ($validated['items'] as $index => $itemRow) {
+                $itemRow['purchase_order_id'] = $po->id;
+                $itemRow['sort_order']        = $index + 1;
+                $itemRow['total_amount']      = !empty($itemRow['total_amount']) ? $itemRow['total_amount'] : ($itemRow['amount'] ?? 0);
+                $itemRow['cgst_percent']      = $itemRow['cgst_percent'] ?? 0;
+                $itemRow['cgst_amount']       = $itemRow['cgst_amount'] ?? 0;
+                $itemRow['sgst_percent']      = $itemRow['sgst_percent'] ?? 0;
+                $itemRow['sgst_amount']       = $itemRow['sgst_amount'] ?? 0;
+                $itemRow['igst_percent']      = $itemRow['igst_percent'] ?? 0;
+                $itemRow['igst_amount']       = $itemRow['igst_amount'] ?? 0;
+
+                PurchaseOrderItem::create($itemRow);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Purchase Order #{$po->po_number} created successfully!",
+                'data'    => ['id' => $po->id, 'po_number' => $po->po_number],
+            ], 201);
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Mobile Accounts storePurchaseOrder error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to create Purchase Order: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * PUT /api/mobile/accounts/purchase-orders/{id}
+     * Update existing purchase order.
+     */
+    public function updatePurchaseOrder(int $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'supplier_id'        => 'nullable|integer',
+            'supplier_name'      => 'required|string|max:255',
+            'company_name'       => 'nullable|string|max:255',
+            'supplier_email'     => 'nullable|email|max:255',
+            'supplier_phone'     => 'nullable|string|max:50',
+            'supplier_gstin'     => 'nullable|string|max:50',
+            'supplier_pan'       => 'nullable|string|max:30',
+            'supplier_address'   => 'nullable|string',
+            'supplier_city'      => 'nullable|string|max:100',
+            'supplier_state'     => 'nullable|string|max:100',
+            'supplier_pincode'   => 'nullable|string|max:20',
+            'supplier_country'   => 'nullable|string|max:100',
+
+            'po_number'          => 'required|string|max:100',
+            'po_date'            => 'required|date',
+            'delivery_date'      => 'nullable|date',
+            'payment_terms'      => 'nullable|string|max:100',
+            'delivery_terms'     => 'nullable|string|max:150',
+            'place_of_supply'    => 'nullable|string|max:100',
+
+            'shipping_attention' => 'nullable|string|max:255',
+            'shipping_address'   => 'nullable|string',
+            'shipping_city'      => 'nullable|string|max:100',
+            'shipping_state'     => 'nullable|string|max:100',
+            'shipping_pincode'   => 'nullable|string|max:20',
+            'shipping_country'   => 'nullable|string|max:100',
+
+            'items'              => 'required|array|min:1',
+            'items.*.item_id'    => 'nullable|integer',
+            'items.*.item_name'  => 'required|string|max:255',
+            'items.*.description'=> 'nullable|string',
+            'items.*.hsn_sac_code'=> 'nullable|string|max:50',
+            'items.*.qty'        => 'required|numeric|min:0.01',
+            'items.*.rate'       => 'required|numeric|min:0',
+            'items.*.amount'     => 'required|numeric|min:0',
+            'items.*.cgst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.cgst_amount'  => 'nullable|numeric|min:0',
+            'items.*.sgst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.sgst_amount'  => 'nullable|numeric|min:0',
+            'items.*.igst_percent' => 'nullable|numeric|min:0|max:100',
+            'items.*.igst_amount'  => 'nullable|numeric|min:0',
+            'items.*.total_amount' => 'nullable|numeric|min:0',
+
+            'subtotal'           => 'required|numeric|min:0',
+            'total_cgst'         => 'nullable|numeric|min:0',
+            'total_sgst'         => 'nullable|numeric|min:0',
+            'total_igst'         => 'nullable|numeric|min:0',
+            'total_tax'          => 'nullable|numeric|min:0',
+            'round_off'          => 'nullable|numeric',
+            'total_amount'       => 'required|numeric|min:0',
+
+            'notes'              => 'nullable|string',
+            'terms_conditions'   => 'nullable|string',
+            'status'             => 'nullable|string|in:draft,issued,approved,received,cancelled',
+        ]);
+
+        $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+        $po = PurchaseOrder::forCompany($companyId)->findOrFail($id);
+
+        DB::beginTransaction();
+        try {
+            $poData = collect($validated)->except(['items'])->toArray();
+            $poData['status']     = strtolower($validated['status'] ?? $po->status);
+            $poData['updated_by'] = $request->user()?->id ?: auth()->id();
+
+            $po->update($poData);
+
+            // Re-sync items
+            $po->items()->delete();
+            foreach ($validated['items'] as $index => $itemRow) {
+                $itemRow['purchase_order_id'] = $po->id;
+                $itemRow['sort_order']        = $index + 1;
+                $itemRow['total_amount']      = !empty($itemRow['total_amount']) ? $itemRow['total_amount'] : ($itemRow['amount'] ?? 0);
+                $itemRow['cgst_percent']      = $itemRow['cgst_percent'] ?? 0;
+                $itemRow['cgst_amount']       = $itemRow['cgst_amount'] ?? 0;
+                $itemRow['sgst_percent']      = $itemRow['sgst_percent'] ?? 0;
+                $itemRow['sgst_amount']       = $itemRow['sgst_amount'] ?? 0;
+                $itemRow['igst_percent']      = $itemRow['igst_percent'] ?? 0;
+                $itemRow['igst_amount']       = $itemRow['igst_amount'] ?? 0;
+
+                PurchaseOrderItem::create($itemRow);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Purchase Order #{$po->po_number} updated successfully!",
+                'data'    => ['id' => $po->id, 'po_number' => $po->po_number],
+            ]);
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Mobile Accounts updatePurchaseOrder error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to update Purchase Order: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * PATCH /api/mobile/accounts/purchase-orders/{id}/status
+     * Quick status update for Purchase Order.
+     */
+    public function updatePurchaseOrderStatus(int $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'status' => 'required|string|in:draft,issued,approved,received,cancelled',
+        ]);
+
+        $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+        $po = PurchaseOrder::forCompany($companyId)->findOrFail($id);
+
+        $po->update([
+            'status'     => strtolower($validated['status']),
+            'updated_by' => $request->user()?->id ?: auth()->id(),
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => "PO #{$po->po_number} status updated to " . ucfirst($validated['status']) . ".",
+            'data'    => ['id' => $po->id, 'status' => $po->status],
+        ]);
+    }
+
+    /**
+     * DELETE /api/mobile/accounts/purchase-orders/{id}
+     * Delete a Purchase Order.
+     */
+    public function destroyPurchaseOrder(int $id, Request $request): JsonResponse
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+            $po = PurchaseOrder::forCompany($companyId)->findOrFail($id);
+
+            $poNumber = $po->po_number;
+            $po->items()->delete();
+            $po->delete();
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Purchase Order #{$poNumber} deleted successfully.",
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts destroyPurchaseOrder error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to delete Purchase Order: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/mobile/accounts/purchase-orders/{id}/pdf
+     * Generate & stream Purchase Order PDF.
+     */
+    public function purchaseOrderPdf(int $id, Request $request)
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+
+            $purchaseOrder = PurchaseOrder::with(['items.itemMaster', 'supplier', 'creator'])
+                ->forCompany($companyId)
+                ->findOrFail($id);
+
+            $setting     = InvoiceSetting::forCompany($companyId);
+            $companyName = $setting->company_name ?: config('app.name');
+            $filename    = 'PurchaseOrder_' . str_replace(['/', '\\'], '_', $purchaseOrder->po_number) . '.pdf';
+
+            $pdf = Pdf::loadView('pages.accounts.purchase_orders.pdf', [
+                'purchaseOrder' => $purchaseOrder,
+                'setting'       => $setting,
+                'companyName'   => $companyName,
+            ])
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'defaultFont'          => 'DejaVu Sans',
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled'      => true,
+                'isPhpEnabled'         => true,
+            ]);
+
+            return $pdf->stream($filename);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts purchaseOrderPdf error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Purchase Order not found or failed to generate PDF: ' . $e->getMessage(),
+            ], 404);
         }
     }
 }

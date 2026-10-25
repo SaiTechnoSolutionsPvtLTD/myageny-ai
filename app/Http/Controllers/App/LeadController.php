@@ -547,6 +547,8 @@ class LeadController extends Controller
                     ->orderBy('sort_order')
                     ->orderBy('label');
             },
+            'domainRecords.renewals',
+            'hostingRecords.renewals',
         ]);
 
         return response()->json([
@@ -1388,6 +1390,93 @@ class LeadController extends Controller
                     'created_at'        => $u->created_at?->toIso8601String(),
                 ])->values()
                 : [],
+
+            // ── Domains & Hosting (Web Parity) ────────────────────────────────
+            'domains' => ($lead->relationLoaded('domainRecords') ? $lead->domainRecords : $lead->domainRecords()->with('renewals')->get())->map(function ($d) {
+                $exp = $d->expires_at ? \Carbon\Carbon::parse($d->expires_at) : null;
+                $isExp = $exp && $exp->isPast();
+                $daysLeft = $exp ? (int) now()->diffInDays($exp, false) : null;
+                $renewals = $d->relationLoaded('renewals') ? $d->renewals : $d->renewals()->latest()->get();
+                $lastRen = $renewals->first();
+
+                return [
+                    'id'                  => $d->id,
+                    'domain_name'         => $d->domain_name,
+                    'registrar'           => $d->registrar,
+                    'status'              => strtoupper($d->status ?? 'ACTIVE'),
+                    'expires_at'          => $exp?->format('d M, Y'),
+                    'is_expired'          => $isExp,
+                    'days_left'           => $daysLeft,
+                    'auto_renew'          => (bool) $d->auto_renew,
+                    'privacy'             => (bool) $d->privacy,
+                    'notes'               => $d->notes,
+                    'renewals_count'      => $renewals->count(),
+                    'last_renewal_amount' => $lastRen ? (float) $lastRen->renewal_amount : 0.0,
+                ];
+            })->values(),
+
+            'hostings' => ($lead->relationLoaded('hostingRecords') ? $lead->hostingRecords : $lead->hostingRecords()->with('renewals')->get())->map(function ($h) {
+                $hExp = $h->renewal_date ? \Carbon\Carbon::parse($h->renewal_date) : null;
+                $hIsExp = $hExp && $hExp->isPast();
+                $hDaysLeft = $hExp ? (int) now()->diffInDays($hExp, false) : null;
+
+                return [
+                    'id'                => $h->id,
+                    'hosting_name'      => $h->hosting_name,
+                    'provider'          => $h->provider,
+                    'plan_type'         => $h->plan_type ?: 'Standard',
+                    'ip_address'        => $h->ip_address,
+                    'allocated_storage' => $h->allocated_storage,
+                    'renewal_date'      => $hExp?->format('d M, Y'),
+                    'is_expired'        => $hIsExp,
+                    'days_left'         => $hDaysLeft,
+                    'renewal_amount'    => (float) $h->renewal_amount,
+                    'status'            => strtoupper($h->status ?? 'ACTIVE'),
+                    'notes'             => $h->notes,
+                ];
+            })->values(),
+
+            'domains_hosting_summary' => [
+                'domains_count'  => $lead->relationLoaded('domainRecords') ? $lead->domainRecords->count() : $lead->domainRecords()->count(),
+                'hostings_count' => $lead->relationLoaded('hostingRecords') ? $lead->hostingRecords->count() : $lead->hostingRecords()->count(),
+                'total_count'    => ($lead->relationLoaded('domainRecords') ? $lead->domainRecords->count() : $lead->domainRecords()->count())
+                    + ($lead->relationLoaded('hostingRecords') ? $lead->hostingRecords->count() : $lead->hostingRecords()->count()),
+            ],
+
+            // ── Partner Ad Budget Eligibility & Branches List (Web Parity) ──
+            'can_record_partner_budget' => (function () use ($lead) {
+                $currentUser = auth()->user() ?? request()->user();
+                if (!$currentUser) return false;
+                $userBranchIds = array_filter(array_unique(array_merge(
+                    $currentUser->getMyBranchIds(),
+                    [$currentUser->branch_id]
+                )));
+                $hasDefault = \App\Models\Branch::withoutGlobalScope('branch')
+                    ->whereIn('id', $userBranchIds)
+                    ->where('is_default', true)
+                    ->exists();
+                if (!$hasDefault && $currentUser->branch) {
+                    $bName = strtolower($currentUser->branch->name ?? '');
+                    if ($currentUser->branch->is_default || str_contains($bName, 'ho') || str_contains($bName, 'head office') || $bName === 'default branch') {
+                        $hasDefault = true;
+                    }
+                }
+                return $hasDefault || $currentUser->isSuperAdmin();
+            })(),
+
+            'all_branches' => (function () use ($lead) {
+                $userCompanyId = auth()->user()?->company_id ?? $lead->company_id;
+                $bq = \App\Models\Branch::withoutGlobalScope('branch')->where('is_active', true);
+                if ($userCompanyId) {
+                    $bq->where('company_id', $userCompanyId);
+                }
+                return $bq->orderBy('name')->get()->map(fn($b) => [
+                    'id'           => $b->id,
+                    'name'         => $b->name,
+                    'code'         => $b->code,
+                    'display_name' => $b->name . ($b->code ? ' ('.$b->code.')' : ''),
+                ])->values();
+            })(),
         ]);
     }
 

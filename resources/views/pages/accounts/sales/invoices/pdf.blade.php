@@ -23,7 +23,6 @@
             width: 100%;
             border: 1px solid #000000;
             background: #ffffff;
-            border-collapse: collapse;
         }
 
         /* Top Header Table */
@@ -31,13 +30,13 @@
             width: 100%;
             border-collapse: collapse;
             border-bottom: 1px solid #000000;
+            table-layout: fixed;
         }
         .header-tbl td {
             vertical-align: middle;
-            padding: 14px 18px 12px 18px;
         }
         .inv-logo {
-            height: 70px;
+            height: 68px;
             max-width: 135px;
         }
         .inv-comp-title {
@@ -53,13 +52,15 @@
             line-height: 1.35;
         }
         .inv-tax-title {
-            font-size: 24px;
-            font-weight: 900;
+            font-size: 19px;
+            font-weight: bold;
             color: #000000;
             letter-spacing: 0.5px;
             text-align: right;
             vertical-align: middle;
             white-space: nowrap;
+            margin: 0;
+            padding: 0;
         }
 
         /* 2-Column Metadata Table */
@@ -67,6 +68,7 @@
             width: 100%;
             border-collapse: collapse;
             border-bottom: 1px solid #000000;
+            table-layout: fixed;
         }
         .meta-col-cell {
             width: 50%;
@@ -99,15 +101,13 @@
             color: #000000;
         }
 
-        /* Main Unified Table */
-        .inv-main-tbl {
+        /* Parties Header & Body (Dedicated 50/50 Table) */
+        .parties-tbl {
             width: 100%;
             border-collapse: collapse;
+            border-bottom: 1px solid #000000;
             table-layout: fixed;
-            font-size: 10.5px;
         }
-
-        /* Parties Header & Body */
         .party-head {
             background: #f3f4f6;
             color: #000000;
@@ -127,7 +127,6 @@
             color: #000000;
             vertical-align: top;
             height: 98px;
-            border-bottom: 1px solid #000000;
         }
         .party-name {
             font-weight: bold;
@@ -135,7 +134,14 @@
             margin-bottom: 2px;
         }
 
-        /* Items Header */
+        /* Items Table */
+        .items-tbl {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 10.5px;
+            border-bottom: 1px solid #000000;
+        }
         .th-item {
             background: #f3f4f6;
             color: #000000;
@@ -149,8 +155,6 @@
         .th-item:last-child {
             border-right: none;
         }
-
-        /* Items Data Cells */
         .td-item {
             padding: 7px 8px;
             vertical-align: top;
@@ -163,7 +167,13 @@
             border-right: none;
         }
 
-        /* Bottom Section Cells */
+        /* Bottom Summary Table */
+        .summary-tbl {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 10.5px;
+        }
         .bottom-left-cell {
             border-right: 1px solid #000000;
             padding: 12px 14px;
@@ -245,13 +255,7 @@
             color: #000000;
         }
 
-        .page-num {
-            text-align: right;
-            font-size: 10px;
-            color: #64748b;
-            padding-top: 5px;
-        }
-
+        /* Terms & Conditions Sheet (Page 2) */
         .terms-page-content p { margin: 0 0 8px 0; }
         .terms-page-content ol, .terms-page-content ul { margin: 0 0 10px 0; padding-left: 20px; }
         .terms-page-content li { margin-bottom: 6px; line-height: 1.55; }
@@ -259,6 +263,7 @@
         .terms-page-content table { width: 100%; border-collapse: collapse; margin: 8px 0; }
         .terms-page-content th, .terms-page-content td { border: 1px solid #000000; padding: 4px 6px; }
     </style>
+</head>
 <body>
     <script type="text/php">
     if (isset($pdf)) {
@@ -313,7 +318,7 @@
     {{-- 1. Top Header --}}
     <table class="header-tbl">
         <tr>
-            <td style="width: 64%; padding: 14px 10px 12px 18px; vertical-align: middle;">
+            <td style="width: 60%; padding: 12px 10px 10px 16px; vertical-align: middle;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr>
                         @if($logoBase64)
@@ -355,7 +360,7 @@
                     </tr>
                 </table>
             </td>
-            <td style="width: 36%; text-align: right; padding: 14px 22px 12px 6px; vertical-align: middle;">
+            <td style="width: 40%; text-align: right; padding: 12px 16px 10px 6px; vertical-align: middle;">
                 <div class="inv-tax-title">TAX INVOICE</div>
             </td>
         </tr>
@@ -405,17 +410,14 @@
         </tr>
     </table>
 
-    {{-- 3. Unified Table: Bill To / Ship To + Items + Bottom Summary --}}
-    <table class="inv-main-tbl">
-        {{-- Row 1: Bill To & Ship To Header --}}
+    {{-- 3. Bill To & Ship To Grid (Strict 50/50 Equal Proportion) --}}
+    <table class="parties-tbl">
         <tr>
-            <th colspan="2" class="party-head" style="width: 50%;">Bill To</th>
-            <th colspan="4" class="party-head col-border-left" style="width: 50%;">Ship To</th>
+            <th class="party-head" style="width: 50%;">Bill To</th>
+            <th class="party-head col-border-left" style="width: 50%;">Ship To</th>
         </tr>
-
-        {{-- Row 2: Bill To & Ship To Content --}}
         <tr>
-            <td colspan="2" class="party-body" style="width: 50%;">
+            <td class="party-body" style="width: 50%;">
                 <div class="party-name">{{ $invoice->customer_name }}</div>
                 @if($invoice->company_name && $invoice->company_name !== $invoice->customer_name)
                     <div style="font-weight:bold; color:#334155; margin-bottom:2px;">{{ $invoice->company_name }}</div>
@@ -437,7 +439,7 @@
                     <div style="margin-top:3px;"><strong>GSTIN</strong> {{ $billingGstin }}</div>
                 @endif
             </td>
-            <td colspan="4" class="party-body col-border-left" style="width: 50%;">
+            <td class="party-body col-border-left" style="width: 50%;">
                 <div class="party-name">{{ $invoice->shipping_attention ?: $invoice->customer_name }}</div>
                 @if($invoice->shipping_address)
                     <div>{!! nl2br(e($invoice->shipping_address)) !!}</div>
@@ -456,22 +458,22 @@
                 @endif
             </td>
         </tr>
+    </table>
 
-        {{-- Row 3: Line Items Header --}}
+    {{-- 4. Line Items Table (Generous 45% for Description, Exact Columns) --}}
+    <table class="items-tbl">
         <tr>
             <th class="th-item" style="width: 5%; text-align:center;">#</th>
-            <th class="th-item" style="width: 45%; text-align:left;">Item & Description</th>
-            <th class="th-item" style="width: 10%; text-align:center;">HSN/SAC</th>
-            <th class="th-item" style="width: 8%; text-align:center;">Qty</th>
+            <th class="th-item" style="width: 45%; text-align:left;">Item &amp; Description</th>
+            <th class="th-item" style="width: 11%; text-align:center;">HSN/SAC</th>
+            <th class="th-item" style="width: 7%; text-align:center;">Qty</th>
             <th class="th-item" style="width: 16%; text-align:right;">Rate</th>
             <th class="th-item" style="width: 16%; text-align:right;">Amount</th>
         </tr>
-
-        {{-- Row 4..N: Line Items Data --}}
         @foreach($invoice->items as $index => $item)
         <tr>
             <td class="td-item" style="text-align:center; font-weight:bold;">{{ $index + 1 }}</td>
-            <td class="td-item">
+            <td class="td-item" style="text-align:left;">
                 <div style="font-weight:bold; color:#000;">{{ $item->item_name }}</div>
                 @if($item->description)
                     <div style="font-size:9.5px; color:#334155; margin-top:2px; line-height:1.35;">
@@ -485,10 +487,12 @@
             <td class="td-item" style="text-align:right;">{{ number_format((float) $item->amount, 2) }}</td>
         </tr>
         @endforeach
+    </table>
 
-        {{-- Row N+1: Bottom Section --}}
+    {{-- 5. Bottom Section: Total in Words, Notes, Bank (Left: 58%) & Totals, Signature (Right: 42%) --}}
+    <table class="summary-tbl">
         <tr>
-            <td colspan="3" class="bottom-left-cell" style="width: 60%;">
+            <td class="bottom-left-cell" style="width: 58%;">
                 <div>
                     <div class="sec-head">Total In Words</div>
                     <div style="font-size:10.5px; font-weight:bold; font-style:italic; color:#000; margin-top:2px;">
@@ -530,7 +534,7 @@
                 </div>
             </td>
 
-            <td colspan="3" class="bottom-right-cell" style="width: 40%;">
+            <td class="bottom-right-cell" style="width: 42%;">
                 <table class="totals-tbl">
                     <tr>
                         <td class="t-label">Sub Total</td>
@@ -606,30 +610,34 @@
 </div>
 
 {{-- PAGE BREAK FOR DEFAULT DEDICATED 2ND PAGE --}}
-<div style="page-break-before: always;"></div>
+<div style="clear: both; page-break-before: always;"></div>
 
-{{-- DEDICATED PAGE 2: TERMS & CONDITIONS ONLY --}}
-<div class="invoice-sheet" style="margin-top: 0; padding: 24px 28px;">
+{{-- DEDICATED PAGE 2: TERMS & CONDITIONS ONLY (Full Width, Left Aligned) --}}
+<div class="invoice-sheet" style="clear: both; width: 100%; border: 1px solid #000000;">
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 24px 28px; vertical-align: top; text-align: left;">
+                <div style="font-size: 16px; font-weight: bold; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 10px; border-bottom: 1px solid #000000; margin-bottom: 18px; text-align: left;">
+                    Terms &amp; Conditions
+                </div>
 
-    <div style="font-size: 16px; font-weight: bold; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 10px; border-bottom: 1px solid #000000; margin-bottom: 18px;">
-        Terms &amp; Conditions
-    </div>
+                @php
+                    $termsBody = !empty(trim((string) ($setting?->terms_conditions ?? '')))
+                        ? $setting->terms_conditions
+                        : (!empty(trim((string) ($invoice->terms_conditions ?? ''))) ? $invoice->terms_conditions : \App\Models\InvoiceSetting::defaultTerms());
+                    $isHtmlBody = strip_tags($termsBody) !== $termsBody;
+                @endphp
 
-    @php
-        $termsBody = !empty(trim((string) ($setting?->terms_conditions ?? '')))
-            ? $setting->terms_conditions
-            : (!empty(trim((string) ($invoice->terms_conditions ?? ''))) ? $invoice->terms_conditions : \App\Models\InvoiceSetting::defaultTerms());
-        $isHtmlBody = strip_tags($termsBody) !== $termsBody;
-    @endphp
-
-    <div class="terms-page-content" style="font-size: 11px; line-height: 1.7; color: #000000;">
-        @if($isHtmlBody)
-            {!! $termsBody !!}
-        @else
-            {!! nl2br(e($termsBody)) !!}
-        @endif
-    </div>
-
+                <div class="terms-page-content" style="font-size: 11px; line-height: 1.7; color: #000000; text-align: left;">
+                    @if($isHtmlBody)
+                        {!! $termsBody !!}
+                    @else
+                        {!! nl2br(e($termsBody)) !!}
+                    @endif
+                </div>
+            </td>
+        </tr>
+    </table>
 </div>
 
 </body>

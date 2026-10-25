@@ -860,7 +860,8 @@ class LeadShowController extends Controller
         }
 
         $v = Validator::make($request->all(), [
-            'payment_type'     => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,new_sale,balance_payment,renewals,new_sales'],
+            'payment_type'     => ['required', 'string', 'in:New Sale,Balance Payment,Renewals,Ad Budget for partner,new_sale,balance_payment,renewals,new_sales,ad_budget_partner,ad_budget_for_partner'],
+            'branch_id'        => ['nullable', 'exists:branches,id'],
             'amount'           => ['required', 'numeric', 'min:0.01'],
             'gross_amount'     => ['nullable', 'numeric', 'min:0.01'],
             'net_amount'       => ['nullable', 'numeric', 'min:0.01'],
@@ -888,8 +889,42 @@ class LeadShowController extends Controller
             'newsale', 'new_sale', 'newsales', 'new_sales' => 'new_sale',
             'balancepayment', 'balance_payment'             => 'balance_payment',
             'renewal', 'renewals'                           => 'renewals',
+            'ad_budget_for_partner', 'ad_budget_partner'    => 'ad_budget_partner',
             default                                         => strtolower(str_replace([' ', '-'], '_', $rawType)),
         };
+
+        if ($paymentType === 'ad_budget_partner') {
+            $currentUser = auth()->user() ?? $request->user();
+            $userBranchIds = array_filter(array_unique(array_merge(
+                $currentUser ? $currentUser->getMyBranchIds() : [],
+                [$currentUser?->branch_id]
+            )));
+            $isMappedToDefault = \App\Models\Branch::withoutGlobalScope('branch')
+                ->whereIn('id', $userBranchIds)
+                ->where('is_default', true)
+                ->exists();
+            if (! $isMappedToDefault && $currentUser?->branch) {
+                $bName = strtolower($currentUser->branch->name ?? '');
+                if ($currentUser->branch->is_default || str_contains($bName, 'ho') || str_contains($bName, 'head office') || $bName === 'default branch') {
+                    $isMappedToDefault = true;
+                }
+            }
+
+            if (! $isMappedToDefault && ! ($currentUser && $currentUser->isSuperAdmin())) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Ad Budget for partner payment type is only available to Default Branch users.',
+                ], 403);
+            }
+
+            if (! $request->filled('branch_id')) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'The branch field is required when recording Ad Budget for partner.',
+                    'errors'  => ['branch_id' => ['The branch field is required.']],
+                ], 422);
+            }
+        }
 
         $isTdsDeducted = filter_var($request->input('is_tds_deducted', false), FILTER_VALIDATE_BOOLEAN);
         $tdsPercentage = null;
@@ -964,6 +999,7 @@ class LeadShowController extends Controller
         $payment = \App\Models\LeadProductPayment::create([
             'lead_product_id'  => $product->id,
             'lead_id'          => $lead->id,
+            'branch_id'        => $request->filled('branch_id') ? (int) $request->input('branch_id') : null,
             'payment_type'     => $paymentType,
             'is_tds_deducted'  => $isTdsDeducted,
             'tds_percentage'   => $tdsPercentage,
@@ -978,7 +1014,7 @@ class LeadShowController extends Controller
             'attachment_name'  => $attachmentName,
             'recorded_by'      => auth()->id(),
         ]);
-        $payment->load(['recordedBy', 'leadProduct']);
+        $payment->load(['recordedBy', 'leadProduct', 'branch']);
 
         if ($isConverting) {
             $companyId = $lead->company_id ?? $request->user()?->company_id;
@@ -1026,7 +1062,7 @@ class LeadShowController extends Controller
         abort_if($product->lead_id !== $lead->id, 403, 'Product does not belong to this lead.');
 
         $payments = $product->payments()
-            ->with('recordedBy:id,name')
+            ->with(['recordedBy:id,name', 'branch:id,name,code'])
             ->orderByDesc('payment_date')
             ->orderByDesc('id')
             ->get();
@@ -1525,6 +1561,10 @@ class LeadShowController extends Controller
             'notes'              => $payment->notes,
             'attachment_name'    => $payment->attachment_name,
             'attachment_url'     => $payment->attachment_url,
+            'branch_id'          => $payment->branch_id,
+            'branch'             => $payment->branch
+                ? ['id' => $payment->branch->id, 'name' => $payment->branch->name, 'code' => $payment->branch->code]
+                : null,
             'recorded_by'        => $payment->recordedBy
                 ? ['id' => $payment->recordedBy->id, 'name' => $payment->recordedBy->name]
                 : null,
