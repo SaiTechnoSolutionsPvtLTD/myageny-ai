@@ -118,7 +118,8 @@ class EmployeeApiController extends Controller
                     }
                 });
             })
-            ->latest();
+            ->orderByDesc('employee_id')
+            ->orderByDesc('id');
 
         $perPage    = (int) ($request->per_page ?? 15);
         $employees  = $query->paginate($perPage);
@@ -317,7 +318,9 @@ class EmployeeApiController extends Controller
             'employee_id'    => $e->employee_id,
             'name'           => $e->name,
             'email'          => $e->email,
+            'official_email' => $e->official_email,
             'mobile'         => $e->mobile,
+            'official_mobile'=> $e->official_mobile,
             'role'           => optional($e->role)->display_name ?? optional($e->role)->name,
             'department'     => optional($e->department)->name,
             'branch_name'    => $e->portalUser?->branch?->name ?? '',
@@ -352,7 +355,9 @@ class EmployeeApiController extends Controller
             'employee_id'              => $e->employee_id,
             'name'                     => $e->name,
             'email'                    => $e->email,
+            'official_email'           => $e->official_email,
             'mobile'                   => $e->mobile,
+            'official_mobile'          => $e->official_mobile,
             'role'                     => optional($e->role)->display_name ?? optional($e->role)->name,
             'department'               => optional($e->department)->name,
             'status'                   => $e->status,

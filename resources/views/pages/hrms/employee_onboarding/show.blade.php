@@ -81,7 +81,7 @@
                             <input type="file" id="photo-input" name="photograph" accept="image/*" style="display: none;" onchange="document.getElementById('photo-upload-form').submit()">
                         </form>
                         <div class="eob-profile-name">{{ $employee->name }}</div>
-                        <div class="eob-profile-mail">{{ $employee->email }}</div>
+                        <div class="eob-profile-mail">{{ $employee->official_email ?: $employee->email }}</div>
                         <div style="margin-top:14px;">
                             <span class="eob-chip eob-chip-{{ $employee->status }}">{{ ucfirst($employee->status) }}</span>
                         </div>
@@ -118,6 +118,18 @@
                                 <div class="eob-side-label">Mobile</div>
                                 <div class="eob-side-value">{{ $employee->mobile }}</div>
                             </div>
+                            @if($employee->official_mobile)
+                                <div class="eob-side-item">
+                                    <div class="eob-side-label">Official Mobile</div>
+                                    <div class="eob-side-value">{{ $employee->official_mobile }}</div>
+                                </div>
+                            @endif
+                            @if($employee->official_email)
+                                <div class="eob-side-item">
+                                    <div class="eob-side-label">Official Email</div>
+                                    <div class="eob-side-value">{{ $employee->official_email }}</div>
+                                </div>
+                            @endif
                             <div class="eob-side-item">
                                 <div class="eob-side-label">Role</div>
                                 <div class="eob-side-value">{{ $employee->role?->display_name ?: ($employee->role?->name ?: 'N/A') }}</div>
@@ -155,6 +167,10 @@
                         <div class="eob-show-grid">
                             <div class="eob-show-item"><div class="eob-show-label">Employee ID</div><div class="eob-show-value">{{ $employee->employee_id }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Source</div><div class="eob-show-value">@if($employee->sourceIntern)<a href="{{ route('interns.show', $employee->sourceIntern) }}">Intern {{ $employee->sourceIntern->intern_id ?: $employee->sourceIntern->name }}</a>@else Direct Employee Onboarding @endif</div></div>
+                            <div class="eob-show-item"><div class="eob-show-label">Personal Mobile</div><div class="eob-show-value">{{ $employee->mobile }}</div></div>
+                            <div class="eob-show-item"><div class="eob-show-label">Official Mobile</div><div class="eob-show-value">{{ $employee->official_mobile ?: 'N/A' }}</div></div>
+                            <div class="eob-show-item"><div class="eob-show-label">Personal Email</div><div class="eob-show-value">{{ $employee->email }}</div></div>
+                            <div class="eob-show-item"><div class="eob-show-label">Official Email</div><div class="eob-show-value">{{ $employee->official_email ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Father's Name</div><div class="eob-show-value">{{ $employee->father_name ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Blood Group</div><div class="eob-show-value">{{ $employee->blood_group ?: 'N/A' }}</div></div>
                             <div class="eob-show-item"><div class="eob-show-label">Marital Status</div><div class="eob-show-value">{{ ucfirst($employee->marital_status) }}</div></div>

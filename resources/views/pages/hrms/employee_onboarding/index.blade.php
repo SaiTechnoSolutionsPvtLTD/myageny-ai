@@ -100,7 +100,18 @@
                     <table class="eob-list-table">
                         <thead>
                             <tr>
-                                <th>Employee ID</th>
+                                <th>
+                                    <a href="{{ request()->fullUrlWithQuery(['sort' => 'employee_id', 'direction' => (($sortField ?? 'employee_id') === 'employee_id' && ($sortDirection ?? 'desc') === 'desc') ? 'asc' : 'desc']) }}" 
+                                       style="color: inherit; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;" 
+                                       title="Sort by Employee ID (Currently: {{ strtoupper($sortDirection ?? 'desc') }})">
+                                        <span>Employee ID</span>
+                                        @if(($sortField ?? 'employee_id') === 'employee_id')
+                                            <i class="bi bi-arrow-{{ ($sortDirection ?? 'desc') === 'desc' ? 'down' : 'up' }}" style="font-size: 11px; color: #fe5f04;"></i>
+                                        @else
+                                            <i class="bi bi-arrow-down-up" style="font-size: 10px; color: #9e9e9e; opacity: 0.5;"></i>
+                                        @endif
+                                    </a>
+                                </th>
                                 <th>Employee</th>
                                 <th>Branch</th>
                                 <th>Role / Department</th>
@@ -149,8 +160,12 @@
                                         </div>
                                     </td>
                                     <td>
-                                        <div class="eob-cell-title">{{ $employee->mobile }}</div>
-                                        <div class="eob-cell-sub">{{ $employee->email }}</div>
+                                        <div class="eob-cell-title" title="{{ $employee->official_mobile ? 'Official: ' . $employee->official_mobile . ' | Personal: ' . $employee->mobile : 'Personal: ' . $employee->mobile }}">
+                                            {{ $employee->official_mobile ?: $employee->mobile }}
+                                        </div>
+                                        <div class="eob-cell-sub" title="{{ $employee->official_email ? 'Official: ' . $employee->official_email . ' | Personal: ' . $employee->email : 'Personal: ' . $employee->email }}">
+                                            {{ $employee->official_email ?: $employee->email }}
+                                        </div>
                                     </td>
                                     <td>{{ optional($employee->date_of_birth)->format('d M Y') }}</td>
                                     <td>

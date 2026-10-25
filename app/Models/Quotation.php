@@ -73,8 +73,8 @@ class Quotation extends Model
     public const CUSTOMER_RESPONSE_DISAGREE = 'disagree';
     public const CUSTOMER_RESPONSES = [
         self::CUSTOMER_RESPONSE_PENDING => 'Pending',
-        self::CUSTOMER_RESPONSE_AGREE => 'Agree',
-        self::CUSTOMER_RESPONSE_DISAGREE => 'Disagree',
+        self::CUSTOMER_RESPONSE_AGREE => 'Approved',
+        self::CUSTOMER_RESPONSE_DISAGREE => 'Rejected',
     ];
 
     public const GST_RATE = 18.0;
@@ -130,6 +130,11 @@ class Quotation extends Model
         'is_approved',
         'customer_response',
         'customer_responded_at',
+        'customer_signature',
+        'customer_location',
+        'customer_latitude',
+        'customer_longitude',
+        'customer_ip',
         'approved_by',
         'approved_at',
         'notes',
@@ -247,9 +252,28 @@ class Quotation extends Model
         return $this->is_approved ? 'Approved' : 'Pending';
     }
 
+    public function getCustomerSignatureUrlAttribute(): ?string
+    {
+        if (! $this->customer_signature) {
+            return null;
+        }
+
+        if (str_starts_with($this->customer_signature, 'http://') || str_starts_with($this->customer_signature, 'https://')) {
+            return $this->customer_signature;
+        }
+
+        return asset($this->customer_signature);
+    }
+
     public function getCustomerResponseLabelAttribute(): string
     {
-        return self::CUSTOMER_RESPONSES[$this->customer_response] ?? 'Pending';
+        return self::CUSTOMER_RESPONSES[$this->customer_response] ?? (
+            match (strtolower((string) $this->customer_response)) {
+                'agree', 'approved', 'approve' => 'Approved',
+                'disagree', 'rejected', 'reject' => 'Rejected',
+                default => 'Pending',
+            }
+        );
     }
 
     public static function normalizeState(?string $state): ?string

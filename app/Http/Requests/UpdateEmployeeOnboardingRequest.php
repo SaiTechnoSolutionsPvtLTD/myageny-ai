@@ -31,6 +31,11 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
         $fileRules = ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'];
         $employee = $this->route('employee_onboarding');
         $portalUserId = $employee?->portal_user_id;
+        if (! $portalUserId && $employee) {
+            $portalUserId = User::where('email', $employee->email)
+                ->orWhere('email', $employee->official_email)
+                ->value('id');
+        }
 
         return [
             'role_id' => ['nullable', 'exists:roles,id', $this->roleMatchesDepartmentRule()],
@@ -47,7 +52,9 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
             'correspondence_address' => ['nullable', 'string', 'max:2000'],
             'permanent_address' => ['nullable', 'string', 'max:2000'],
             'mobile' => ['required', 'string', 'max:20'],
+            'official_mobile' => ['nullable', 'string', 'max:20'],
             'email' => ['required', 'email', 'max:150'],
+            'official_email' => ['nullable', 'email', 'max:150'],
             'date_of_birth' => ['required', 'date'],
             'joining_date' => ['nullable', 'date'],
             'blood_group' => ['nullable', Rule::in(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])],
@@ -146,7 +153,10 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
     {
         $validator->after(function ($validator): void {
             $employee = $this->route('employee_onboarding');
-            $hasPortalUser = (bool) $employee?->portal_user_id;
+            $hasPortalUser = (bool) $employee?->portal_user_id
+                || (! empty($employee?->email) && User::where('email', $employee->email)->exists())
+                || (! empty($employee?->official_email) && User::where('email', $employee->official_email)->exists())
+                || ($this->filled('portal_email') && User::where('email', $this->input('portal_email'))->exists());
             $wantsPortalAccount = $hasPortalUser
                 || $this->filled('portal_email')
                 || $this->filled('portal_password')

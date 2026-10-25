@@ -1354,6 +1354,8 @@ class LeadShowController extends Controller
                 'lead'        => $lead,
                 'agreeUrl'    => $agreeUrl,
                 'disagreeUrl' => $disagreeUrl,
+                'approveUrl'  => $agreeUrl,
+                'rejectUrl'   => $disagreeUrl,
             ], function ($message) use ($quotation, $lead, $email, $pdf, $filename) {
                 $message->to($email, $lead->contact_name ?: null)
                     ->subject('Quotation ' . $quotation->quotation_no)

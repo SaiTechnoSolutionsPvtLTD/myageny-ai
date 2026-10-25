@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Spatie\Permission\PermissionRegistrar;
 
 class EmployeeOnboardingController extends Controller
 {
@@ -60,6 +61,16 @@ class EmployeeOnboardingController extends Controller
     {
         abort_unless(auth()->user()?->isHrOrAdmin(), 403, 'Unauthorized.');
 
+        $sortField = $request->input('sort', 'employee_id');
+        $sortDirection = $request->input('direction', 'desc');
+
+        if (! in_array($sortField, ['employee_id', 'name', 'created_at', 'status'])) {
+            $sortField = 'employee_id';
+        }
+        if (! in_array(strtolower($sortDirection), ['asc', 'desc'])) {
+            $sortDirection = 'desc';
+        }
+
         $employees = EmployeeOnboarding::query()
             ->with(['role', 'department', 'sourceIntern', 'educations', 'familyDetails', 'portalUser.branch'])
             ->when($request->search, function ($query) use ($request) {
@@ -69,7 +80,9 @@ class EmployeeOnboardingController extends Controller
                     $subQuery->where('employee_id', 'like', '%' . $search . '%')
                         ->orWhere('name', 'like', '%' . $search . '%')
                         ->orWhere('email', 'like', '%' . $search . '%')
+                        ->orWhere('official_email', 'like', '%' . $search . '%')
                         ->orWhere('mobile', 'like', '%' . $search . '%')
+                        ->orWhere('official_mobile', 'like', '%' . $search . '%')
                         ->orWhere('aadhaar_card_no', 'like', '%' . $search . '%');
                 });
             })
@@ -93,7 +106,8 @@ class EmployeeOnboardingController extends Controller
                 $query->where('role_id', $request->integer('role_id'));
             })
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->status))
-            ->latest()
+            ->orderBy($sortField, $sortDirection)
+            ->orderByDesc('id')
             ->paginate(10)
             ->withQueryString();
 
@@ -105,7 +119,7 @@ class EmployeeOnboardingController extends Controller
             ->orderByRaw('COALESCE(display_name, name)')
             ->get();
 
-        return view('pages.hrms.employee_onboarding.index', compact('employees', 'departments', 'branches', 'roles'));
+        return view('pages.hrms.employee_onboarding.index', compact('employees', 'departments', 'branches', 'roles', 'sortField', 'sortDirection'));
     }
 
     public function updateStatus(Request $request, EmployeeOnboarding $employee_onboarding): RedirectResponse|\Illuminate\Http\JsonResponse
@@ -239,12 +253,16 @@ class EmployeeOnboardingController extends Controller
         ]);
 
         $companyId = $this->currentCompanyId($employee_onboarding);
+        $userRoleId = $employee_onboarding->portalUser?->roles->first()?->id;
 
         $roles = Role::with(['department', 'roleParentMapping.parentRole'])
-            ->where(function ($q) use ($companyId, $employee_onboarding) {
+            ->where(function ($q) use ($companyId, $employee_onboarding, $userRoleId) {
                 $q->where('company_id', $companyId);
                 if ($employee_onboarding->role_id) {
                     $q->orWhere('id', $employee_onboarding->role_id);
+                }
+                if ($userRoleId) {
+                    $q->orWhere('id', $userRoleId);
                 }
             })
             ->orderByRaw('COALESCE(display_name, name)')
@@ -268,7 +286,7 @@ class EmployeeOnboardingController extends Controller
         $validated = $request->validated();
 
         DB::transaction(function () use ($request, $validated, $employee_onboarding) {
-            $portalUser = $this->syncPortalAccount($employee_onboarding->portalUser, $validated);
+            $portalUser = $this->syncPortalAccount($employee_onboarding->portalUser, $validated, $employee_onboarding);
 
             $employee_onboarding->fill($this->extractAttributes($validated));
             if ($portalUser) {
@@ -410,21 +428,48 @@ class EmployeeOnboardingController extends Controller
         return $attributes;
     }
 
-    private function syncPortalAccount(?User $user, array $validated): ?User
+    private function syncPortalAccount(?User $user, array $validated, ?EmployeeOnboarding $employee = null): ?User
     {
         $email = trim((string) ($validated['portal_email'] ?? ''));
         $password = (string) ($validated['portal_password'] ?? '');
+
+        // If $user was not passed, check if one can be found
+        if (! $user) {
+            if ($employee && $employee->portal_user_id) {
+                $user = User::withoutGlobalScopes()->find($employee->portal_user_id);
+            }
+
+            if (! $user && $email !== '') {
+                $user = User::withoutGlobalScopes()->where('email', $email)->first();
+            }
+
+            if (! $user) {
+                $candidateEmails = array_filter([
+                    trim((string) ($validated['official_email'] ?? '')),
+                    trim((string) ($validated['email'] ?? '')),
+                    trim((string) ($employee?->official_email ?? '')),
+                    trim((string) ($employee?->email ?? '')),
+                ]);
+
+                if (! empty($candidateEmails)) {
+                    $user = User::withoutGlobalScopes()->whereIn('email', $candidateEmails)->first();
+                }
+            }
+        }
 
         if (! $user && $email === '') {
             return null;
         }
 
-        $role = Role::withoutGlobalScopes()->find($validated['role_id'] ?? null);
+        $role = !empty($validated['role_id']) ? Role::withoutGlobalScopes()->find($validated['role_id']) : null;
 
         $attributes = [
             'name' => $validated['name'],
-            'email' => $email,
         ];
+
+        if ($email !== '') {
+            $attributes['email'] = $email;
+        }
 
         if (array_key_exists('branch_id', $validated)) {
             $attributes['branch_id'] = $validated['branch_id'] ?: null;
@@ -435,7 +480,7 @@ class EmployeeOnboardingController extends Controller
         }
 
         if (! $user) {
-            $companyId = auth()->user()?->company_id;
+            $companyId = auth()->user()?->company_id ?: ($employee?->company_id ?: 1);
             if ($companyId) {
                 $company = Company::find($companyId);
                 if ($company && $company->hasReachedUserLimit()) {
@@ -449,7 +494,7 @@ class EmployeeOnboardingController extends Controller
             $attributes['is_active'] = array_key_exists('status', $validated)
                 ? ($validated['status'] === EmployeeOnboarding::STATUS_ACTIVE)
                 : true;
-            $attributes['password'] = Hash::make($password);
+            $attributes['password'] = Hash::make($password ?: 'Welcome@123');
 
             $user = User::create($attributes);
         } else {
@@ -462,13 +507,52 @@ class EmployeeOnboardingController extends Controller
 
         if ($role) {
             $user->syncRoles([$role->name]);
+            $this->syncCompanySuperAdmin($user, $role->name);
+        } else {
+            $user->syncRoles([]);
+            $this->syncCompanySuperAdmin($user, null);
         }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         if (array_key_exists('branches', $validated)) {
             $user->branches()->sync($validated['branches'] ?? []);
         }
 
         return $user;
+    }
+
+    private function syncCompanySuperAdmin(User $user, ?string $roleName): void
+    {
+        if (! $user->company_id) {
+            return;
+        }
+
+        $company = Company::find($user->company_id);
+
+        if (! $company) {
+            return;
+        }
+
+        $companyAdminRole = Role::tenantRoleName('company_admin', $company->id);
+
+        if ($roleName === $companyAdminRole) {
+            if ($company->super_admin_user_id && (int) $company->super_admin_user_id !== (int) $user->id) {
+                $previousSuperAdmin = User::find($company->super_admin_user_id);
+
+                if ($previousSuperAdmin) {
+                    $previousSuperAdmin->removeRole($companyAdminRole);
+                }
+            }
+
+            $company->update(['super_admin_user_id' => $user->id]);
+
+            return;
+        }
+
+        if ((int) $company->super_admin_user_id === (int) $user->id) {
+            $company->update(['super_admin_user_id' => null]);
+        }
     }
 
     private function syncPortalMapping(User $user, array $validated): void

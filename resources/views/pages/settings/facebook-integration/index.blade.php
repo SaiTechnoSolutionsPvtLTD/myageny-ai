@@ -121,6 +121,12 @@
                         Sync All
                     </button>
                 </form>
+                @can('facebook_integration.manage')
+                <button type="button" class="crm-btn crm-btn-ghost open-update-token-modal" style="display:inline-flex; align-items:center; gap:6px; background:#f0fdf4; color:#16a34a; border-color:#bbf7d0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-1.5 1.5L10 13V17h4l7.5-7.5a2.121 2.121 0 0 0-3-3z"/><circle cx="7.5" cy="16.5" r="5.5"/></svg>
+                    Update Access Token
+                </button>
+                @endcan
                 <a href="/settings/auth/facebook" target="_blank" class="crm-btn crm-btn-primary">+ Login Facebook</a>
             </div>
         </div>
@@ -231,6 +237,9 @@
                                             <button type="submit" class="crm-table-dropdown-item">Sync Now</button>
                                         </form>
                                         <button type="button" class="crm-table-dropdown-item editintegratedcamp" data-camp_id="{{ $campaignMaster->id }}">Edit Mapping</button>
+                                        @can('facebook_integration.manage')
+                                        <button type="button" class="crm-table-dropdown-item updatecampaigntoken" data-camp_id="{{ $campaignMaster->id }}" data-camp_name="{{ $campaignMaster->campaign_name }}">Update Token</button>
+                                        @endcan
                                         <button type="button" class="crm-table-dropdown-item danger deleteintegratedcamp" data-camp_id="{{ $campaignMaster->id }}">Delete</button>
                                     </div>
                                 </details>
@@ -247,6 +256,76 @@
             @if ($campaignMasters->hasPages())
                 @include('partials.table-pagination', ['paginator' => $campaignMasters])
             @endif
+        </div>
+    </div>
+
+    <!-- ====== UPDATE ACCESS TOKEN MODAL ====== -->
+    <div class="crm-modal-overlay" id="updateTokenModal" style="display:none;">
+        <div class="crm-modal" style="width:620px; max-width:95vw; max-height:90vh; overflow-y:auto;">
+            <div class="crm-modal-header">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:8px; background:#ecfdf5; color:#059669;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-1.5 1.5L10 13V17h4l7.5-7.5a2.121 2.121 0 0 0-3-3z"/><circle cx="7.5" cy="16.5" r="5.5"/></svg>
+                    </span>
+                    <div>
+                        <h3 style="margin:0; font-size:17px; font-weight:700;">Update Facebook Access Token</h3>
+                        <p style="margin:2px 0 0; font-size:12px; color:#6b7280;">Update Facebook Graph API access token for lead sync</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeModal('updateTokenModal')">✕</button>
+            </div>
+            <form action="{{ route('settings.facebook-integration.update-token') }}" method="POST" id="updateTokenForm">
+                @csrf
+                <div class="crm-modal-body" style="padding:20px; display:flex; flex-direction:column; gap:16px;">
+                    <div>
+                        <label class="crm-label" style="font-weight:600; margin-bottom:6px; display:block;">Apply Token To <span style="color:#ef4444;">*</span></label>
+                        <select name="target_type" id="tokenTargetType" class="crm-select" required>
+                            <option value="all">All Integrated Campaigns & Ad Accounts</option>
+                            <option value="ad_account">Specific Ad Account</option>
+                            <option value="campaign">Specific Campaign</option>
+                        </select>
+                    </div>
+
+                    <div id="adAccountSelectGroup" style="display:none;">
+                        <label class="crm-label" style="font-weight:600; margin-bottom:6px; display:block;">Select Ad Account <span style="color:#ef4444;">*</span></label>
+                        <select name="ad_account_id" id="tokenAdAccountSelect" class="crm-select">
+                            <option value="">-- Choose Ad Account --</option>
+                            @foreach ($adAccounts ?? [] as $adAcc)
+                                <option value="{{ $adAcc->act_id }}">{{ $adAcc->act_name }} ({{ $adAcc->act_id }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div id="campaignSelectGroup" style="display:none;">
+                        <label class="crm-label" style="font-weight:600; margin-bottom:6px; display:block;">Select Campaign <span style="color:#ef4444;">*</span></label>
+                        <select name="campaign_id" id="tokenCampaignSelect" class="crm-select">
+                            <option value="">-- Choose Campaign --</option>
+                            @foreach ($allCampaigns ?? [] as $camp)
+                                <option value="{{ $camp->id }}">{{ $camp->campaign_name }} (#{{ $camp->id }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="crm-label" style="font-weight:600; margin-bottom:6px; display:block;">Facebook Access Token <span style="color:#ef4444;">*</span></label>
+                        <textarea
+                            name="access_token"
+                            id="facebookAccessTokenInput"
+                            rows="4"
+                            class="crm-input"
+                            style="width:100%; font-family:monospace; font-size:12px; resize:vertical; padding:10px 12px; border:1px solid #e1dee3; border-radius:8px;"
+                            placeholder="EAA..."
+                            required>{{ old('access_token', 'EAAW4M0czKR4BStmBTUDIPdMiCmJTJ4C0JiuvCHWZAJazjs2Lejof0942QLlzgobhtVGZCZB9ZCRUDKdR3dRPFBw4NoibdjlLZC9NpMFHv0b8WLsZBBhI08GZBZCZA9ALySVCQ29zUUl9ZACR2w4ZA37trr5ZC70PYcssX2666Faa0j16DuiyqMIli85jIRhTpcCO') }}</textarea>
+                        <small style="display:block; margin-top:4px; color:#6b7280; font-size:11px;">
+                            Paste your Graph API User or System User Access Token (starts with EAA...)
+                        </small>
+                    </div>
+                </div>
+                <div class="crm-modal-footer" style="padding:14px 20px; border-top:1px solid #e5e7eb; display:flex; justify-content:flex-end; gap:10px; background:#f9fafb; border-radius:0 0 12px 12px;">
+                    <button type="button" class="crm-btn crm-btn-ghost" onclick="closeModal('updateTokenModal')">Cancel</button>
+                    <button type="submit" class="crm-btn crm-btn-primary" style="background:#059669; border-color:#059669; color:#fff;">Save Token</button>
+                </div>
+            </form>
         </div>
     </div>
 

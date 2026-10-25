@@ -44,6 +44,36 @@
                 Kindly check the attached PDF for complete quotation details.
             </p>
 
+            @php
+                $approveActionUrl = $agreeUrl ?? $approveUrl ?? null;
+                $rejectActionUrl = $disagreeUrl ?? $rejectUrl ?? null;
+            @endphp
+
+            @if(!empty($approveActionUrl) && !empty($rejectActionUrl))
+            <div style="margin:24px 0;padding:22px 18px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;text-align:center;">
+                <p style="margin:0 0 16px;font-size:15px;font-weight:700;color:#111827;">
+                    Please review this quotation and submit your decision:
+                </p>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                    <tr>
+                        <td align="center" style="padding:0 8px;">
+                            <a href="{{ $approveActionUrl }}" target="_blank" style="display:inline-block;padding:12px 28px;background:#16a34a;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:8px;box-shadow:0 2px 4px rgba(22,163,74,0.25);">
+                                &#10003; Approve
+                            </a>
+                        </td>
+                        <td align="center" style="padding:0 8px;">
+                            <a href="{{ $rejectActionUrl }}" target="_blank" style="display:inline-block;padding:12px 28px;background:#dc2626;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:8px;box-shadow:0 2px 4px rgba(220,38,38,0.25);">
+                                &#10005; Reject
+                            </a>
+                        </td>
+                    </tr>
+                </table>
+                <p style="margin:14px 0 0;font-size:12px;color:#6b7280;line-height:1.5;">
+                    Your response will directly update the quotation status in our system.
+                </p>
+            </div>
+            @endif
+
             <p style="margin:0;font-size:15px;line-height:1.6;">
                 Regards,<br>
                 {{ config('mail.from.name') ?: config('app.name') }}

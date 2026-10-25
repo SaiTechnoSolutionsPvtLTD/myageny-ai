@@ -207,6 +207,16 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
 
             <div class="filter-group">
+                <label class="filter-label" for="customer_response">Customer Status</label>
+                <select id="customer_response" name="customer_response" class="filter-select">
+                    <option value="">All Customer Status</option>
+                    <option value="agree" @selected(request('customer_response') === 'agree')>Approved</option>
+                    <option value="disagree" @selected(request('customer_response') === 'disagree')>Rejected</option>
+                    <option value="pending" @selected(request('customer_response') === 'pending')>Pending</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
                 <label class="filter-label" for="approved_by">Approved By</label>
                 <select id="approved_by" name="approved_by" class="filter-select">
                     <option value="">All Users</option>
@@ -247,13 +257,13 @@ tbody tr:last-child td { border-bottom: none; }
                         $leadEmail = $q->lead?->email;
                         $response = $q->customer_response ?: 'pending';
                         $responseBadge = match ($response) {
-                            'agree' => 'badge-agree',
-                            'disagree' => 'badge-disagree',
+                            'agree', 'approved', 'approve' => 'badge-agree',
+                            'disagree', 'rejected', 'reject' => 'badge-disagree',
                             default => 'badge-pending',
                         };
                         $responseIcon = match ($response) {
-                            'agree' => 'bi-check-circle-fill',
-                            'disagree' => 'bi-x-circle-fill',
+                            'agree', 'approved', 'approve' => 'bi-check-circle-fill',
+                            'disagree', 'rejected', 'reject' => 'bi-x-circle-fill',
                             default => 'bi-clock-fill',
                         };
                     @endphp

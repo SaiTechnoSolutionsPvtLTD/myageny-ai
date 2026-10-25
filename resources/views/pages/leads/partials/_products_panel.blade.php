@@ -955,7 +955,7 @@
         <div class="pp-mbody" style="padding: 24px;">
             <p style="font-size: 15px; font-weight: 700; color: #111827; margin: 0 0 8px;">Are you sure you want to send this price request?</p>
             <p style="font-size: 13px; color: #6b7280; margin: 0 0 16px; line-height: 1.5;">An email notification will be sent to <strong>tamilarasan@saitechnosolutions.net</strong> with the requested price changes.</p>
-            
+
             <div id="pp-price-confirm-details" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; font-size:13px;">
                 <!-- Content generated dynamically by JS -->
             </div>
@@ -1008,7 +1008,7 @@
                 <strong>TO:</strong> customersuccess@saitechnosolutions.net, customersuccessteam.sts@gmail.com<br>
                 <strong>CC:</strong> tamilarasan@saitechnosolutions.net
             </p>
-            
+
             <div id="pp-production-confirm-details" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; font-size:13px;">
                 <!-- Filled dynamically by JS -->
             </div>
@@ -1049,7 +1049,7 @@
 ══════════════════════════════════════════════════════ --}}
 <div class="pp-overlay" id="pp-modal-domains-hosting" style="z-index: 10005;">
     <div class="pp-modal-box pp-modal-box--fullscreen" style="width: 95vw; max-width: 1320px; height: 90vh; max-height: 92vh; border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; background: #fff; box-shadow: 0 25px 80px rgba(15, 23, 42, 0.35);">
-        
+
         {{-- Modal Header --}}
         <div class="pp-mhd" style="display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; border-bottom: 1px solid #e2e8f0; background: #ffffff; flex-shrink: 0;">
             <div style="display: flex; align-items: center; gap: 14px;">
@@ -1076,9 +1076,7 @@
                         <i class="bi bi-hdd-network"></i> {{ $leadHostings->count() }} Hostings
                     </span>
                 </div>
-                <a href="{{ route('accounts.domains-hosting.index') }}" target="_blank" class="ppf-btn ppf-btn-sec" style="font-size: 12px; padding: 7px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; border: 1px solid #cbd5e1; color: #334155; font-weight: 600;">
-                    <i class="bi bi-box-arrow-up-right"></i> Open Module
-                </a>
+
                 <button type="button" class="pp-mclose" onclick="closeLeadDomainsHostingModal()" style="font-size: 20px; color: #94a3b8; background: none; border: none; cursor: pointer; padding: 4px; line-height: 1;">✕</button>
             </div>
         </div>

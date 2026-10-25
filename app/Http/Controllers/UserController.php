@@ -159,6 +159,7 @@ class UserController extends Controller
             $user->syncRoles([$role]);
             app(PermissionRegistrar::class)->forgetCachedPermissions();
             $this->syncCompanySuperAdmin($user, $role->name);
+            $this->syncEmployeeOnboardingRole($user, $role);
         }
 
         return redirect()
@@ -198,6 +199,13 @@ class UserController extends Controller
             ->orderBy('display_name')
             ->get();
         $currentRole = $user->roles->first()?->name;
+        if (! $currentRole) {
+            $employee = EmployeeOnboarding::withoutGlobalScopes()
+                ->where('portal_user_id', $user->id)
+                ->orWhere('email', $user->email)
+                ->first();
+            $currentRole = $employee?->role?->name;
+        }
 
         return view('pages.users.edit', compact('user', 'branches', 'roles', 'currentRole'));
     }
@@ -244,8 +252,12 @@ class UserController extends Controller
             $user->syncRoles([$role]);
             app(PermissionRegistrar::class)->forgetCachedPermissions();
             $this->syncCompanySuperAdmin($user, $role->name);
+            $this->syncEmployeeOnboardingRole($user, $role);
         } else {
+            $user->syncRoles([]);
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
             $this->syncCompanySuperAdmin($user, null);
+            $this->syncEmployeeOnboardingRole($user, null);
         }
 
         return redirect()
@@ -330,6 +342,42 @@ class UserController extends Controller
             $employee->update(['status' => EmployeeOnboarding::STATUS_INACTIVE]);
         } elseif ($user->is_active && $employee->status === EmployeeOnboarding::STATUS_INACTIVE) {
             $employee->update(['status' => EmployeeOnboarding::STATUS_ACTIVE]);
+        }
+    }
+
+    private function syncEmployeeOnboardingRole(User $user, ?Role $role): void
+    {
+        $employees = EmployeeOnboarding::withoutGlobalScopes()
+            ->where('portal_user_id', $user->id)
+            ->orWhere(function ($q) use ($user) {
+                $q->where('email', $user->email);
+                if (!empty($user->official_email)) {
+                    $q->orWhere('official_email', $user->official_email);
+                }
+            })
+            ->get();
+
+        foreach ($employees as $employee) {
+            $employee->portal_user_id = $user->id;
+            $employee->role_id = $role?->id;
+            if ($role && $role->department_id) {
+                $employee->department_id = $role->department_id;
+            }
+            $employee->save();
+        }
+
+        $interns = InternJoiningForm::withoutGlobalScopes()
+            ->where('portal_user_id', $user->id)
+            ->orWhere('email', $user->email)
+            ->get();
+
+        foreach ($interns as $intern) {
+            $intern->portal_user_id = $user->id;
+            $intern->role_id = $role?->id;
+            if ($role && $role->department_id) {
+                $intern->department_id = $role->department_id;
+            }
+            $intern->save();
         }
     }
 

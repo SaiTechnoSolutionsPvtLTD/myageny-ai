@@ -1,11 +1,17 @@
 @php
     $employee = $employee ?? null;
     $portalUser = $employee?->portalUser;
+    if (! $portalUser && $employee) {
+        $portalUser = $employee->portal_user_id ? \App\Models\User::withoutGlobalScopes()->find($employee->portal_user_id) : null;
+        if (! $portalUser) {
+            $portalUser = \App\Models\User::withoutGlobalScopes()->where('email', $employee->official_email)->orWhere('email', $employee->email)->first();
+        }
+    }
     $selectedTlUserId = old('tl_user_id', $portalUser?->managerMappings?->first()?->manager_id);
     $portalBranchId = old('branch_id', $portalUser?->branch_id ?? $employee?->branch?->id ?? ((($method ?? 'POST') === 'POST') ? auth()->user()?->branch_id : null));
     $portalUserBranchIds = $portalUser?->branches?->pluck('id')->toArray() ?? [];
-    $portalEmail = old('portal_email', $portalUser?->email ?? '');
-    $portalPasswordRequired = ($method ?? 'POST') === 'POST';
+    $portalEmail = old('portal_email', $portalUser?->email ?? ($employee?->official_email ?: $employee?->email ?: ''));
+    $portalPasswordRequired = ($method ?? 'POST') === 'POST' && ! $portalUser;
     $portalAccountRequired = $portalPasswordRequired || (bool) $portalUser;
 
     $bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -93,7 +99,9 @@
         'correspondence_address' => 'personal',
         'permanent_address' => 'personal',
         'mobile' => 'personal',
+        'official_mobile' => 'personal',
         'email' => 'personal',
+        'official_email' => 'personal',
         'date_of_birth' => 'personal',
         'joining_date' => 'personal',
         'blood_group' => 'personal',
@@ -250,14 +258,24 @@
                                 @error('permanent_address')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
-                                <label class="eob-label">Mobile <span class="eob-label-required">*</span></label>
+                                <label class="eob-label">Personal Mobile <span class="eob-label-required">*</span></label>
                                 <input type="text" name="mobile" class="eob-input" value="{{ old('mobile', $employee?->mobile) }}" required>
                                 @error('mobile')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
-                                <label class="eob-label">Email ID <span class="eob-label-required">*</span></label>
+                                <label class="eob-label">Official Mobile Number</label>
+                                <input type="text" name="official_mobile" class="eob-input" value="{{ old('official_mobile', $employee?->official_mobile) }}" placeholder="Enter official mobile number">
+                                @error('official_mobile')<div class="eob-error">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="eob-group">
+                                <label class="eob-label">Personal Email ID <span class="eob-label-required">*</span></label>
                                 <input type="email" name="email" class="eob-input" value="{{ old('email', $employee?->email) }}" required>
                                 @error('email')<div class="eob-error">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="eob-group">
+                                <label class="eob-label">Official E-mail ID</label>
+                                <input type="email" name="official_email" class="eob-input" value="{{ old('official_email', $employee?->official_email) }}" placeholder="Enter official e-mail ID">
+                                @error('official_email')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">Date of Birth <span class="eob-label-required">*</span></label>
@@ -442,7 +460,7 @@
                             </div>
                             <div class="eob-group">
                                 <label class="eob-label">Role @if($portalAccountRequired)<span class="eob-label-required">*</span>@endif</label>
-                                <select name="role_id" class="eob-select" id="employeeRoleSelect" data-selected-role="{{ old('role_id', $employee?->role_id) }}" @if($portalAccountRequired) required @endif>
+                                <select name="role_id" class="eob-select" id="employeeRoleSelect" data-selected-role="{{ old('role_id', $employee?->role_id ?? $portalUser?->roles->first()?->id) }}" @if($portalAccountRequired) required @endif>
                                     <option value="">Select role</option>
                                     @foreach($roles as $role)
                                         <option
@@ -451,7 +469,7 @@
                                             data-department-name="{{ $role->department?->name ?? '' }}"
                                             data-parent-role-id="{{ $role->roleParentMapping?->parent_role_id ?? '' }}"
                                             data-parent-role-name="{{ $role->roleParentMapping?->parentRole ? ($role->roleParentMapping->parentRole->display_name ?: \Illuminate\Support\Str::of(\Illuminate\Support\Str::afterLast($role->roleParentMapping->parentRole->name, '__'))->replace('_', ' ')->title()->value()) : '' }}"
-                                            @selected((string) old('role_id', $employee?->role_id) === (string) $role->id)
+                                            @selected((string) old('role_id', $employee?->role_id ?? $portalUser?->roles->first()?->id) === (string) $role->id)
                                         >
                                             {{ $role->display_name ?: ucfirst(str_replace('_', ' ', \Illuminate\Support\Str::afterLast($role->name, '__'))) }}
                                         </option>
@@ -939,6 +957,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const tlSelect = document.getElementById('employeeTlSelect');
     const tlHelp = document.getElementById('employeeTlHelp');
     const personalEmailInput = form.querySelector('input[name="email"]');
+    const officialEmailInput = form.querySelector('input[name="official_email"]');
     const portalEmailInput = document.getElementById('employeePortalEmail');
     const stepButtons = Array.from(document.querySelectorAll('.eob-wizard-step-btn'));
     const panels = Array.from(document.querySelectorAll('.eob-wizard-panel'));
@@ -1025,12 +1044,22 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (personalEmailInput && portalEmailInput) {
-        personalEmailInput.addEventListener('input', function () {
-            if (!portalEmailInput.dataset.touched && portalEmailInput.value.trim() === '') {
-                portalEmailInput.value = personalEmailInput.value.trim();
-            }
-        });
+    if (portalEmailInput) {
+        if (personalEmailInput) {
+            personalEmailInput.addEventListener('input', function () {
+                if (!portalEmailInput.dataset.touched && portalEmailInput.value.trim() === '' && (!officialEmailInput || officialEmailInput.value.trim() === '')) {
+                    portalEmailInput.value = personalEmailInput.value.trim();
+                }
+            });
+        }
+
+        if (officialEmailInput) {
+            officialEmailInput.addEventListener('input', function () {
+                if (!portalEmailInput.dataset.touched) {
+                    portalEmailInput.value = officialEmailInput.value.trim() || (personalEmailInput ? personalEmailInput.value.trim() : '');
+                }
+            });
+        }
 
         portalEmailInput.addEventListener('input', function () {
             portalEmailInput.dataset.touched = '1';

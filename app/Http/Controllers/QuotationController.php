@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Throwable;
 
@@ -70,6 +71,16 @@ class QuotationController extends Controller
 
         if ($request->filled('end_date')) {
             $query->whereDate('quotation_date', '<=', $request->end_date);
+        }
+
+        if ($request->filled('customer_response')) {
+            if ($request->customer_response === 'pending') {
+                $query->where(function ($q) {
+                    $q->whereNull('customer_response')->orWhere('customer_response', 'pending');
+                });
+            } else {
+                $query->where('customer_response', $request->customer_response);
+            }
         }
 
         $quotations = $query->paginate(15)->withQueryString();
@@ -633,10 +644,12 @@ class QuotationController extends Controller
             ]);
 
             Mail::send('emails.quotation', [
-                'quotation' => $quotation,
-                'lead' => $lead,
-                'agreeUrl' => $agreeUrl,
+                'quotation'   => $quotation,
+                'lead'        => $lead,
+                'agreeUrl'    => $agreeUrl,
                 'disagreeUrl' => $disagreeUrl,
+                'approveUrl'  => $agreeUrl,
+                'rejectUrl'   => $disagreeUrl,
             ], function ($message) use ($quotation, $lead, $email, $pdf, $filename) {
                 $message
                     ->to($email, $lead->contact_name ?: null)
@@ -658,23 +671,156 @@ class QuotationController extends Controller
         return back()->with('success', 'Quotation ' . $quotation->quotation_no . ' sent to ' . $email . '.');
     }
 
-    public function customerResponse(Quotation $quotation, string $response): View
+    public function customerResponse(Request $request, Quotation $quotation, string $response): View
     {
-        abort_unless(in_array($response, [
-            Quotation::CUSTOMER_RESPONSE_AGREE,
-            Quotation::CUSTOMER_RESPONSE_DISAGREE,
-        ], true), 404);
+        $normalizedResponse = match (strtolower(trim($response))) {
+            'agree', 'approved', 'approve' => Quotation::CUSTOMER_RESPONSE_AGREE,
+            'disagree', 'rejected', 'reject' => Quotation::CUSTOMER_RESPONSE_DISAGREE,
+            default => null,
+        };
 
-        $quotation->update([
-            'customer_response' => $response,
-            'customer_responded_at' => now(),
+        abort_unless($normalizedResponse !== null, 404);
+
+        $quotation->loadMissing(['lead', 'items.product', 'company']);
+
+        // If already responded
+        if ($quotation->customer_responded_at && $quotation->customer_response !== Quotation::CUSTOMER_RESPONSE_PENDING) {
+            $label = match ($quotation->customer_response) {
+                Quotation::CUSTOMER_RESPONSE_AGREE, 'approved' => 'Approved',
+                Quotation::CUSTOMER_RESPONSE_DISAGREE, 'rejected' => 'Rejected',
+                default => ucfirst((string) $quotation->customer_response),
+            };
+
+            return view('pages.quotations.customer_response', [
+                'quotation'     => $quotation,
+                'response'      => $quotation->customer_response,
+                'responseLabel' => $label,
+                'alreadyDone'   => true,
+            ]);
+        }
+
+        if ($normalizedResponse === Quotation::CUSTOMER_RESPONSE_AGREE) {
+            $submitUrl = URL::signedRoute('quotations.customer-response.submit', [
+                'quotation' => $quotation->id,
+                'response'  => Quotation::CUSTOMER_RESPONSE_AGREE,
+            ]);
+
+            return view('pages.quotations.customer_approve', [
+                'quotation' => $quotation,
+                'lead'      => $quotation->lead,
+                'submitUrl' => $submitUrl,
+            ]);
+        }
+
+        $submitUrl = URL::signedRoute('quotations.customer-response.submit', [
+            'quotation' => $quotation->id,
+            'response'  => Quotation::CUSTOMER_RESPONSE_DISAGREE,
         ]);
+
+        return view('pages.quotations.customer_reject', [
+            'quotation' => $quotation,
+            'lead'      => $quotation->lead,
+            'submitUrl' => $submitUrl,
+        ]);
+    }
+
+    public function submitCustomerResponse(Request $request, Quotation $quotation, string $response): View
+    {
+        $normalizedResponse = match (strtolower(trim($response))) {
+            'agree', 'approved', 'approve' => Quotation::CUSTOMER_RESPONSE_AGREE,
+            'disagree', 'rejected', 'reject' => Quotation::CUSTOMER_RESPONSE_DISAGREE,
+            default => null,
+        };
+
+        abort_unless($normalizedResponse !== null, 404);
+
+        $isApproved = ($normalizedResponse === Quotation::CUSTOMER_RESPONSE_AGREE);
+        $signaturePath = null;
+
+        if ($isApproved) {
+            $request->validate([
+                'signature_data' => ['required', 'string'],
+                'location'       => ['nullable', 'string', 'max:255'],
+                'latitude'       => ['nullable', 'string', 'max:50'],
+                'longitude'      => ['nullable', 'string', 'max:50'],
+            ]);
+
+            $signatureData = (string) $request->input('signature_data');
+            $signaturePath = $this->saveSignatureData($quotation, $signatureData);
+        }
+
+        $location = $request->input('location') ?: null;
+        $latitude = $request->input('latitude') ?: null;
+        $longitude = $request->input('longitude') ?: null;
+        $ip = $request->ip();
+
+        $updateData = [
+            'customer_response'     => $normalizedResponse,
+            'customer_responded_at' => now(),
+            'is_approved'           => $isApproved,
+            'approved_at'           => $isApproved ? ($quotation->approved_at ?: now()) : null,
+            'customer_ip'           => $ip,
+        ];
+
+        if ($isApproved) {
+            if ($signaturePath) {
+                $updateData['customer_signature'] = $signaturePath;
+            }
+            if ($location) {
+                $updateData['customer_location'] = $location;
+            }
+            if ($latitude) {
+                $updateData['customer_latitude'] = $latitude;
+            }
+            if ($longitude) {
+                $updateData['customer_longitude'] = $longitude;
+            }
+        }
+
+        $quotation->update($updateData);
+
+        Log::info('Customer quotation response submitted.', [
+            'quotation_id' => $quotation->id,
+            'quotation_no' => $quotation->quotation_no,
+            'response'     => $normalizedResponse,
+            'is_approved'  => $isApproved,
+            'signature'    => $signaturePath,
+            'location'     => $location,
+            'ip'           => $ip,
+        ]);
+
+        $responseLabel = $isApproved ? 'Approved' : 'Rejected';
 
         return view('pages.quotations.customer_response', [
-            'quotation' => $quotation,
-            'response' => $response,
-            'responseLabel' => Quotation::CUSTOMER_RESPONSES[$response],
+            'quotation'     => $quotation->fresh(['lead']),
+            'response'      => $normalizedResponse,
+            'responseLabel' => $responseLabel,
+            'justSubmitted' => true,
         ]);
+    }
+
+    protected function saveSignatureData(Quotation $quotation, string $signatureData): ?string
+    {
+        if (! preg_match('/^data:image\/(\w+);base64,/', $signatureData)) {
+            return null;
+        }
+
+        $data = substr($signatureData, strpos($signatureData, ',') + 1);
+        $decoded = base64_decode($data);
+
+        if ($decoded === false) {
+            return null;
+        }
+
+        $dir = public_path('uploads/quotations/signatures');
+        if (! file_exists($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $filename = 'sig_q' . $quotation->id . '_' . time() . '_' . Str::random(8) . '.png';
+        file_put_contents($dir . '/' . $filename, $decoded);
+
+        return 'uploads/quotations/signatures/' . $filename;
     }
 
     // ── Destroy ───────────────────────────────────────────────────────────────

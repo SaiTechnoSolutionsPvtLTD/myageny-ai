@@ -79,7 +79,22 @@ class FacebookIntegrationController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        return view('pages.settings.facebook-integration.index', compact('campaignMasters', 'activeUsers', 'sortBy', 'sortDir'));
+        $adAccounts = DB::table('ad_accounts')
+            ->orderBy('act_name')
+            ->get(['id', 'act_id', 'act_name']);
+
+        $allCampaigns = CampaignMaster::query()
+            ->orderBy('campaign_name')
+            ->get(['id', 'campaign_name', 'camp_id']);
+
+        return view('pages.settings.facebook-integration.index', compact(
+            'campaignMasters',
+            'activeUsers',
+            'adAccounts',
+            'allCampaigns',
+            'sortBy',
+            'sortDir'
+        ));
     }
 
     public function facebookIndex() {
@@ -740,8 +755,76 @@ class FacebookIntegrationController extends Controller
         }
     }
 
+    public function updateToken(Request $request)
+    {
+        $validated = $request->validate([
+            'access_token' => ['required', 'string', 'min:20'],
+            'target_type' => ['required', 'in:all,ad_account,campaign'],
+            'ad_account_id' => ['nullable', 'string'],
+            'campaign_id' => ['nullable', 'integer'],
+        ]);
+
+        $token = trim($validated['access_token']);
+        $targetType = $validated['target_type'];
+
+        try {
+            if ($targetType === 'all') {
+                $updatedAdAccounts = DB::table('ad_accounts')->update(['token' => $token]);
+                $updatedCampaigns = CampaignMaster::query()->update(['access_token' => $token]);
+                $message = "Facebook access token updated successfully for all ad accounts ({$updatedAdAccounts}) and campaigns ({$updatedCampaigns}).";
+            } elseif ($targetType === 'ad_account') {
+                $actId = trim((string) $request->input('ad_account_id'));
+                if ($actId === '') {
+                    return redirect()->back()->with('error', 'Please select an Ad Account to update.');
+                }
+
+                $candidates = collect([
+                    $actId,
+                    Str::startsWith($actId, 'act_') ? Str::after($actId, 'act_') : 'act_' . $actId,
+                ])->filter()->unique()->values();
+
+                $updatedAdAccounts = DB::table('ad_accounts')
+                    ->whereIn('act_id', $candidates)
+                    ->update(['token' => $token]);
+
+                $updatedCampaigns = CampaignMaster::whereIn('ad_id', $candidates)
+                    ->update(['access_token' => $token]);
+
+                $message = "Facebook access token updated for Ad Account ({$actId}) and {$updatedCampaigns} campaign(s).";
+            } elseif ($targetType === 'campaign') {
+                $campaignId = $request->input('campaign_id');
+                $campaign = CampaignMaster::find($campaignId);
+                if (!$campaign) {
+                    return redirect()->back()->with('error', 'Selected campaign not found.');
+                }
+
+                $campaign->forceFill(['access_token' => $token])->saveQuietly();
+                $message = "Facebook access token updated for campaign: {$campaign->campaign_name}.";
+            } else {
+                return redirect()->back()->with('error', 'Invalid target type selected.');
+            }
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => true, 'message' => $message]);
+            }
+
+            return redirect()->route('settings.facebook-integration')->with('success', $message);
+        } catch (\Throwable $th) {
+            Log::error('Error updating Facebook access token.', [
+                'message' => $th->getMessage(),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Failed to update token: ' . $th->getMessage()], 500);
+            }
+
+            return redirect()->back()->with('error', 'Failed to update Facebook access token: ' . $th->getMessage());
+        }
+    }
+
     public function syncAllCampaigns(FacebookLeadImporter $importer)
     {
+
         try {
             $summary = $importer->importIntegratedCampaigns();
 
