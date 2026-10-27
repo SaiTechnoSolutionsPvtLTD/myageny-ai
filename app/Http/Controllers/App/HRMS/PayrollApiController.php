@@ -112,7 +112,13 @@ class PayrollApiController extends Controller
                 }
             })
             ->when($request->filled('salary_cycle'), function ($q) use ($request) {
-                $q->where('salary_cycle', $request->salary_cycle);
+                if (in_array($request->salary_cycle, ['26_to_25', '25_to_25'], true)) {
+                    $q->whereIn('salary_cycle', ['26_to_25', '25_to_25']);
+                } elseif (in_array($request->salary_cycle, ['1_to_30', '10_to_10'], true)) {
+                    $q->whereIn('salary_cycle', ['1_to_30', '10_to_10']);
+                } else {
+                    $q->where('salary_cycle', $request->salary_cycle);
+                }
             })
             ->latest('salary_month');
 
@@ -155,7 +161,7 @@ class PayrollApiController extends Controller
                 'id'                 => $payroll->id,
                 'salary_month'       => optional($payroll->salary_month)->format('Y-m'),
                 'salary_month_label' => optional($payroll->salary_month)->format('M Y'),
-                'salary_cycle'       => $payroll->salary_cycle ?? '25_to_25',
+                'salary_cycle'       => $payroll->salary_cycle ?? '26_to_25',
                 'salary_date'        => optional($payroll->salary_date)->format('Y-m-d'),
                 'total_working_days' => (int) $payroll->total_working_days,
                 'employee_count'     => (int) $payroll->employee_count,
@@ -198,7 +204,7 @@ class PayrollApiController extends Controller
             ? Carbon::createFromFormat('Y-m', $request->string('month'))->startOfMonth()
             : now()->startOfMonth();
 
-        $selectedCycle = $request->input('salary_cycle', '25_to_25');
+        $selectedCycle = $request->input('salary_cycle', '26_to_25');
 
         $user = auth()->user();
         $selectedBranchId = $request->filled('branch_id')
@@ -252,7 +258,7 @@ class PayrollApiController extends Controller
             : now()->startOfMonth();
 
         $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
-        $selectedCycle    = $request->filled('salary_cycle') ? $request->string('salary_cycle')->value() : '25_to_25';
+        $selectedCycle    = $request->filled('salary_cycle') ? $request->string('salary_cycle')->value() : '26_to_25';
         $search = $request->string('search')->trim()->value();
         $user = auth()->user();
 
@@ -266,11 +272,13 @@ class PayrollApiController extends Controller
             })
             ->with(['role', 'portalUser', 'department'])
             ->when($selectedCycle, function ($query) use ($selectedCycle) {
-                if ($selectedCycle === '25_to_25') {
+                if (in_array($selectedCycle, ['26_to_25', '25_to_25'], true)) {
                     $query->where(function ($q) {
-                        $q->where('salary_cycle', '25_to_25')
+                        $q->whereIn('salary_cycle', ['26_to_25', '25_to_25'])
                           ->orWhereNull('salary_cycle');
                     });
+                } elseif (in_array($selectedCycle, ['1_to_30', '10_to_10'], true)) {
+                    $query->whereIn('salary_cycle', ['1_to_30', '10_to_10']);
                 } else {
                     $query->where('salary_cycle', $selectedCycle);
                 }
@@ -393,7 +401,7 @@ class PayrollApiController extends Controller
 
         $validated = $request->validate([
             'month'                          => ['required', 'date_format:Y-m'],
-            'salary_cycle'                   => ['nullable', 'string', 'in:25_to_25,10_to_10'],
+            'salary_cycle'                   => ['nullable', 'string', 'in:26_to_25,1_to_30,25_to_25,10_to_10'],
             'salary_date'                    => ['nullable', 'date'],
             'notes'                          => ['nullable', 'string'],
             'items'                          => ['required', 'array', 'min:1'],
@@ -423,7 +431,7 @@ class PayrollApiController extends Controller
         ]);
 
         $salaryMonth = Carbon::createFromFormat('Y-m', $validated['month'])->startOfMonth();
-        $salaryCycle = $validated['salary_cycle'] ?? '25_to_25';
+        $salaryCycle = $validated['salary_cycle'] ?? '26_to_25';
         $employeeIds = collect($validated['items'])->pluck('employee_onboarding_id')->all();
         $employees = EmployeeOnboarding::query()
             ->with('role')
@@ -521,7 +529,7 @@ class PayrollApiController extends Controller
                 'id'                 => $payroll->id,
                 'salary_month'       => optional($payroll->salary_month)->format('Y-m'),
                 'salary_month_label' => optional($payroll->salary_month)->format('M Y'),
-                'salary_cycle'       => $payroll->salary_cycle ?? '25_to_25',
+                'salary_cycle'       => $payroll->salary_cycle ?? '26_to_25',
                 'total_working_days' => (int) $payroll->total_working_days,
                 'employee_count'     => (int) $payroll->employee_count,
                 'gross_total'        => (float) $payroll->gross_total,
@@ -580,7 +588,7 @@ class PayrollApiController extends Controller
                 'id'                 => $payroll->id,
                 'salary_month'       => optional($payroll->salary_month)->format('Y-m'),
                 'salary_month_label' => optional($payroll->salary_month)->format('M Y'),
-                'salary_cycle'       => $payroll->salary_cycle ?? '25_to_25',
+                'salary_cycle'       => $payroll->salary_cycle ?? '26_to_25',
                 'salary_date'        => optional($payroll->salary_date)->format('Y-m-d'),
                 'total_working_days' => (int) $payroll->total_working_days,
                 'employee_count'     => (int) $payroll->employee_count,

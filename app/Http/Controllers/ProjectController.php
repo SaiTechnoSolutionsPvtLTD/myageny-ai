@@ -525,7 +525,11 @@ class ProjectController extends Controller
                 $project->balance_amount = max(0, $project->project_value - $project->received_amount);
 
                 $expVal = (float) ($project->expected_value ?? $project->leadProduct?->expected_value ?? 0);
-                $expDate = $project->expected_date ?? $project->leadProduct?->closure_date;
+                $formExpiry = $project->getFormExpiryDate();
+                $expDate = $project->expected_date
+                    ?? $project->leadProduct?->closure_date
+                    ?? ($formExpiry ? $formExpiry->toDateString() : null)
+                    ?? ($project->project_delivery_date ? (is_string($project->project_delivery_date) ? $project->project_delivery_date : $project->project_delivery_date->toDateString()) : null);
 
                 $project->expected_value = $expVal > 0 ? $expVal : 0;
                 $project->expected_date = !empty($expDate) ? $expDate : null;
@@ -2753,6 +2757,43 @@ class ProjectController extends Controller
         $tlAllocationSummaries = $this->tlAllocationSummaries($productionInitiation);
         $projectDeliveryDate = $this->projectDeliveryDate($productionInitiation);
 
+        // Auto-default prospect expected amount & expected date if empty (e.g. first time viewing)
+        $defaultExpectedVal = $productionInitiation->expected_value
+            ?? $productionInitiation->leadProduct?->expected_value
+            ?? ($productionInitiation->leadProduct?->total_price ?? $productionInitiation->lead_budget_amount ?? null);
+
+        $formExpiryDate = $productionInitiation->getFormExpiryDate();
+
+        $defaultExpectedDate = $productionInitiation->expected_date
+            ?? $productionInitiation->leadProduct?->closure_date
+            ?? ($formExpiryDate ? $formExpiryDate->toDateString() : null)
+            ?? ($projectDeliveryDate ? $projectDeliveryDate->toDateString() : null);
+
+        $needsProspectSave = false;
+        if (($productionInitiation->expected_value === null || (float)$productionInitiation->expected_value <= 0) && (float)$defaultExpectedVal > 0) {
+            $productionInitiation->expected_value = (float) $defaultExpectedVal;
+            $needsProspectSave = true;
+        }
+        if (empty($productionInitiation->expected_date) && !empty($defaultExpectedDate)) {
+            $productionInitiation->expected_date = $defaultExpectedDate;
+            $needsProspectSave = true;
+        }
+        if ($needsProspectSave) {
+            $productionInitiation->save();
+            if ($productionInitiation->leadProduct) {
+                $lpSync = [];
+                if ($productionInitiation->expected_value !== null) {
+                    $lpSync['expected_value'] = $productionInitiation->expected_value;
+                }
+                if ($productionInitiation->expected_date) {
+                    $lpSync['closure_date'] = $productionInitiation->expected_date;
+                }
+                if (!empty($lpSync)) {
+                    $productionInitiation->leadProduct->update($lpSync);
+                }
+            }
+        }
+
         $testingTlUsers = User::with(['roles.department', 'branch'])
             ->where('is_active', true)
             ->get()
@@ -3918,10 +3959,15 @@ class ProjectController extends Controller
         $expectedDate = !empty($validated['expected_date']) ? Carbon::parse($validated['expected_date'])->toDateString() : null;
         $expectedValue = isset($validated['expected_value']) && $validated['expected_value'] !== '' && $validated['expected_value'] !== null ? (float) $validated['expected_value'] : null;
 
-        $productionInitiation->update([
+        $updateData = [
             'expected_date'  => $expectedDate,
             'expected_value' => $expectedValue,
-        ]);
+        ];
+        if ($expectedDate) {
+            $updateData['project_delivery_date'] = $expectedDate;
+        }
+
+        $productionInitiation->update($updateData);
 
         if ($productionInitiation->leadProduct) {
             $productionInitiation->leadProduct->update([

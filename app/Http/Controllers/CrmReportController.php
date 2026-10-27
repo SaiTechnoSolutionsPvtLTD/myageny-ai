@@ -543,27 +543,47 @@ class CrmReportController extends Controller
         }
 
         $validated = $request->validate([
-            'payment_type' => ['required', 'string', 'in:new_sale,balance_payment,renewals'],
-            'payment_date' => ['required', 'date'],
-            'amount'       => ['required', 'numeric', 'min:0.01'],
+            'payment_type'     => ['required', 'string', 'in:new_sale,balance_payment,renewals,ad_budget_partner'],
+            'payment_date'     => ['required', 'date'],
+            'amount'           => ['required', 'numeric', 'min:0.01'],
+            'payment_mode'     => ['nullable', 'string', 'in:cash,bank_transfer,cheque,upi,card'],
+            'reference_number' => ['nullable', 'string', 'max:255'],
+            'notes'            => ['nullable', 'string', 'max:1000'],
+            'is_tds_deducted'  => ['nullable'],
+            'tds_percentage'   => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tds_amount'       => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $oldValues = [
-            'payment_type' => $payment->payment_type,
-            'payment_date' => $payment->payment_date?->format('Y-m-d'),
-            'amount'       => (float) $payment->amount,
+            'payment_type'     => $payment->payment_type,
+            'payment_date'     => $payment->payment_date?->format('Y-m-d'),
+            'amount'           => (float) $payment->amount,
+            'payment_mode'     => $payment->payment_mode,
+            'reference_number' => $payment->reference_number,
+            'notes'            => $payment->notes,
+            'is_tds_deducted'  => (bool) $payment->is_tds_deducted,
+            'tds_percentage'   => (float) ($payment->tds_percentage ?? 0),
+            'tds_amount'       => (float) ($payment->tds_amount ?? 0),
         ];
 
         DB::transaction(function () use ($payment, $validated, $user, $oldValues) {
             $newAmount = (float) $validated['amount'];
+            $isTds = !empty($validated['is_tds_deducted']) && (string)$validated['is_tds_deducted'] !== '0';
+            $tdsPercent = $isTds && isset($validated['tds_percentage']) ? (float) $validated['tds_percentage'] : null;
+            $tdsAmount = $isTds && isset($validated['tds_amount']) ? (float) $validated['tds_amount'] : null;
 
-            $payment->payment_type = $validated['payment_type'];
-            $payment->payment_date = $validated['payment_date'];
-            $payment->amount       = $newAmount;
-
-            if ($payment->is_tds_deducted) {
-                $payment->after_tds_amount = $newAmount;
+            $payment->payment_type     = $validated['payment_type'];
+            $payment->payment_date     = $validated['payment_date'];
+            $payment->amount           = $newAmount;
+            if (isset($validated['payment_mode'])) {
+                $payment->payment_mode = $validated['payment_mode'];
             }
+            $payment->reference_number = $validated['reference_number'] ?? null;
+            $payment->notes            = $validated['notes'] ?? null;
+            $payment->is_tds_deducted  = $isTds;
+            $payment->tds_percentage   = $tdsPercent;
+            $payment->tds_amount       = $tdsAmount;
+            $payment->after_tds_amount = $isTds ? $newAmount : null;
 
             $payment->save();
 
@@ -578,9 +598,14 @@ class CrmReportController extends Controller
                 'product_name' => $payment->leadProduct?->product_name,
                 'old_values'   => $oldValues,
                 'new_values'   => [
-                    'payment_type' => $payment->payment_type,
-                    'payment_date' => $validated['payment_date'],
-                    'amount'       => $newAmount,
+                    'payment_type'     => $payment->payment_type,
+                    'payment_date'     => $validated['payment_date'],
+                    'amount'           => $newAmount,
+                    'payment_mode'     => $payment->payment_mode,
+                    'reference_number' => $payment->reference_number,
+                    'is_tds_deducted'  => $isTds,
+                    'tds_percentage'   => $tdsPercent,
+                    'tds_amount'       => $tdsAmount,
                 ],
             ]);
         });
@@ -589,11 +614,66 @@ class CrmReportController extends Controller
             'success' => true,
             'message' => 'Payment details updated successfully.',
             'payment' => [
-                'id'           => $payment->id,
-                'payment_type' => $payment->payment_type,
-                'payment_date' => $payment->payment_date?->format('Y-m-d'),
-                'amount'       => (float) $payment->amount,
+                'id'                 => $payment->id,
+                'payment_type'       => $payment->payment_type,
+                'payment_date'       => $payment->payment_date?->format('Y-m-d'),
+                'amount'             => (float) $payment->amount,
+                'payment_mode'       => $payment->payment_mode,
+                'reference_number'   => $payment->reference_number,
+                'notes'              => $payment->notes,
+                'is_tds_deducted'    => (bool) $payment->is_tds_deducted,
+                'tds_percentage'     => (float) ($payment->tds_percentage ?? 0),
+                'tds_amount'         => (float) ($payment->tds_amount ?? 0),
             ],
+        ]);
+    }
+
+    public function destroyPaymentCollection(Request $request, $payment): JsonResponse
+    {
+        $user = auth()->user();
+        $canDelete = $user && (
+            $user->isSuperAdmin() ||
+            $user->hasRole('super_admin') ||
+            $user->isCompanyAdmin() ||
+            $user->isCompanyAdminRole() ||
+            $user->hasRole('company_admin')
+        );
+
+        if (! $canDelete) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only Company Admin can delete payment records.',
+            ], 403);
+        }
+
+        if (! ($payment instanceof LeadProductPayment)) {
+            $payment = LeadProductPayment::findOrFail($payment);
+        }
+
+        if ($user && ! $user->isSuperAdmin() && ! $user->hasRole('super_admin')) {
+            $paymentLead = $payment->lead;
+            if ($user->company_id && $paymentLead && (int) $paymentLead->company_id !== (int) $user->company_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. You can only delete payments for your company.',
+                ], 403);
+            }
+        }
+
+        $payment->load('leadProduct');
+        ActivityLogger::logPayment('delete', $payment, $payment->lead_id, $user, [
+            'product_name' => $payment->leadProduct?->product_name,
+        ]);
+
+        // Soft delete payment record (sets deleted_at)
+        $payment->delete();
+
+        // Sync parent lead product payment status & amount_paid
+        $payment->leadProduct?->syncPaymentStatus();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment record deleted successfully.',
         ]);
     }
 
@@ -866,9 +946,11 @@ class CrmReportController extends Controller
                 'lead_product_payments.tds_percentage',
                 'lead_product_payments.is_tds_deducted',
                 'lead_product_payments.payment_type',
+                'lead_product_payments.notes',
                 'leads.id as customer_id',
                 'leads.company_name',
                 'lead_products.product_name',
+                'lead_products.total_price',
                 'branches.name as branch_name',
                 DB::raw('COALESCE(NULLIF(leads.contact_name, ""), NULLIF(leads.company_name, ""), CONCAT("Lead #", leads.id)) as customer_name'),
                 DB::raw('CASE WHEN lead_product_payments.payment_type = "balance_payment" THEN 0 ELSE (COALESCE(lead_product_payments.amount, 0) + COALESCE(lead_product_payments.tds_amount, 0) + GREATEST(COALESCE(lead_products.total_price, 0) - (SELECT COALESCE(SUM(p2.amount + COALESCE(p2.tds_amount, 0)), 0) FROM lead_product_payments p2 WHERE p2.lead_product_id = lead_product_payments.lead_product_id AND (p2.payment_date < lead_product_payments.payment_date OR (p2.payment_date = lead_product_payments.payment_date AND p2.id <= lead_product_payments.id))), 0)) END as total_amount'),

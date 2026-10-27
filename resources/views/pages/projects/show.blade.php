@@ -241,7 +241,11 @@
     $lead = $projectItem->lead;
     $leadProduct = $projectItem->leadProduct;
     $salesPerson = $lead?->assignedTo ?: $lead?->createdBy;
-    $salesPersonRole = trim((string) ($salesPerson?->designation ?? ''));
+    $rawSalesDesignation = trim((string) ($salesPerson?->designation ?? ''));
+    $salesPersonRole = (!empty($salesPerson?->role_display_name) && $salesPerson->role_display_name !== 'No Role')
+        ? $salesPerson->role_display_name
+        : ($salesPerson?->employeeOnboarding?->role?->display_name
+            ?: (!preg_match('/^[0-9+\s\-().]{6,}$/', $rawSalesDesignation) ? $rawSalesDesignation : 'Sales Executive'));
     $leadDisplayId = $lead?->id ? 'LD-' . str_pad((string) $lead->id, 4, '0', STR_PAD_LEFT) : 'Not available';
     $productValue = (float) ($leadProduct?->total_price ?? 0);
     $receivedAmount = (float) ($leadProduct?->payments?->sum('amount') ?? $leadProduct?->amount_paid ?? 0);
@@ -379,8 +383,14 @@
         $currentUser->isCompanyAdmin()
     ));
 
-    $prospectExpectedDate = $projectItem->expected_date ?? $projectItem->leadProduct?->closure_date;
-    $prospectExpectedValue = $projectItem->expected_value ?? $projectItem->leadProduct?->expected_value;
+    $formExpiryDate = $projectItem->getFormExpiryDate();
+    $prospectExpectedDate = $projectItem->expected_date
+        ?? $projectItem->leadProduct?->closure_date
+        ?? ($formExpiryDate ? $formExpiryDate->toDateString() : null)
+        ?? $projectItem->project_delivery_date;
+    $prospectExpectedValue = $projectItem->expected_value
+        ?? $projectItem->leadProduct?->expected_value
+        ?? ($projectItem->leadProduct?->total_price ?? $projectItem->lead_budget_amount ?? null);
 
     if ($activeTab === 'testing' && ! $canSeeTestingTab) {
         $activeTab = 'overview';
@@ -1786,11 +1796,11 @@
                                         <span style="font-size: 11.5px; font-weight: 800; color: #c2410c; text-transform: uppercase; letter-spacing: 0.05em;">Client Details</span>
                                         <span style="width: 32px; height: 32px; border-radius: 8px; background: #ffedd5; color: #c2410c; display: flex; align-items: center; justify-content: center; font-size: 15px;">👤</span>
                                     </div>
-                                    <div style="font-size: 16px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $projectItem->client_name ?: ($projectItem->lead?->client_name ?? '-') }}">
-                                        {{ $projectItem->client_name ?: ($projectItem->lead?->client_name ?? '-') }}
+                                    <div style="font-size: 16px; font-weight: 800; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $projectItem->client_name ?: ($lead?->contact_name ?: ($projectItem->lead?->contact_name ?: '-')) }}">
+                                        {{ $projectItem->client_name ?: ($lead?->contact_name ?: ($projectItem->lead?->contact_name ?: '-')) }}
                                     </div>
                                     <div style="font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600;">
-                                        {{ $projectItem->company_name ?: ($projectItem->lead?->company_name ?? '-') }}
+                                        {{ $projectItem->company_name ?: ($lead?->company_name ?: ($projectItem->lead?->company_name ?? '-')) }}
                                     </div>
                                 </div>
                             </div>

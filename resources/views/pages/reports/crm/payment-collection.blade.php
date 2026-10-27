@@ -319,6 +319,57 @@
     transform: translateY(-1px);
     box-shadow: 0 4px 10px rgba(22, 163, 74, 0.12);
 }
+.crm-pay-del-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #fecaca;
+    background: #ffffff;
+    color: #dc2626;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.crm-pay-del-btn:hover {
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #b91c1c;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.12);
+}
+.ppf-mode-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 7px;
+}
+.ppf-mode-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    border-radius: 10px;
+    border: 1.5px solid #e2e8f0;
+    background: #ffffff;
+    cursor: pointer;
+    transition: all .15s ease;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    user-select: none;
+    text-align: center;
+}
+.ppf-mode-tile:hover, .ppf-mode-tile.pp-sel {
+    border-color: #fe5f04;
+    background: #fff0e6;
+    color: #fe5f04;
+}
+.ppf-mode-ico {
+    font-size: 18px;
+}
 .crm-modal-overlay {
     position: fixed;
     inset: 0;
@@ -885,7 +936,7 @@
                                     <th>Transaction Reference</th>
                                     <th>Received By</th>
                                     @if($isSuperAdmin)
-                                        <th style="text-align:center; width:90px;">Action</th>
+                                        <th style="text-align:center; width:150px;">Actions</th>
                                     @endif
                                 </tr>
                             </thead>
@@ -976,23 +1027,46 @@
                                         </td>
                                         @if($isSuperAdmin)
                                             <td onclick="event.stopPropagation();" style="text-align:center; white-space:nowrap;">
-                                                <button type="button"
-                                                        class="crm-pay-edit-btn"
-                                                        title="Edit Payment"
-                                                        onclick="event.stopPropagation(); openEditPaymentModal({
-                                                            id: {{ $row->payment_id }},
-                                                            code: 'PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}',
-                                                            customer: '{{ addslashes($row->company_name ?: $row->customer_name) }}',
-                                                            payment_type: '{{ $row->payment_type ?: $row->collection_type }}',
-                                                            payment_date: '{{ $row->payment_date ? \Illuminate\Support\Carbon::parse($row->payment_date)->format('Y-m-d') : '' }}',
-                                                            amount: '{{ (float) ($row->received_amount ?? 0) }}'
-                                                        })">
-                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                                    </svg>
-                                                    <span>Edit</span>
-                                                </button>
+                                                <div style="display:inline-flex; align-items:center; gap:6px;">
+                                                    <button type="button"
+                                                            class="crm-pay-edit-btn"
+                                                            title="Edit Payment"
+                                                            onclick="event.stopPropagation(); openEditPaymentModal({
+                                                                id: {{ $row->payment_id }},
+                                                                code: 'PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}',
+                                                                customer: '{{ addslashes($row->company_name ?: $row->customer_name) }}',
+                                                                product_name: '{{ addslashes($row->product_name ?? 'Product Payment') }}',
+                                                                total_price: '{{ (float) ($row->total_amount ?? 0) }}',
+                                                                outstanding: '{{ (float) ($row->outstanding_amount ?? 0) }}',
+                                                                payment_type: '{{ $row->payment_type ?: $row->collection_type }}',
+                                                                payment_date: '{{ $row->payment_date ? \Illuminate\Support\Carbon::parse($row->payment_date)->format('Y-m-d') : '' }}',
+                                                                amount: '{{ (float) ($row->received_amount ?? 0) }}',
+                                                                payment_mode: '{{ $row->payment_mode ?: 'upi' }}',
+                                                                reference_number: '{{ addslashes($row->transaction_reference ?: '') }}',
+                                                                notes: '{{ addslashes($row->notes ?: '') }}',
+                                                                is_tds_deducted: {{ $row->is_tds_deducted ? 1 : 0 }},
+                                                                tds_percentage: '{{ (float) ($row->tds_percentage ?? 0) }}',
+                                                                tds_amount: '{{ (float) ($row->tds_amount ?? 0) }}'
+                                                            })">
+                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                                        </svg>
+                                                        <span>Edit</span>
+                                                    </button>
+                                                    <button type="button"
+                                                            class="crm-pay-del-btn"
+                                                            title="Delete Payment (Soft Delete)"
+                                                            onclick="event.stopPropagation(); handleDeletePayment({{ $row->payment_id }}, 'PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}', '{{ addslashes($row->company_name ?: $row->customer_name) }}', '{{ (float) ($row->received_amount ?? 0) }}')">
+                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                                                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                                                        </svg>
+                                                        <span>Delete</span>
+                                                    </button>
+                                                </div>
                                             </td>
                                         @endif
                                     </tr>
@@ -1109,50 +1183,146 @@
 
 @if($isSuperAdmin)
 <div id="crmEditPaymentModal" class="crm-modal-overlay" style="display:none;" onclick="if(event.target === this) closeEditPaymentModal()">
-    <div class="crm-modal-card" role="dialog" aria-modal="true" aria-labelledby="crmEditPaymentTitle">
-        <div class="crm-modal-header">
+    <div class="crm-modal-card" style="max-width: 580px; max-height: 90vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="crmEditPaymentTitle">
+        <div class="crm-modal-header" style="position: sticky; top: 0; background: #fff; z-index: 10;">
             <div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span id="crmEditModalCode" class="crm-pay-code" style="font-size:13px; font-weight:800; background:#f1f5f9; padding:3px 8px; border-radius:6px; color:#0f172a;"></span>
                     <span class="crm-modal-badge">Admin Access</span>
                 </div>
-                <h3 id="crmEditPaymentTitle" class="crm-modal-title">Edit Payment Details</h3>
-                <p id="crmEditModalCustomer" class="crm-modal-sub"></p>
+                <h3 id="crmEditPaymentTitle" class="crm-modal-title" style="margin: 8px 0 2px; font-size: 16px; font-weight: 800; color: #121212;">
+                    💳 Edit Payment — <span id="crmEditModalProductName" style="color:#fe5f04;"></span>
+                </h3>
+                <p id="crmEditModalCustomer" class="crm-modal-sub" style="font-size: 13px; color: #64748b; font-weight: 600;"></p>
             </div>
             <button type="button" class="crm-modal-close" onclick="closeEditPaymentModal()" aria-label="Close">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         </div>
 
+        <div style="padding: 12px 24px; background: #fafafa; border-bottom: 1px solid #f0eef2;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                    <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: #9e9e9e; margin-bottom: 3px;">Total Deal Value</div>
+                    <div id="crmEditModalTotal" style="font-size: 15px; font-weight: 800; color: #0f172a;">₹0.00</div>
+                </div>
+                <div>
+                    <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: #9e9e9e; margin-bottom: 3px;">Balance Due</div>
+                    <div id="crmEditModalBalance" style="font-size: 15px; font-weight: 800; color: #dc2626;">₹0.00</div>
+                </div>
+            </div>
+        </div>
+
         <form id="crmEditPaymentForm" onsubmit="handleEditPaymentSubmit(event)">
             <input type="hidden" id="edit_payment_id" name="payment_id">
+            <input type="hidden" id="edit_payment_mode" name="payment_mode" value="upi">
 
-            <div id="crmEditModalAlert" style="display:none; margin: 0 24px 16px 24px; padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; line-height: 1.4;"></div>
+            <div id="crmEditModalAlert" style="display:none; margin: 14px 24px 0 24px; padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; line-height: 1.4;"></div>
 
-            <div class="crm-modal-body">
-                <div class="crm-modal-field">
-                    <label class="crm-modal-label" for="edit_payment_type">Payment Type <span style="color:#ef4444;">*</span></label>
-                    <select id="edit_payment_type" name="payment_type" class="crm-modal-select" required>
-                        <option value="new_sale">New Sales</option>
-                        <option value="balance_payment">Balance Payment</option>
-                        <option value="renewals">Renewals</option>
-                    </select>
+            <div class="crm-modal-body" style="padding: 18px 24px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="crm-modal-field">
+                        <label class="crm-modal-label" for="edit_payment_type">Payment Type <span style="color:#ef4444;">*</span></label>
+                        <select id="edit_payment_type" name="payment_type" class="crm-modal-select" required style="cursor: pointer;">
+                            <option value="new_sale">New Sale</option>
+                            <option value="balance_payment">Balance Payment</option>
+                            <option value="renewals">Renewals</option>
+                        </select>
+                    </div>
+
+                    <div class="crm-modal-field">
+                        <label class="crm-modal-label" for="edit_amount">Amount Received ₹ <span style="color:#ef4444;">*</span></label>
+                        <input type="number" step="0.01" min="0.01" id="edit_amount" name="amount" class="crm-modal-input" placeholder="0.00" required oninput="recalculateCrmEditTds()">
+                    </div>
+                </div>
+
+                <!-- Deduct TDS Checkbox & Section -->
+                <div style="margin-top: 4px; margin-bottom: 4px; display: flex; align-items: center; width: fit-content;">
+                    <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #1e293b; cursor: pointer; user-select: none;">
+                        <input type="checkbox" id="edit_is_tds_deducted" name="is_tds_deducted" value="1" style="width: 17px; height: 17px; accent-color: #fe5f04; cursor: pointer;" onchange="toggleCrmEditTds(this.checked)">
+                        <span>Deduct TDS</span>
+                    </label>
+                </div>
+
+                <div id="crm_edit_tds_container" style="display: none; background: #fff8f5; border: 1px solid #fed7aa; border-radius: 10px; padding: 12px 14px;">
+                    <div class="crm-modal-field" style="margin-bottom: 8px;">
+                        <label class="crm-modal-label" style="color: #9a3412;">TDS Percentage (%) <span style="color:#ef4444;">*</span></label>
+                        <input type="number" id="edit_tds_percentage" name="tds_percentage" class="crm-modal-input"
+                               placeholder="Enter TDS % (e.g. 1, 2, 5, 10)" step="0.01" min="0.01" max="100" list="crm-edit-tds-percentages"
+                               oninput="recalculateCrmEditTds()" style="font-weight: 600;">
+                        <datalist id="crm-edit-tds-percentages">
+                            <option value="1">1%</option>
+                            <option value="2">2%</option>
+                            <option value="5">5%</option>
+                            <option value="10">10%</option>
+                            <option value="20">20%</option>
+                        </datalist>
+                    </div>
+
+                    <!-- Dynamic TDS Breakdown Box -->
+                    <div id="crm_edit_tds_breakdown" style="display: none; margin-top: 10px; padding: 10px 12px; background: #ffffff; border: 1px solid #fdba74; border-radius: 8px; font-size: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #475569;">
+                            <span>TDS Percentage:</span>
+                            <span id="crm_edit_tds_disp_percent" style="font-weight: 600; color: #1e293b;">0%</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #ea580c;">
+                            <span>TDS Deduction Amount:</span>
+                            <span id="crm_edit_tds_disp_amount" style="font-weight: 600; color: #dc2626;">-₹0.00</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 13px; font-weight: 700; color: #16a34a;">
+                            <span>Gross Settlement Amount:</span>
+                            <span id="crm_edit_tds_disp_gross">₹0.00</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="crm-modal-field">
-                    <label class="crm-modal-label" for="edit_payment_date">Date Received <span style="color:#ef4444;">*</span></label>
-                    <input type="date" id="edit_payment_date" name="payment_date" class="crm-modal-input" required>
+                    <label class="crm-modal-label">Payment Mode <span style="color:#ef4444;">*</span></label>
+                    <div class="ppf-mode-grid">
+                        <div class="ppf-mode-tile" data-val="cash" onclick="pickCrmEditMode(this)">
+                            <div class="ppf-mode-ico">💵</div>
+                            Cash
+                        </div>
+                        <div class="ppf-mode-tile" data-val="bank_transfer" onclick="pickCrmEditMode(this)">
+                            <div class="ppf-mode-ico">🏦</div>
+                            Bank Transfer
+                        </div>
+                        <div class="ppf-mode-tile" data-val="cheque" onclick="pickCrmEditMode(this)">
+                            <div class="ppf-mode-ico">📝</div>
+                            Cheque
+                        </div>
+                        <div class="ppf-mode-tile pp-sel" data-val="upi" onclick="pickCrmEditMode(this)">
+                            <div class="ppf-mode-ico">📱</div>
+                            UPI
+                        </div>
+                        <div class="ppf-mode-tile" data-val="card" onclick="pickCrmEditMode(this)">
+                            <div class="ppf-mode-ico">💳</div>
+                            Card
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="crm-modal-field">
+                        <label class="crm-modal-label" for="edit_payment_date">Payment Date <span style="color:#ef4444;">*</span></label>
+                        <input type="date" id="edit_payment_date" name="payment_date" class="crm-modal-input" required>
+                    </div>
+                    <div class="crm-modal-field">
+                        <label class="crm-modal-label" for="edit_reference_number">Reference / UTR No.</label>
+                        <input type="text" id="edit_reference_number" name="reference_number" class="crm-modal-input" placeholder="Txn ID / Cheque No.">
+                    </div>
                 </div>
 
                 <div class="crm-modal-field">
-                    <label class="crm-modal-label" for="edit_amount">Received Amount (₹) <span style="color:#ef4444;">*</span></label>
-                    <input type="number" step="0.01" min="0.01" id="edit_amount" name="amount" class="crm-modal-input" placeholder="0.00" required>
+                    <label class="crm-modal-label" for="edit_notes">Notes</label>
+                    <textarea id="edit_notes" name="notes" class="crm-modal-input" placeholder="Optional note…" rows="2" style="resize:vertical; min-height:60px;"></textarea>
                 </div>
             </div>
 
-            <div class="crm-modal-footer">
+            <div class="crm-modal-footer" style="position: sticky; bottom: 0; background: #f8fafc; z-index: 10;">
                 <button type="button" class="crm-modal-btn crm-modal-btn-cancel" onclick="closeEditPaymentModal()">Cancel</button>
-                <button type="submit" id="crmEditModalSubmitBtn" class="crm-modal-btn crm-modal-btn-save">
+                <button type="submit" id="crmEditModalSubmitBtn" class="crm-modal-btn crm-modal-btn-save" style="display: inline-flex; align-items: center; gap: 6px;">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                     <span id="crmEditModalSubmitText">Save Changes</span>
                     <span id="crmEditModalSpinner" style="display:none;">Saving...</span>
                 </button>
@@ -1451,11 +1621,65 @@ document.addEventListener('DOMContentLoaded', function() {
 
 @if($isSuperAdmin)
 const CRM_UPDATE_URL_TEMPLATE = "{{ route('reports.crm.payment-collection.update', ':id') }}";
+const CRM_DELETE_URL_TEMPLATE = "{{ route('reports.crm.payment-collection.delete', ':id') }}";
+
+function pickCrmEditMode(tile) {
+    document.querySelectorAll('#crmEditPaymentModal .ppf-mode-tile').forEach(t => t.classList.remove('pp-sel'));
+    tile.classList.add('pp-sel');
+    const val = tile.getAttribute('data-val');
+    document.getElementById('edit_payment_mode').value = val;
+}
+
+function toggleCrmEditTds(isChecked) {
+    const container = document.getElementById('crm_edit_tds_container');
+    const percentInp = document.getElementById('edit_tds_percentage');
+    const breakdown = document.getElementById('crm_edit_tds_breakdown');
+
+    if (isChecked) {
+        if (container) container.style.display = 'block';
+        if (percentInp && !percentInp.value) {
+            percentInp.focus();
+        }
+        recalculateCrmEditTds();
+    } else {
+        if (container) container.style.display = 'none';
+        if (percentInp) percentInp.value = '';
+        if (breakdown) breakdown.style.display = 'none';
+    }
+}
+
+function recalculateCrmEditTds() {
+    const chk = document.getElementById('edit_is_tds_deducted');
+    const breakdown = document.getElementById('crm_edit_tds_breakdown');
+    if (!chk || !chk.checked) {
+        if (breakdown) breakdown.style.display = 'none';
+        return;
+    }
+
+    const amount = parseFloat(document.getElementById('edit_amount')?.value || 0);
+    const percent = parseFloat(document.getElementById('edit_tds_percentage')?.value || 0);
+
+    if (percent > 0 && amount > 0) {
+        const tdsAmount = Math.round((amount * percent / 100) * 100) / 100;
+        const grossAmount = Math.round((amount + tdsAmount) * 100) / 100;
+
+        document.getElementById('crm_edit_tds_disp_percent').textContent = percent + '%';
+        document.getElementById('crm_edit_tds_disp_amount').textContent = '- ₹' + tdsAmount.toLocaleString('en-IN', {minimumFractionDigits: 2});
+        document.getElementById('crm_edit_tds_disp_gross').textContent = '₹' + grossAmount.toLocaleString('en-IN', {minimumFractionDigits: 2});
+
+        if (breakdown) breakdown.style.display = 'block';
+    } else {
+        if (breakdown) breakdown.style.display = 'none';
+    }
+}
 
 function openEditPaymentModal(data) {
     document.getElementById('edit_payment_id').value = data.id;
     document.getElementById('crmEditModalCode').textContent = data.code;
     document.getElementById('crmEditModalCustomer').textContent = data.customer ? `Customer: ${data.customer}` : '';
+    document.getElementById('crmEditModalProductName').textContent = data.product_name || 'Product Payment';
+    document.getElementById('crmEditModalTotal').textContent = '₹' + Number(data.total_price || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    document.getElementById('crmEditModalBalance').textContent = '₹' + Number(data.outstanding || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
     
     let rawType = (data.payment_type || '').toLowerCase().trim().replace(/[\s-]/g, '_');
     let pType = 'new_sale';
@@ -1495,6 +1719,26 @@ function openEditPaymentModal(data) {
 
     document.getElementById('edit_payment_date').value = data.payment_date || '';
     document.getElementById('edit_amount').value = data.amount || '';
+    document.getElementById('edit_reference_number').value = data.reference_number || '';
+    document.getElementById('edit_notes').value = data.notes || '';
+
+    // Payment Mode
+    const mode = (data.payment_mode || 'upi').toLowerCase();
+    document.getElementById('edit_payment_mode').value = mode;
+    document.querySelectorAll('#crmEditPaymentModal .ppf-mode-tile').forEach(t => {
+        if (t.getAttribute('data-val') === mode) {
+            t.classList.add('pp-sel');
+        } else {
+            t.classList.remove('pp-sel');
+        }
+    });
+
+    // TDS
+    const isTds = !!(data.is_tds_deducted == 1 || data.is_tds_deducted === true);
+    const tdsChk = document.getElementById('edit_is_tds_deducted');
+    if (tdsChk) tdsChk.checked = isTds;
+    document.getElementById('edit_tds_percentage').value = isTds ? (data.tds_percentage || '') : '';
+    toggleCrmEditTds(isTds);
 
     const alertBox = document.getElementById('crmEditModalAlert');
     if (alertBox) {
@@ -1516,6 +1760,12 @@ async function handleEditPaymentSubmit(e) {
     const paymentType = document.getElementById('edit_payment_type').value;
     const paymentDate = document.getElementById('edit_payment_date').value;
     const amount = document.getElementById('edit_amount').value;
+    const paymentMode = document.getElementById('edit_payment_mode').value;
+    const ref = document.getElementById('edit_reference_number').value;
+    const notes = document.getElementById('edit_notes').value;
+    const isTds = document.getElementById('edit_is_tds_deducted')?.checked ? 1 : 0;
+    const tdsPercentage = isTds ? parseFloat(document.getElementById('edit_tds_percentage')?.value || 0) : null;
+    const tdsAmount = isTds && tdsPercentage > 0 ? (parseFloat(amount) * tdsPercentage / 100) : null;
 
     const alertBox = document.getElementById('crmEditModalAlert');
     const submitBtn = document.getElementById('crmEditModalSubmitBtn');
@@ -1540,7 +1790,13 @@ async function handleEditPaymentSubmit(e) {
             body: JSON.stringify({
                 payment_type: paymentType,
                 payment_date: paymentDate,
-                amount: amount
+                amount: amount,
+                payment_mode: paymentMode,
+                reference_number: ref,
+                notes: notes,
+                is_tds_deducted: isTds,
+                tds_percentage: tdsPercentage,
+                tds_amount: tdsAmount
             })
         });
 
@@ -1551,7 +1807,7 @@ async function handleEditPaymentSubmit(e) {
             closeEditPaymentModal();
             setTimeout(() => {
                 window.location.reload();
-            }, 700);
+            }, 600);
         } else {
             let errorMsg = result.message || 'Failed to update payment.';
             if (result.errors) {
@@ -1581,6 +1837,38 @@ async function handleEditPaymentSubmit(e) {
         submitBtn.disabled = false;
         submitText.style.display = 'inline';
         spinner.style.display = 'none';
+    }
+}
+
+async function handleDeletePayment(id, code, customer, amount) {
+    const formattedAmount = Number(amount || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    if (!confirm(`Are you sure you want to delete payment record ${code} (₹${formattedAmount}) for ${customer}?\n\nThis will soft-delete the payment and automatically recalculate collection amounts.`)) {
+        return;
+    }
+
+    const url = CRM_DELETE_URL_TEMPLATE.replace(':id', id);
+
+    try {
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}'
+            }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showCrmToast(result.message || 'Payment deleted successfully!', 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 600);
+        } else {
+            showCrmToast(result.message || 'Failed to delete payment.', 'error');
+        }
+    } catch (err) {
+        showCrmToast('A network error occurred. Please try again.', 'error');
     }
 }
 

@@ -706,10 +706,10 @@
                             <div class="eob-group">
                                 <label class="eob-label">Salary Cycle <span style="color:#ef4444;">*</span></label>
                                 <select name="salary_cycle" class="eob-select">
-                                    <option value="25_to_25" @selected(old('salary_cycle', $employee?->salary_cycle ?? '25_to_25') === '25_to_25')>25 to 25 days cycle</option>
-                                    <option value="10_to_10" @selected(old('salary_cycle', $employee?->salary_cycle) === '10_to_10')>10 to 10 cycle</option>
+                                    <option value="26_to_25" @selected(in_array(old('salary_cycle', $employee?->salary_cycle ?? '26_to_25'), ['26_to_25', '25_to_25']))>26 to 25 cycle</option>
+                                    <option value="1_to_30" @selected(in_array(old('salary_cycle', $employee?->salary_cycle), ['1_to_30', '10_to_10']))>1 to 30 cycle</option>
                                 </select>
-                                <div class="eob-help">Determines attendance & salary calculation cycle (e.g. 25th to 25th or 10th to 10th).</div>
+                                <div class="eob-help">Determines attendance & salary calculation cycle (e.g. 26th to 25th or 1st to 30th/31st).</div>
                                 @error('salary_cycle')<div class="eob-error">{{ $message }}</div>@enderror
                             </div>
                             <div class="eob-group">

@@ -199,4 +199,93 @@ class ProductionInitiation extends Model
     {
         return $this->hasOne(ProductionCountReport::class);
     }
+
+    /**
+     * Extract expiry / end date from custom_form_data (Priority 2 for Renewal expected date).
+     */
+    public function getFormExpiryDate(): ?\Carbon\Carbon
+    {
+        $formData = is_array($this->custom_form_data)
+            ? $this->custom_form_data
+            : (json_decode($this->custom_form_data ?? '[]', true) ?? []);
+
+        if (!is_array($formData)) {
+            return null;
+        }
+
+        $keywords = [
+            'ovp_end_date', 'ovp end date', 'end_date', 'enddate', 'end date',
+            'ovp_renewal_date', 'renewal_date', 'renewal date',
+            'smm_end_date', 'smm end date', 'campaign_expiry', 'campaign expiry',
+            'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'expiry', 'end'
+        ];
+
+        foreach ($formData as $field) {
+            if (!is_array($field)) {
+                continue;
+            }
+
+            $fieldKey   = $field['field_name'] ?? '';
+            $fieldLabel = $field['label'] ?? ($field['key'] ?? '');
+            $fieldVal   = $field['value'] ?? '';
+
+            $key   = strtolower(is_array($fieldKey) ? implode(' ', array_filter(array_map('strval', $fieldKey))) : trim((string) $fieldKey));
+            $label = strtolower(is_array($fieldLabel) ? implode(' ', array_filter(array_map('strval', $fieldLabel))) : trim((string) $fieldLabel));
+
+            if (is_array($fieldVal)) {
+                $value = implode(', ', array_filter(array_map(fn($v) => is_array($v) ? json_encode($v) : (string) $v, $fieldVal)));
+            } else {
+                $value = trim((string) $fieldVal);
+            }
+
+            if (empty($value)) {
+                continue;
+            }
+
+            foreach ($keywords as $kw) {
+                if ($key === $kw || str_contains($key, $kw) || $label === $kw || str_contains($label, $kw)) {
+                    try {
+                        return \Carbon\Carbon::parse($value);
+                    } catch (\Throwable $e) {
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve the target expected date following priority:
+     * 1. Explicit expected_date or leadProduct closure_date
+     * 2. Expiry / End date from custom_form_data
+     * 3. Fallback project_delivery_date
+     */
+    public function getResolvedExpectedDate(): ?\Carbon\Carbon
+    {
+        if (!empty($this->expected_date)) {
+            try {
+                return \Carbon\Carbon::parse($this->expected_date);
+            } catch (\Throwable $e) {}
+        }
+
+        if (!empty($this->leadProduct?->closure_date)) {
+            try {
+                return \Carbon\Carbon::parse($this->leadProduct->closure_date);
+            } catch (\Throwable $e) {}
+        }
+
+        $formExpiry = $this->getFormExpiryDate();
+        if ($formExpiry) {
+            return $formExpiry;
+        }
+
+        if (!empty($this->project_delivery_date)) {
+            try {
+                return \Carbon\Carbon::parse($this->project_delivery_date);
+            } catch (\Throwable $e) {}
+        }
+
+        return null;
+    }
 }

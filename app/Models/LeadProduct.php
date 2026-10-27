@@ -216,13 +216,18 @@ class LeadProduct extends Model
     // ── Accessors ─────────────────────────────────────────────────────
     public function getAmountPaidAttribute(): float
     {
-        $rawAmount = (float) ($this->attributes['amount_paid'] ?? 0);
-        if ($this->relationLoaded('payments')) {
-            $sum = (float) $this->payments->sum(fn($p) => (float)$p->amount + (float)($p->tds_amount ?? 0));
-            return max($rawAmount, $sum);
+        $hasLedgerPayments = $this->relationLoaded('payments')
+            ? ($this->payments->isNotEmpty() || $this->payments()->withTrashed()->exists())
+            : $this->payments()->withTrashed()->exists();
+
+        if ($hasLedgerPayments) {
+            if ($this->relationLoaded('payments')) {
+                return (float) $this->payments->sum(fn($p) => (float)$p->amount + (float)($p->tds_amount ?? 0));
+            }
+            return (float) $this->payments()->selectRaw('SUM(amount + COALESCE(tds_amount, 0)) as total')->value('total');
         }
-        $sum = (float) $this->payments()->selectRaw('SUM(amount + COALESCE(tds_amount, 0)) as total')->value('total');
-        return max($rawAmount, $sum);
+
+        return (float) ($this->attributes['amount_paid'] ?? 0);
     }
 
     public function getAmountPendingAttribute(): float
@@ -298,7 +303,7 @@ class LeadProduct extends Model
      */
     public function recalcPaid(): void
     {
-        // Amounts are now computed dynamically from payments table
+        $this->syncPaymentStatus();
     }
 
     /**
@@ -358,19 +363,23 @@ class LeadProduct extends Model
     }
 
     public function syncPaymentStatus(): void
-{
-    $paid = (float) $this->payments()->selectRaw('SUM(amount + COALESCE(tds_amount, 0)) as total')->value('total');
-    if ($paid <= 0) {
-        $status = 'pending';
-    } elseif ($paid >= $this->total_price) {
-        $status = 'paid';
-    } else {
-        $status = 'partial';
+    {
+        $paid = (float) $this->payments()->selectRaw('SUM(amount + COALESCE(tds_amount, 0)) as total')->value('total');
+        if ($paid <= 0) {
+            $status = 'pending';
+        } elseif ($paid >= $this->total_price) {
+            $status = 'paid';
+        } else {
+            $status = 'partial';
+        }
+
+        $latestPaymentDate = $this->payments()->latest('payment_date')->value('payment_date');
+
+        $this->updateQuietly([
+            'amount_paid'    => $paid,
+            'payment_status' => $status,
+            'payment_date'   => $latestPaymentDate,
+        ]);
     }
-    $this->updateQuietly([
-        'amount_paid'    => $paid,
-        'payment_status' => $status,
-    ]);
-}
 
 }

@@ -9596,7 +9596,7 @@
 
 
 
-{{-- ── Edit Prospect Date Modal (Company Admin Only) ── --}}
+{{-- ── Edit Prospect Date Modal ── --}}
 
 <div class="da-submodal-overlay" id="daEditProspectDateModal" style="display:none; z-index:999999;" onclick="if(event.target === this) closeEditProspectDateModal()">
 
@@ -9635,6 +9635,14 @@
                 <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px;">New Date <span style="color:#ef4444;">*</span></label>
 
                 <input type="date" id="daEditNewDate" style="width:100%; padding:10px 14px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; color:#1e293b; outline:none; box-sizing:border-box;" required>
+
+            </div>
+
+            <div style="margin-bottom: 16px;">
+
+                <label style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px;">Expected Amount (₹)</label>
+
+                <input type="number" step="0.01" min="0" id="daEditExpectedAmount" style="width:100%; padding:10px 14px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; color:#1e293b; outline:none; box-sizing:border-box;" placeholder="e.g. 50000">
 
             </div>
 
@@ -17002,7 +17010,7 @@ function buildAccordionSubTableHtml(leads) {
 
 
 
-    var canEditProspectDate = @json(auth()->user() ? (auth()->user()->isSuperAdmin() || auth()->user()->isCompanyAdminRole() || auth()->user()->isSystemAdmin() || auth()->user()->isCbo()) : false);
+    var canEditProspectDate = @json(auth()->check());
 
 
 
@@ -17108,7 +17116,7 @@ function buildAccordionSubTableHtml(leads) {
 
                 '<span>' + (l.closure_date || '-') + '</span>' +
 
-                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date (Company Admin Only)">✏️</button>' +
+                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\', ' + (l.expected_value !== undefined && l.expected_value !== null ? l.expected_value : 'null') + ')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date">✏️</button>' +
 
                 '</div>';
 
@@ -17320,7 +17328,7 @@ function renderFullDetailsTable(leads) {
 
 
 
-    var canEditProspectDate = @json(auth()->user() ? (auth()->user()->isSuperAdmin() || auth()->user()->isCompanyAdminRole() || auth()->user()->isSystemAdmin() || auth()->user()->isCbo()) : false);
+    var canEditProspectDate = @json(auth()->check());
 
 
 
@@ -17430,7 +17438,7 @@ function renderFullDetailsTable(leads) {
 
                 '<span>' + (l.closure_date || '-') + '</span>' +
 
-                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date (Company Admin Only)">✏️</button>' +
+                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\', ' + (l.expected_value !== undefined && l.expected_value !== null ? l.expected_value : 'null') + ')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date">✏️</button>' +
 
                 '</div>';
 
@@ -21265,13 +21273,15 @@ window.showToast = function(title, desc, type) {
 
 
 
-window.openEditProspectDateModal = function(leadId, piId, currentDateRaw, companyName) {
+window.openEditProspectDateModal = function(leadId, piId, currentDateRaw, companyName, expectedAmount) {
 
     var leadIdEl = document.getElementById('daEditLeadId');
 
     var piIdEl = document.getElementById('daEditPiId');
 
     var newDateEl = document.getElementById('daEditNewDate');
+
+    var expectedAmountEl = document.getElementById('daEditExpectedAmount');
 
     var reasonEl = document.getElementById('daEditReason');
 
@@ -21288,6 +21298,8 @@ window.openEditProspectDateModal = function(leadId, piId, currentDateRaw, compan
     if (piIdEl) piIdEl.value = (piId && piId !== 'null') ? piId : '';
 
     if (newDateEl) newDateEl.value = currentDateRaw || '';
+
+    if (expectedAmountEl) expectedAmountEl.value = (expectedAmount !== undefined && expectedAmount !== null && expectedAmount !== 'null' && expectedAmount !== '') ? expectedAmount : '';
 
     if (reasonEl) reasonEl.value = '';
 
@@ -21364,6 +21376,8 @@ window.submitProspectDateUpdate = function(event) {
     var piId = document.getElementById('daEditPiId')?.value || '';
 
     var newDate = document.getElementById('daEditNewDate')?.value || '';
+
+    var expectedAmount = document.getElementById('daEditExpectedAmount')?.value || '';
 
     var reason = document.getElementById('daEditReason')?.value || '';
 
@@ -21461,6 +21475,8 @@ window.submitProspectDateUpdate = function(event) {
 
             new_date: newDate,
 
+            expected_amount: expectedAmount ? parseFloat(expectedAmount) : null,
+
             reason: reason,
 
             remarks: remarks
@@ -21510,6 +21526,12 @@ window.submitProspectDateUpdate = function(event) {
                         item.closure_date = data.closure_date;
 
                         item.closure_date_raw = data.closure_date_raw;
+
+                        if (data.expected_value !== undefined && data.expected_value !== null) {
+
+                            item.expected_value = data.expected_value;
+
+                        }
 
                     }
 

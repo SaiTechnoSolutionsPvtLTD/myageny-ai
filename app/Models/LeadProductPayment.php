@@ -11,6 +11,22 @@ use Illuminate\Support\Facades\Storage;
 class LeadProductPayment extends Model
 {
     use SoftDeletes;
+
+    protected static function booted()
+    {
+        static::saved(function ($payment) {
+            $payment->leadProduct?->syncPaymentStatus();
+        });
+
+        static::deleted(function ($payment) {
+            $payment->leadProduct?->syncPaymentStatus();
+        });
+
+        static::restored(function ($payment) {
+            $payment->leadProduct?->syncPaymentStatus();
+        });
+    }
+
     protected $fillable = [
         'lead_product_id',
         'lead_id',

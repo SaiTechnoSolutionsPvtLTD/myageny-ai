@@ -52,7 +52,13 @@ class PayrollController extends Controller
                 $query->whereDate('salary_month', $month->toDateString());
             })
             ->when($request->filled('salary_cycle'), function ($query) use ($request) {
-                $query->where('salary_cycle', $request->salary_cycle);
+                if (in_array($request->salary_cycle, ['26_to_25', '25_to_25'], true)) {
+                    $query->whereIn('salary_cycle', ['26_to_25', '25_to_25']);
+                } elseif (in_array($request->salary_cycle, ['1_to_30', '10_to_10'], true)) {
+                    $query->whereIn('salary_cycle', ['1_to_30', '10_to_10']);
+                } else {
+                    $query->where('salary_cycle', $request->salary_cycle);
+                }
             })
             ->latest('salary_month')
             ->latest('id')
@@ -87,7 +93,7 @@ class PayrollController extends Controller
             : now()->startOfMonth();
 
         $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
-        $selectedCycle    = $request->filled('salary_cycle') ? $request->string('salary_cycle')->value() : '25_to_25';
+        $selectedCycle    = $request->filled('salary_cycle') ? $request->string('salary_cycle')->value() : '26_to_25';
 
         $branches = Branch::query()
             ->where('is_active', true)
@@ -119,7 +125,7 @@ class PayrollController extends Controller
             : now()->startOfMonth();
 
         $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
-        $selectedCycle    = $request->filled('salary_cycle') ? $request->string('salary_cycle')->value() : '25_to_25';
+        $selectedCycle    = $request->filled('salary_cycle') ? $request->string('salary_cycle')->value() : '26_to_25';
 
         $employees = EmployeeOnboarding::query()
             ->active()
@@ -131,11 +137,13 @@ class PayrollController extends Controller
             })
             ->with(['role', 'portalUser', 'department'])
             ->when($selectedCycle, function ($query) use ($selectedCycle) {
-                if ($selectedCycle === '25_to_25') {
+                if (in_array($selectedCycle, ['26_to_25', '25_to_25'], true)) {
                     $query->where(function ($q) {
-                        $q->where('salary_cycle', '25_to_25')
+                        $q->whereIn('salary_cycle', ['26_to_25', '25_to_25'])
                           ->orWhereNull('salary_cycle');
                     });
+                } elseif (in_array($selectedCycle, ['1_to_30', '10_to_10'], true)) {
+                    $query->whereIn('salary_cycle', ['1_to_30', '10_to_10']);
                 } else {
                     $query->where('salary_cycle', $selectedCycle);
                 }
@@ -231,7 +239,7 @@ class PayrollController extends Controller
 
         $validated = $request->validate([
             'month' => ['required', 'date_format:Y-m'],
-            'salary_cycle' => ['nullable', 'string', 'in:25_to_25,10_to_10'],
+            'salary_cycle' => ['nullable', 'string', 'in:26_to_25,1_to_30,25_to_25,10_to_10'],
             'salary_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
@@ -261,7 +269,7 @@ class PayrollController extends Controller
         ]);
 
         $salaryMonth = Carbon::createFromFormat('Y-m', $validated['month'])->startOfMonth();
-        $salaryCycle = $validated['salary_cycle'] ?? '25_to_25';
+        $salaryCycle = $validated['salary_cycle'] ?? '26_to_25';
         $employeeIds = collect($validated['items'])->pluck('employee_onboarding_id')->all();
         $employees = EmployeeOnboarding::query()
             ->with('role')
@@ -448,15 +456,15 @@ class PayrollController extends Controller
 
     public static function getCycleDateRange(Carbon $month, ?string $cycle): array
     {
-        if ($cycle === '10_to_10') {
-            $start = $month->copy()->subMonthNoOverflow()->setDay(10)->startOfDay();
-            $end   = $month->copy()->setDay(10)->endOfDay();
-        } elseif ($cycle === '25_to_25') {
-            $start = $month->copy()->subMonthNoOverflow()->setDay(25)->startOfDay();
+        if (in_array($cycle, ['26_to_25', '25_to_25'], true)) {
+            $start = $month->copy()->subMonthNoOverflow()->setDay(26)->startOfDay();
             $end   = $month->copy()->setDay(25)->endOfDay();
-        } else {
+        } elseif (in_array($cycle, ['1_to_30', '10_to_10'], true)) {
             $start = $month->copy()->startOfMonth();
             $end   = $month->copy()->endOfMonth();
+        } else {
+            $start = $month->copy()->subMonthNoOverflow()->setDay(26)->startOfDay();
+            $end   = $month->copy()->setDay(25)->endOfDay();
         }
 
         return [$start, $end];

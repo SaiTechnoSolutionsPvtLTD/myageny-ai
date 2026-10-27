@@ -174,48 +174,21 @@ class CustomerSuccessDashboardController extends Controller
         };
 
         $expectedDate = !empty($pi->expected_date) ? Carbon::parse($pi->expected_date) : ($getFormDate(['expected']) ?: ($pi->leadProduct?->closure_date ? Carbon::parse($pi->leadProduct->closure_date) : null));
+        $formExpiry   = $pi->getFormExpiryDate() ?: $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date', 'enddate', 'ovp_renewal_date', 'renewal_date', 'expiry']);
         $deliveryDate = !empty($pi->project_delivery_date) ? Carbon::parse($pi->project_delivery_date) : ($getFormDate(['delivery']) ?: null);
 
-        // 1. Technical SEO & Local SEO: Delivery Date based
-        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
-        if ($isSeo) {
-            $date = $deliveryDate ?: ($expectedDate ?: null);
-            return $date ? $date->toDateString() : null;
+        // Priority 1: Explicitly set Expected Date / Closure Date
+        if ($expectedDate) {
+            return $expectedDate->toDateString();
         }
 
-        // 2. Development Projects: Expected Date (Priority) & Delivery Date
-        $isDevelopment = (($pi->department_id ?? 0) == 1)
-            || str_contains($deptName, 'develop')
-            || str_contains($productName, 'develop')
-            || str_contains($productName, 'website')
-            || str_contains($productName, 'app')
-            || str_contains($productName, 'software');
-
-        if ($isDevelopment) {
-            $date = $expectedDate ?: ($deliveryDate ?: null);
-            return $date ? $date->toDateString() : null;
+        // Priority 2: Expiry / End Date in Custom Form Data
+        if ($formExpiry) {
+            return $formExpiry->toDateString();
         }
 
-        // 3. LG (Lead Generation): Renewal Date (Expiry date in form data)
-        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen') || str_contains($productName, 'lg');
-        if ($isLeadGen) {
-            $campaignExpiry = $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
-            $date = $campaignExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
-            return $date ? $date->toDateString() : null;
-        }
-
-        // 4. SMM (Social Media Marketing): Renewal Date (Expiry date in form data)
-        $isSmm = str_contains($productName, 'smm') || str_contains($productName, 'social media');
-        if ($isSmm) {
-            $smmExpiry = $getFormDate(['smm_end_date', 'smm end date', 'smm_expiry', 'smm expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
-            $date = $smmExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
-            return $date ? $date->toDateString() : null;
-        }
-
-        // Default Fallback for any other items: Check Form Expiry -> Delivery Date -> Expected Date
-        $generalExpiry = $getFormDate(['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date', 'expiry']);
-        $date = $generalExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
-        return $date ? $date->toDateString() : null;
+        // Priority 3: Project Delivery Date fallback
+        return $deliveryDate ? $deliveryDate->toDateString() : null;
     }
 
     /**
