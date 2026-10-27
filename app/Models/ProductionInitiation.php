@@ -12,6 +12,16 @@ class ProductionInitiation extends Model
 {
     use HasFactory, BelongsToCompany;
 
+    /**
+     * Virtual attributes dynamically assigned for user-scoped views.
+     * Declaring these explicitly prevents Eloquent from treating them as dirty database columns on save.
+     */
+    public $current_team_status = null;
+    public $current_team_allocated_at = null;
+    public $current_team_allocated_by = null;
+    public $current_team_allocated_by_name = null;
+    public $current_team_employee_user_ids = null;
+
     protected $fillable = [
         'company_id',
         'lead_id',

@@ -2721,7 +2721,6 @@ class ProjectController extends Controller
         $user = auth()->user();
 
         $this->ensureProjectIsVisibleToUser($productionInitiation, $user);
-        $productionInitiation = $this->decorateProjectForUser($productionInitiation, $user);
         $productionInitiation->load(['projectUpdates.createdBy:id,name', 'leadProduct', 'lead', 'department']);
 
         $projectUpdatesQuery = $productionInitiation->projectUpdates()
@@ -2793,6 +2792,8 @@ class ProjectController extends Controller
                 }
             }
         }
+
+        $productionInitiation = $this->decorateProjectForUser($productionInitiation, $user);
 
         $testingTlUsers = User::with(['roles.department', 'branch'])
             ->where('is_active', true)
