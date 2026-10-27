@@ -517,6 +517,30 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/profit-and-loss/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportProfitAndLossExcel'])->name('profit-and-loss.export-excel');
             Route::get('/profit-and-loss/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportProfitAndLossPdf'])->name('profit-and-loss.export-pdf');
         });
+
+        // Zoho Books Migration / Integration Group
+        Route::prefix('zoho')->name('zoho.')->group(function () {
+            Route::get('/', [App\Http\Controllers\ZohoBooksController::class, 'index'])->name('index');
+            Route::get('/settings', [App\Http\Controllers\ZohoBooksController::class, 'settings'])->name('settings');
+            Route::post('/settings', [App\Http\Controllers\ZohoBooksController::class, 'updateSettings'])->name('settings.update');
+            Route::get('/oauth/redirect', [App\Http\Controllers\ZohoBooksController::class, 'oauthRedirect'])->name('oauth.redirect');
+            Route::get('/callback', [App\Http\Controllers\ZohoBooksController::class, 'oauthCallback'])->name('oauth.callback');
+            Route::post('/manual-token', [App\Http\Controllers\ZohoBooksController::class, 'manualToken'])->name('manual-token');
+            Route::post('/select-organization', [App\Http\Controllers\ZohoBooksController::class, 'selectOrganization'])->name('select-organization');
+            Route::get('/test-connection', [App\Http\Controllers\ZohoBooksController::class, 'testConnection'])->name('test-connection');
+            Route::post('/disconnect', [App\Http\Controllers\ZohoBooksController::class, 'disconnect'])->name('disconnect');
+
+            // Invoices
+            Route::get('/invoices', [App\Http\Controllers\ZohoBooksController::class, 'invoices'])->name('invoices');
+            Route::get('/invoices/{id}', [App\Http\Controllers\ZohoBooksController::class, 'showInvoice'])->name('show-invoice');
+            Route::post('/invoices/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncInvoices'])->name('invoices.sync');
+            Route::post('/invoices/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migrateInvoice'])->name('invoices.migrate');
+            Route::post('/invoices/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigrateInvoices'])->name('invoices.bulk-migrate');
+
+            // Expenses
+            Route::get('/expenses', [App\Http\Controllers\ZohoBooksController::class, 'expenses'])->name('expenses');
+            Route::post('/expenses/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncExpenses'])->name('expenses.sync');
+        });
     });
 
     Route::get('/reports/crm/payment-collection', [CrmReportController::class, 'paymentCollection'])
