@@ -845,6 +845,36 @@
             </div>
         @endif
 
+        @if($quotation->customer_signature || $quotation->customer_responded_at)
+            <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 20px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                <div style="display:flex; align-items:center; gap:14px;">
+                    <div style="width:40px; height:40px; border-radius:10px; background:{{ $quotation->is_approved ? '#ecfdf5' : '#fef2f2' }}; color:{{ $quotation->is_approved ? '#059669' : '#dc2626' }}; display:inline-flex; align-items:center; justify-content:center; font-size:20px;">
+                        <i class="bi {{ $quotation->is_approved ? 'bi-patch-check-fill' : 'bi-x-circle-fill' }}"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:14px; font-weight:700; color:#0f172a;">
+                            Customer {{ $quotation->is_approved ? 'Approved' : 'Rejected' }}
+                        </div>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">
+                            Responded on {{ $quotation->customer_responded_at?->format('d M Y, h:i A') }}
+                            @if($quotation->customer_location)
+                                • 📍 {{ $quotation->customer_location }}
+                            @endif
+                            @if($quotation->customer_ip)
+                                • 🌐 IP: {{ $quotation->customer_ip }}
+                            @endif
+                        </div>
+                    </div>
+                </div>
+                @if($quotation->customer_signature)
+                    <div style="display:flex; align-items:center; gap:10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:6px 14px;">
+                        <span style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Customer Signature:</span>
+                        <img src="{{ asset($quotation->customer_signature) }}" alt="Customer Signature" style="max-height:45px; max-width:140px; object-fit:contain;">
+                    </div>
+                @endif
+            </div>
+        @endif
+
         {{-- Document Viewer Canvas --}}
         <div class="inv-canvas-wrap">
             <div class="inv-doc-toolbar">

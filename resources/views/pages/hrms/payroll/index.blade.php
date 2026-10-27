@@ -75,8 +75,8 @@
                     <div style="font-size:13px;font-weight:700;color:#444;margin-bottom:8px;">Salary Cycle</div>
                     <select name="salary_cycle" class="payroll-input">
                         <option value="">All Cycles</option>
-                        <option value="25_to_25" @selected(request('salary_cycle') === '25_to_25')>25 to 25 days cycle</option>
-                        <option value="10_to_10" @selected(request('salary_cycle') === '10_to_10')>10 to 10 cycle</option>
+                        <option value="26_to_25" @selected(request('salary_cycle') === '26_to_25')>26 to 25 cycle</option>
+                        <option value="1_to_30" @selected(request('salary_cycle') === '1_to_30')>1 to 30 cycle</option>
                     </select>
                 </div>
                 <button type="submit" class="payroll-btn payroll-btn-primary">Filter</button>
@@ -127,10 +127,10 @@
                                     <td>
                                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                                             <span style="font-weight:700;color:#121212;">{{ $payroll->salary_month->format('F Y') }}</span>
-                                            @if(($payroll->salary_cycle ?? '25_to_25') === '10_to_10')
-                                                <span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;font-weight:700;">10 to 10</span>
+                                            @if(in_array($payroll->salary_cycle ?? '26_to_25', ['1_to_30', '10_to_10'], true))
+                                                <span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:11px;font-weight:700;">1 to 30</span>
                                             @else
-                                                <span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;">25 to 25</span>
+                                                <span style="display:inline-flex;padding:3px 8px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;">26 to 25</span>
                                             @endif
                                         </div>
                                         <div style="font-size:11px;color:#9e9e9e;margin-top:2px;">Processed {{ optional($payroll->updated_at)->format('d M Y h:i A') }}</div>

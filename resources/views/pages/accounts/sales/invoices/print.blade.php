@@ -420,10 +420,30 @@
 </head>
 <body>
 
+    @php
+        $leadId = request('lead_id') ?: (request('from') === 'lead' ? ($invoice->customer?->lead_id) : null);
+        if (!$leadId) {
+            $prev = url()->previous();
+            if ($prev && str_contains($prev, '/leads/')) {
+                if (preg_match('/\/leads\/(\d+)/', $prev, $m)) {
+                    $leadId = $m[1];
+                }
+            }
+        }
+
+        if ($leadId) {
+            $backUrl = url('/leads/' . $leadId);
+            $backLabel = 'Back to Invoice';
+        } else {
+            $backUrl = route('accounts.sales.invoices.index');
+            $backLabel = 'Back to Invoices';
+        }
+    @endphp
+
     <div class="print-btn-bar">
-        <a href="{{ route('accounts.sales.invoices.show', $invoice->id) }}" class="p-btn p-btn-back">
+        <a href="{{ $backUrl }}" class="p-btn p-btn-back" title="{{ $leadId ? 'Back to Lead #' . $leadId : 'Back to All Invoices' }}">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            <span>Back to Invoice</span>
+            <span>{{ $backLabel }}</span>
         </a>
 
         <div class="print-info-tag">

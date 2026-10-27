@@ -621,6 +621,16 @@ class SuperAdminDashboardController extends ApiController
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
             ->whereMonth('closure_date', $parsedMonth['month'])
             ->whereYear('closure_date', $parsedMonth['year'])
+            ->where(function ($q) {
+                $q->whereRaw('COALESCE(lead_products.amount_paid, 0) < COALESCE(NULLIF(lead_products.expected_value, 0), lead_products.total_price)')
+                    ->whereRaw('NOT EXISTS (
+                        SELECT 1 FROM lead_product_payments
+                        WHERE lead_product_payments.lead_product_id = lead_products.id
+                          AND lead_product_payments.deleted_at IS NULL
+                          AND lead_product_payments.payment_date <= lead_products.closure_date
+                        HAVING SUM(amount + COALESCE(tds_amount, 0)) >= COALESCE(NULLIF(lead_products.expected_value, 0), lead_products.total_price)
+                    )');
+            })
             ->whereHas('lead', function ($lq) use ($request, $branchId, $effectiveUserId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
                 if ($branchId) $lq->where('branch_id', $branchId);
@@ -1838,6 +1848,16 @@ class SuperAdminDashboardController extends ApiController
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
             ->whereMonth('closure_date', $parsedMonth['month'])
             ->whereYear('closure_date', $parsedMonth['year'])
+            ->where(function ($q) {
+                $q->whereRaw('COALESCE(lead_products.amount_paid, 0) < COALESCE(NULLIF(lead_products.expected_value, 0), lead_products.total_price)')
+                    ->whereRaw('NOT EXISTS (
+                        SELECT 1 FROM lead_product_payments
+                        WHERE lead_product_payments.lead_product_id = lead_products.id
+                          AND lead_product_payments.deleted_at IS NULL
+                          AND lead_product_payments.payment_date <= lead_products.closure_date
+                        HAVING SUM(amount + COALESCE(tds_amount, 0)) >= COALESCE(NULLIF(lead_products.expected_value, 0), lead_products.total_price)
+                    )');
+            })
             ->whereHas('lead', function ($lq) use ($request, $branchId, $userId) {
                 $this->visibility->applyLeadVisibility($lq, $request->user());
                 if ($branchId) $lq->where('branch_id', $branchId);
@@ -2736,6 +2756,11 @@ class SuperAdminDashboardController extends ApiController
                     $seenLpIds[$pi->lead_product_id] = true;
                 }
 
+                // If expected amount is already received within closure date / cycle, do not show in forecast
+                if ($this->isCstProspectExpectedAmountReceived($pi, $expVal, $rDate, $cmStart)) {
+                    continue;
+                }
+
                 $salesPerson = $lead?->assignedTo?->name ?: '-';
                 $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
                 $assignedName = $cstPerson !== '-' ? $cstPerson : ($salesPerson !== '-' ? $salesPerson : 'Unassigned');
@@ -2782,9 +2807,15 @@ class SuperAdminDashboardController extends ApiController
                         $dq->where('name', 'like', '%develop%');
                     });
             })
+            ->where(function ($q) {
+                $q->where(function ($sq) {
+                    $sq->whereNotNull('expected_value')->where('expected_value', '>', 0);
+                })->orWhereHas('leadProduct', function ($lq) {
+                    $lq->whereNotNull('expected_value')->where('expected_value', '>', 0);
+                });
+            })
             ->where(function ($q) use ($cmStart, $cmEnd) {
                 $q->whereBetween('expected_date', [$cmStart, $cmEnd])
-                    ->orWhereBetween('project_delivery_date', [$cmStart, $cmEnd])
                     ->orWhereHas('leadProduct', function ($lq) use ($cmStart, $cmEnd) {
                         $lq->whereBetween('closure_date', [$cmStart, $cmEnd]);
                     });
@@ -2812,13 +2843,35 @@ class SuperAdminDashboardController extends ApiController
 
             $lead = $pi->lead;
             $lp = $pi->leadProduct;
-            $cExpDate = $this->resolveCstProspectTargetDate($pi);
-            if (!$cExpDate) continue;
 
-            if (!$cExpDate->between($cmStart, $cmEnd)) continue;
+            // Only show development project if Expected Amount is explicitly set and > 0
+            $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? 0);
+            if ($expVal <= 0) {
+                continue;
+            }
 
-            $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
-            $expVal = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
+            // Only show development project if Expected Date is explicitly set and falls in current month
+            $rawExpDate = $pi->expected_date ?: ($lp?->closure_date ?: null);
+            if (!$rawExpDate) {
+                continue;
+            }
+
+            $cExpDate = Carbon::parse($rawExpDate);
+            if (!$cExpDate->between($cmStart, $cmEnd)) {
+                continue;
+            }
+
+            $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? $expVal);
+
+            $seenPiIds[$pi->id] = true;
+            if ($pi->lead_product_id) {
+                $seenLpIds[$pi->lead_product_id] = true;
+            }
+
+            // If expected amount is already received within closure date / cycle, do not show in forecast
+            if ($this->isCstProspectExpectedAmountReceived($pi, $expVal, $cExpDate, $cmStart)) {
+                continue;
+            }
 
             $salesPerson = $lead?->assignedTo?->name ?: '-';
             $cstPerson   = $lead?->customerSupportExecutive?->name ?: ($lead?->customerSupportTl?->name ?: '-');
@@ -2890,43 +2943,62 @@ class SuperAdminDashboardController extends ApiController
         };
 
         $expectedDate = $pi->expected_date ? Carbon::parse($pi->expected_date) : ($getFormDate(['expected']) ?: ($pi->leadProduct?->closure_date ? Carbon::parse($pi->leadProduct->closure_date) : null));
+        $formExpiry   = $pi->getFormExpiryDate() ?: $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date', 'enddate', 'ovp_renewal_date', 'renewal_date', 'expiry']);
         $deliveryDate = $pi->project_delivery_date ? Carbon::parse($pi->project_delivery_date) : ($getFormDate(['delivery']) ?: null);
 
-        // 1. Technical SEO & Local SEO: Delivery Date based
-        $isSeo = str_contains($productName, 'seo') || str_contains($deptName, 'seo');
-        if ($isSeo) {
-            return $deliveryDate ?: ($expectedDate ?: null);
+        // Priority 1: Explicitly set Expected Date / Closure Date
+        if ($expectedDate) {
+            return $expectedDate;
         }
 
-        // 2. Development Projects: Expected Date (Priority) & Delivery Date
-        $isDevelopment = ($pi->department_id == 1)
-            || str_contains($deptName, 'develop')
-            || str_contains($productName, 'develop')
-            || str_contains($productName, 'website')
-            || str_contains($productName, 'app')
-            || str_contains($productName, 'software');
-
-        if ($isDevelopment) {
-            return $expectedDate ?: ($deliveryDate ?: null);
+        // Priority 2: Expiry / End Date in Custom Form Data
+        if ($formExpiry) {
+            return $formExpiry;
         }
 
-        // 3. LG (Lead Generation): Renewal Date (Expiry date in form data)
-        $isLeadGen = str_contains($productName, 'lead generation') || str_contains($productName, 'lead gen') || str_contains($productName, 'lg');
-        if ($isLeadGen) {
-            $campaignExpiry = $getFormDate(['campaign_expiry', 'campaign expiry', 'campaign_end', 'campaign end', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
-            return $campaignExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        // Priority 3: Project Delivery Date fallback
+        return $deliveryDate ?: null;
+    }
+
+    /**
+     * Determine if the expected amount has already been received for a CST prospect item on or before closure date.
+     */
+    protected function isCstProspectExpectedAmountReceived(ProductionInitiation $pi, float $expVal, Carbon $targetDate, Carbon $cmStart): bool
+    {
+        if ($expVal <= 0) {
+            return false;
         }
 
-        // 4. SMM (Social Media Marketing): Renewal Date (Expiry date in form data)
-        $isSmm = str_contains($productName, 'smm') || str_contains($productName, 'social media');
-        if ($isSmm) {
-            $smmExpiry = $getFormDate(['smm_end_date', 'smm end date', 'smm_expiry', 'smm expiry', 'expiry_date', 'expiry date', 'end_date', 'end date', 'ovp_end_date']);
-            return $smmExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        $clsDate = $targetDate->copy()->endOfDay();
+        $windowStart = $cmStart->copy()->subDays(3);
+        $checkUntil = $clsDate->gt(now()) ? $clsDate : now()->endOfDay();
+
+        // 1. Direct payments on PI's lead_product_id within target window
+        $lpPayments = 0.0;
+        if ($pi->lead_product_id) {
+            $lpPayments = (float) LeadProductPayment::where('lead_product_id', $pi->lead_product_id)
+                ->where('payment_date', '<=', $checkUntil)
+                ->where('payment_date', '>=', $windowStart)
+                ->sum(DB::raw('amount + COALESCE(tds_amount, 0)'));
         }
 
-        // Default fallback for any other CST / Renewal item
-        $generalExpiry = $getFormDate(['end_date', 'enddate', 'end date', 'smm_end_date', 'ovp_end_date', 'expiry']);
-        return $generalExpiry ?: ($deliveryDate ?: ($expectedDate ?: null));
+        // 2. Payments on the lead within target window for this product/renewal
+        $lp = $pi->leadProduct;
+        $leadPayments = (float) LeadProductPayment::where('lead_id', $pi->lead_id)
+            ->where('payment_date', '<=', $checkUntil)
+            ->where('payment_date', '>=', $windowStart)
+            ->where(function ($q) use ($pi, $lp) {
+                $q->where('payment_type', 'renewals')
+                  ->orWhere('lead_product_id', $pi->lead_product_id);
+                if ($lp && $lp->product_id) {
+                    $q->orWhereHas('product', fn ($pq) => $pq->where('product_id', $lp->product_id));
+                }
+            })
+            ->sum(DB::raw('amount + COALESCE(tds_amount, 0)'));
+
+        $received = max($lpPayments, $leadPayments);
+
+        return $received >= $expVal;
     }
 
     public function buildCstProspectMetrics(?Request $request = null): array
@@ -3042,7 +3114,17 @@ class SuperAdminDashboardController extends ApiController
                 ])
                 ->whereRaw('LOWER(product_status) = ?', ['hot'])
                 ->whereMonth('closure_date', $parsedMonth['month'])
-                ->whereYear('closure_date', $parsedMonth['year']);
+                ->whereYear('closure_date', $parsedMonth['year'])
+                ->where(function ($q) {
+                    $q->whereRaw('COALESCE(lead_products.amount_paid, 0) < COALESCE(NULLIF(lead_products.expected_value, 0), lead_products.total_price)')
+                        ->whereRaw('NOT EXISTS (
+                            SELECT 1 FROM lead_product_payments
+                            WHERE lead_product_payments.lead_product_id = lead_products.id
+                              AND lead_product_payments.deleted_at IS NULL
+                              AND lead_product_payments.payment_date <= lead_products.closure_date
+                            HAVING SUM(amount + COALESCE(tds_amount, 0)) >= COALESCE(NULLIF(lead_products.expected_value, 0), lead_products.total_price)
+                        )');
+                });
 
             $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
                 $this->visibility->applyLeadVisibility($lq, $currentUser);
@@ -3180,7 +3262,17 @@ class SuperAdminDashboardController extends ApiController
             ])
             ->whereRaw('LOWER(product_status) = ?', ['hot'])
             ->whereMonth('closure_date', $parsedMonth['month'])
-            ->whereYear('closure_date', $parsedMonth['year']);
+            ->whereYear('closure_date', $parsedMonth['year'])
+            ->where(function ($q) {
+                $q->whereRaw('COALESCE(lead_products.amount_paid, 0) < COALESCE(NULLIF(lead_products.expected_value, 0), lead_products.total_price)')
+                    ->whereRaw('NOT EXISTS (
+                        SELECT 1 FROM lead_product_payments
+                        WHERE lead_product_payments.lead_product_id = lead_products.id
+                          AND lead_product_payments.deleted_at IS NULL
+                          AND lead_product_payments.payment_date <= lead_products.closure_date
+                        HAVING SUM(amount + COALESCE(tds_amount, 0)) >= COALESCE(NULLIF(lead_products.expected_value, 0), lead_products.total_price)
+                    )');
+            });
 
         // Apply Lead Visibility
         $query->whereHas('lead', function ($lq) use ($currentUser, $request) {
@@ -3600,7 +3692,7 @@ class SuperAdminDashboardController extends ApiController
 
     /**
      * Update prospect date (Closure Date / Delivery Date / Expected Date) with reason and remarks.
-     * Only Company Admin / Super Admin / CBO users can update this.
+     * Allowed for all authenticated users.
      */
     public function updateProspectDate(Request $request): JsonResponse
     {
@@ -3609,22 +3701,14 @@ class SuperAdminDashboardController extends ApiController
             return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
-        // Authorization check: Only Company Admin / Super Admin / CBO
-        $isCompanyAdmin = $currentUser->isSuperAdmin() ||
-                          $currentUser->isSystemAdmin() ||
-                          $currentUser->isCompanyAdminRole() ||
-                          $currentUser->isCbo();
-
-        if (!$isCompanyAdmin) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized. Only Company Admin can update closure dates.'], 403);
-        }
-
         $validator = Validator::make($request->all(), [
-            'lead_id'  => ['nullable', 'integer'],
-            'pi_id'    => ['nullable', 'integer'],
-            'new_date' => ['required', 'date'],
-            'reason'   => ['required', 'string', 'max:255'],
-            'remarks'  => ['nullable', 'string', 'max:1000'],
+            'lead_id'         => ['nullable', 'integer'],
+            'pi_id'           => ['nullable', 'integer'],
+            'new_date'        => ['required', 'date'],
+            'expected_amount' => ['nullable', 'numeric', 'min:0'],
+            'expected_value'  => ['nullable', 'numeric', 'min:0'],
+            'reason'          => ['required', 'string', 'max:255'],
+            'remarks'         => ['nullable', 'string', 'max:1000'],
         ]);
 
         if ($validator->fails()) {
@@ -3660,9 +3744,25 @@ class SuperAdminDashboardController extends ApiController
             'expiry_date', 'expiry date', 'ovp_end_date', 'expiry'
         ];
 
-        $applyInitiationDateUpdates = function (ProductionInitiation $pi) use ($formattedNewDateRaw, $expiryKeys) {
+        $applyInitiationDateUpdates = function (ProductionInitiation $pi) use ($formattedNewDateRaw, $expiryKeys, $request) {
             $pi->project_delivery_date = $formattedNewDateRaw;
             $pi->expected_date         = $formattedNewDateRaw;
+
+            // Automatically resolve and sync expected amount for renewals / projects
+            $targetExpectedValue = null;
+            if ($request && $request->filled('expected_amount')) {
+                $targetExpectedValue = (float) $request->input('expected_amount');
+            } elseif ($request && $request->filled('expected_value')) {
+                $targetExpectedValue = (float) $request->input('expected_value');
+            } else {
+                $lp = $pi->leadProduct;
+                $dealVal = (float) ($lp?->total_price ?? $pi->lead_budget_amount ?? 0);
+                $targetExpectedValue = (float) ($pi->expected_value ?? $lp?->expected_value ?? $dealVal);
+            }
+
+            if ($targetExpectedValue !== null && $targetExpectedValue > 0) {
+                $pi->expected_value = $targetExpectedValue;
+            }
 
             $formData = is_array($pi->custom_form_data)
                 ? $pi->custom_form_data
@@ -3705,11 +3805,15 @@ class SuperAdminDashboardController extends ApiController
                 }
             })->update(['end_date' => $formattedNewDateRaw]);
 
-            // Update associated LeadProduct closure_date
+            // Update associated LeadProduct closure_date and expected_value
+            $lpUpdate = ['closure_date' => $formattedNewDateRaw];
+            if ($targetExpectedValue !== null && $targetExpectedValue > 0) {
+                $lpUpdate['expected_value'] = $targetExpectedValue;
+            }
             if ($pi->lead_product_id) {
-                LeadProduct::where('id', $pi->lead_product_id)->update(['closure_date' => $formattedNewDateRaw]);
+                LeadProduct::where('id', $pi->lead_product_id)->update($lpUpdate);
             } elseif ($pi->lead_id) {
-                LeadProduct::where('lead_id', $pi->lead_id)->update(['closure_date' => $formattedNewDateRaw]);
+                LeadProduct::where('lead_id', $pi->lead_id)->update($lpUpdate);
             }
         };
 
@@ -3725,6 +3829,9 @@ class SuperAdminDashboardController extends ApiController
 
                 // Construct timeline content
                 $timelineContent = "Closure / End Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
+                if ($pi->expected_value !== null && (float)$pi->expected_value > 0) {
+                    $timelineContent .= "<br><strong>Expected Amount:</strong> ₹" . number_format((float)$pi->expected_value, 2);
+                }
                 if (!empty($reason)) {
                     $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
                 }
@@ -3749,10 +3856,14 @@ class SuperAdminDashboardController extends ApiController
             if ($lead) {
                 // Find or update lead products
                 $lps = LeadProduct::where('lead_id', $leadId)->get();
+                $reqExpAmount = $request->filled('expected_amount') ? (float)$request->input('expected_amount') : ($request->filled('expected_value') ? (float)$request->input('expected_value') : null);
                 foreach ($lps as $lp) {
-                    $lp->update([
-                        'closure_date' => $formattedNewDateRaw,
-                    ]);
+                    $lpUpdates = ['closure_date' => $formattedNewDateRaw];
+                    $targetLpExp = $reqExpAmount ?? ($lp->expected_value ?? (float)($lp->total_price ?? 0));
+                    if ($targetLpExp > 0) {
+                        $lpUpdates['expected_value'] = $targetLpExp;
+                    }
+                    $lp->update($lpUpdates);
                 }
 
                 // Update associated CustomerCampaign records by lead_id
@@ -3770,6 +3881,9 @@ class SuperAdminDashboardController extends ApiController
                         $applyInitiationDateUpdates($pItem);
 
                         $timelineContent = "Closure / End Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
+                        if ($pItem->expected_value !== null && (float)$pItem->expected_value > 0) {
+                            $timelineContent .= "<br><strong>Expected Amount:</strong> ₹" . number_format((float)$pItem->expected_value, 2);
+                        }
                         if (!empty($reason)) {
                             $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
                         }
@@ -3793,11 +3907,20 @@ class SuperAdminDashboardController extends ApiController
             return response()->json(['success' => false, 'message' => 'Lead or Project record not found.'], 404);
         }
 
+        $finalExpectedVal = null;
+        if (!empty($pi) && $pi->expected_value !== null) {
+            $finalExpectedVal = (float) $pi->expected_value;
+        } elseif (!empty($lps) && $lps->isNotEmpty()) {
+            $finalExpectedVal = (float) ($lps->first()->expected_value ?? 0);
+        }
+
         return response()->json([
-            'success'          => true,
-            'message'          => 'Date updated successfully and recorded in project timeline.',
-            'closure_date'     => $formattedNewDate,
-            'closure_date_raw' => $formattedNewDateRaw,
+            'success'                  => true,
+            'message'                  => 'Date and expected amount updated successfully and recorded in project timeline.',
+            'closure_date'             => $formattedNewDate,
+            'closure_date_raw'         => $formattedNewDateRaw,
+            'expected_value'           => $finalExpectedVal,
+            'expected_value_formatted' => $finalExpectedVal !== null && $finalExpectedVal > 0 ? '₹' . number_format($finalExpectedVal, 2) : null,
         ]);
     }
 

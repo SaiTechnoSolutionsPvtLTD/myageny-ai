@@ -50,6 +50,11 @@ class DaySalesTrackerController extends Controller
                         $q->whereBetween('payment_date', [$startDateStr, $endDateStr]);
                     }
                 ])
+                ->withCount([
+                    'payments as all_ledger_payments_count' => function ($q) {
+                        $q->withTrashed();
+                    }
+                ])
                 ->where(function ($q) {
                     $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                       ->orWhere('lead_status_id', 5);
@@ -90,6 +95,10 @@ class DaySalesTrackerController extends Controller
                 if ($lp->payments && $lp->payments->count() > 0) {
                     $paymentDate = $lp->payments->first()->payment_date;
                     $receivedAmount = (float) $lp->payments->sum('amount');
+                } elseif (($lp->all_ledger_payments_count ?? 0) > 0) {
+                    // Has ledger payments but none active in this date range (or all payments deleted)
+                    $paymentDate = $lp->converted_at ?: $lp->created_at;
+                    $receivedAmount = 0.0;
                 } elseif ($lp->payment_date) {
                     $paymentDate = $lp->payment_date;
                     $receivedAmount = (float) ($lp->amount_paid ?: 0);
@@ -471,6 +480,11 @@ class DaySalesTrackerController extends Controller
                         $q->whereBetween('payment_date', [$startDateStr, $endDateStr]);
                     }
                 ])
+                ->withCount([
+                    'payments as all_ledger_payments_count' => function ($q) {
+                        $q->withTrashed();
+                    }
+                ])
                 ->where(function ($q) {
                     $q->whereRaw('LOWER(product_status) in (?, ?)', ['converted', 'won'])
                       ->orWhere('lead_status_id', 5);
@@ -521,6 +535,10 @@ class DaySalesTrackerController extends Controller
                 if ($lp->payments && $lp->payments->count() > 0) {
                     $paymentDate = $lp->payments->first()->payment_date;
                     $receivedAmount = (float) $lp->payments->sum('amount');
+                } elseif (($lp->all_ledger_payments_count ?? 0) > 0) {
+                    // Has ledger payments but none active in this date range (or all payments deleted)
+                    $paymentDate = $lp->converted_at ?: $lp->created_at;
+                    $receivedAmount = 0.0;
                 } elseif ($lp->payment_date) {
                     $paymentDate = $lp->payment_date;
                     $receivedAmount = (float) ($lp->amount_paid ?: 0);
@@ -791,7 +809,7 @@ class DaySalesTrackerController extends Controller
                 ->get();
 
             foreach ($convertedProducts as $lp) {
-                if ($lp->payments->count() > 0) {
+                if ($lp->payments->count() > 0 || $lp->payments()->withTrashed()->exists()) {
                     continue;
                 }
 

@@ -44,14 +44,16 @@ class EmployeeOnboarding extends Model
     public const STATUS_INACTIVE = 'inactive';
     public const STATUS_RESIGNED = 'resigned';
 
+    public const SALARY_CYCLE_26_TO_25 = '26_to_25';
+    public const SALARY_CYCLE_1_TO_30 = '1_to_30';
     public const SALARY_CYCLE_25_TO_25 = '25_to_25';
     public const SALARY_CYCLE_10_TO_10 = '10_to_10';
 
     public static function salaryCycles(): array
     {
         return [
-            self::SALARY_CYCLE_25_TO_25 => '25 to 25 days cycle',
-            self::SALARY_CYCLE_10_TO_10 => '10 to 10 cycle',
+            self::SALARY_CYCLE_26_TO_25 => '26 to 25 cycle',
+            self::SALARY_CYCLE_1_TO_30 => '1 to 30 cycle',
         ];
     }
 
@@ -86,7 +88,9 @@ class EmployeeOnboarding extends Model
         'correspondence_address',
         'permanent_address',
         'mobile',
+        'official_mobile',
         'email',
+        'official_email',
         'date_of_birth',
         'joining_date',
         'blood_group',

@@ -89,8 +89,8 @@
                 <div class="pr-field">
                     <label class="pr-label">Salary Cycle</label>
                     <select id="filterSalaryCycle" class="pr-select">
-                        <option value="25_to_25" @selected(($selectedCycle ?? '25_to_25') === '25_to_25')>25 to 25 days cycle</option>
-                        <option value="10_to_10" @selected(($selectedCycle ?? '') === '10_to_10')>10 to 10 cycle</option>
+                        <option value="26_to_25" @selected(in_array(($selectedCycle ?? '26_to_25'), ['26_to_25', '25_to_25']))>26 to 25 cycle</option>
+                        <option value="1_to_30" @selected(in_array(($selectedCycle ?? ''), ['1_to_30', '10_to_10']))>1 to 30 cycle</option>
                     </select>
                 </div>
                 <button type="button" id="btnLoadEmployees" class="pr-btn pr-btn-primary">Load Employees</button>
@@ -170,7 +170,7 @@
                 <form method="POST" action="{{ route('payroll.store') }}" id="payrollForm" style="margin-top:16px;">
                     @csrf
                     <input type="hidden" id="formMonth" name="month" value="{{ $selectedMonth->format('Y-m') }}">
-                    <input type="hidden" id="formSalaryCycle" name="salary_cycle" value="{{ $selectedCycle ?? '25_to_25' }}">
+                    <input type="hidden" id="formSalaryCycle" name="salary_cycle" value="{{ $selectedCycle ?? '26_to_25' }}">
                     <div class="pr-card" style="margin-bottom:12px;">
                         <div class="pr-form-row">
                             <div class="pr-field">
@@ -395,7 +395,7 @@
     function loadRows() {
         const month       = filterMonth.value;
         const branchId    = filterBranch.value;
-        const salaryCycle = filterSalaryCycle ? filterSalaryCycle.value : '25_to_25';
+        const salaryCycle = filterSalaryCycle ? filterSalaryCycle.value : '26_to_25';
 
         tableSection.classList.remove('active');
         tableLoader.classList.add('active');

@@ -831,6 +831,19 @@ class LeadShowController extends Controller
 
         $product->update($updatePayload);
 
+        // Sync with associated ProductionInitiation if exists
+        $piUpdates = [];
+        if (isset($updatePayload['closure_date'])) {
+            $piUpdates['expected_date'] = $updatePayload['closure_date'];
+            $piUpdates['project_delivery_date'] = $updatePayload['closure_date'];
+        }
+        if (isset($updatePayload['expected_value'])) {
+            $piUpdates['expected_value'] = $updatePayload['expected_value'];
+        }
+        if (!empty($piUpdates)) {
+            \App\Models\ProductionInitiation::where('lead_product_id', $product->id)->update($piUpdates);
+        }
+
         return response()->json([
             'status'  => true,
             'message' => "Product status updated to {$status->name}.",
@@ -1541,6 +1554,8 @@ class LeadShowController extends Controller
                 'lead'        => $lead,
                 'agreeUrl'    => $agreeUrl,
                 'disagreeUrl' => $disagreeUrl,
+                'approveUrl'  => $agreeUrl,
+                'rejectUrl'   => $disagreeUrl,
             ], function ($message) use ($quotation, $lead, $email, $pdf, $filename) {
                 $message->to($email, $lead->contact_name ?: null)
                     ->subject('Quotation ' . $quotation->quotation_no)

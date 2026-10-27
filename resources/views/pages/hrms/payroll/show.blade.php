@@ -47,11 +47,11 @@
     <div class="ps-topbar">
         <div>
             <div class="ps-title">{{ $selfServiceMode ? 'My Salary Details' : 'Payroll Run Details' }}</div>
-            <div class="ps-breadcrumb">HRMS &gt; Payroll &gt; {{ $payroll->salary_month->format('F Y') }} ({{ ($payroll->salary_cycle ?? '25_to_25') === '10_to_10' ? '10 to 10 cycle' : '25 to 25 cycle' }})</div>
+            <div class="ps-breadcrumb">HRMS &gt; Payroll &gt; {{ $payroll->salary_month->format('F Y') }} ({{ in_array($payroll->salary_cycle ?? '26_to_25', ['1_to_30', '10_to_10'], true) ? '1 to 30 cycle' : '26 to 25 cycle' }})</div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
             @unless($selfServiceMode)
-                <a href="{{ route('payroll.create', ['month' => $payroll->salary_month->format('Y-m'), 'salary_cycle' => $payroll->salary_cycle ?? '25_to_25']) }}" class="ps-btn ps-btn-primary">
+                <a href="{{ route('payroll.create', ['month' => $payroll->salary_month->format('Y-m'), 'salary_cycle' => $payroll->salary_cycle ?? '26_to_25']) }}" class="ps-btn ps-btn-primary">
                     <i class="bi bi-arrow-repeat"></i> Rerun Month
                 </a>
             @endunless
@@ -74,7 +74,7 @@
                 <div class="ps-stat-label">Salary Month &amp; Cycle</div>
                 <div class="ps-stat-value">{{ $payroll->salary_month->format('M Y') }}</div>
                 <div class="ps-stat-sub">
-                    <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,0.2);font-weight:700;">{{ ($payroll->salary_cycle ?? '25_to_25') === '10_to_10' ? '10 to 10 Cycle' : '25 to 25 Cycle' }}</span>
+                    <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,0.2);font-weight:700;">{{ in_array($payroll->salary_cycle ?? '26_to_25', ['1_to_30', '10_to_10'], true) ? '1 to 30 Cycle' : '26 to 25 Cycle' }}</span>
                     &bull; {{ optional($payroll->salary_date)->format('d M Y') ?: 'Schedule' }}
                 </div>
             </div>

@@ -83,6 +83,9 @@ Route::get('/quotations/{id}/pdf',  [QuotationController::class, 'downloadPdf'])
 Route::get('/quotations/{quotation}/response/{response}', [QuotationController::class, 'customerResponse'])
     ->middleware('signed')
     ->name('quotations.customer-response');
+Route::post('/quotations/{quotation}/response/{response}', [QuotationController::class, 'submitCustomerResponse'])
+    ->middleware('signed')
+    ->name('quotations.customer-response.submit');
 
 Route::post('/logout', [AuthController::class, 'logout'])
     ->middleware('auth')
@@ -520,6 +523,8 @@ Route::middleware(['auth'])->group(function () {
         ->name('reports.crm.payment-collection');
     Route::post('/reports/crm/payment-collection/{payment}/update', [CrmReportController::class, 'updatePaymentCollection'])
         ->name('reports.crm.payment-collection.update');
+    Route::delete('/reports/crm/payment-collection/{payment}/delete', [CrmReportController::class, 'destroyPaymentCollection'])
+        ->name('reports.crm.payment-collection.delete');
     Route::get('/reports/crm/payment-collection/export', [CrmReportController::class, 'exportPaymentCollection'])
         ->name('reports.crm.payment-collection.export');
     Route::get('/reports/crm/branch-comparison', [CrmReportController::class, 'branchComparison'])
@@ -1135,6 +1140,9 @@ Route::post('/facebook-integration/{campaignMaster}/sync', [FacebookIntegrationC
 Route::post('/facebook-integration/sync-all', [FacebookIntegrationController::class, 'syncAllCampaigns'])
     ->middleware('can:facebook_integration.manage')
     ->name('facebook-integration.sync-all');
+Route::post('/facebook-integration/update-token', [FacebookIntegrationController::class, 'updateToken'])
+    ->middleware('can:facebook_integration.manage')
+    ->name('facebook-integration.update-token');
 
 
     Route::get('/quotation-setting',       [QuotationSettingsController::class, 'index'])->middleware('can:quotation_settings.menuview')->name('quotation');

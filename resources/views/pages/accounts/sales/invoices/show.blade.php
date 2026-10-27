@@ -863,10 +863,20 @@
     <div class="inv-topbar">
         {{-- Row 1: Back Navigation & Secondary Utilities --}}
         <div class="inv-top-nav">
+            @php
+                $showLeadId = request('lead_id') ?: (request('from') === 'lead' ? ($invoice->customer?->lead_id) : null);
+                if (!$showLeadId && url()->previous() && str_contains(url()->previous(), '/leads/')) {
+                    if (preg_match('/\/leads\/(\d+)/', url()->previous(), $m)) {
+                        $showLeadId = $m[1];
+                    }
+                }
+                $showBackUrl = $showLeadId ? url('/leads/' . $showLeadId) : route('accounts.sales.invoices.index');
+                $showBackLabel = $showLeadId ? 'Back to Lead' : 'All Invoices';
+            @endphp
             <div class="inv-nav-left">
-                <a href="{{ route('accounts.sales.invoices.index') }}" class="inv-back-btn" title="Back to All Invoices">
+                <a href="{{ $showBackUrl }}" class="inv-back-btn" title="{{ $showBackLabel }}">
                     <i class="bi bi-arrow-left"></i>
-                    <span>All Invoices</span>
+                    <span>{{ $showBackLabel }}</span>
                 </a>
                 <div class="inv-breadcrumbs">
                     <a href="{{ route('accounts.dashboard') }}"><i class="bi bi-house-door"></i> Accounts</a>

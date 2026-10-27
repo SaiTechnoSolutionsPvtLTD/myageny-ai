@@ -1013,13 +1013,16 @@ class ProjectApiController extends Controller
 
         // ── Prospect tab visibility & data (mirrors web show.blade.php 372-391) ──
         $canSeeProspectTab = $this->canSeeProspectTab($productionInitiation, $user);
+        $formExpiryDate = $productionInitiation->getFormExpiryDate();
         $prospectExpectedDate = $productionInitiation->expected_date
-            ?? $productionInitiation->leadProduct?->closure_date;
+            ?? $productionInitiation->leadProduct?->closure_date
+            ?? ($formExpiryDate ? $formExpiryDate->toDateString() : null)
+            ?? $productionInitiation->project_delivery_date;
         $prospectExpectedValue = $productionInitiation->expected_value !== null
             ? (float) $productionInitiation->expected_value
             : ($productionInitiation->leadProduct?->expected_value !== null
                 ? (float) $productionInitiation->leadProduct->expected_value
-                : null);
+                : ((float)($productionInitiation->leadProduct?->total_price ?? $productionInitiation->lead_budget_amount ?? 0) ?: null));
         $prospectExpectedDateFormatted  = $prospectExpectedDate
             ? Carbon::parse($prospectExpectedDate)->format('d M Y')
             : null;
@@ -2336,16 +2339,16 @@ class ProjectApiController extends Controller
             'can_edit_content_calendar_sheet' => ! ($user?->belongsToDesigningDepartment() ?? false),
             'can_see_testing_tab' => $this->canSeeTestingTab($p, $user),
             'can_see_prospect_tab'            => $this->canSeeProspectTab($p, $user),
-            'prospect_expected_date'          => $p->expected_date ?? $p->leadProduct?->closure_date,
-            'prospect_expected_date_formatted' => ($p->expected_date ?? $p->leadProduct?->closure_date)
-                ? Carbon::parse($p->expected_date ?? $p->leadProduct?->closure_date)->format('d M Y')
+            'prospect_expected_date'          => ($expResolved = $p->getResolvedExpectedDate()) ? $expResolved->toDateString() : null,
+            'prospect_expected_date_formatted' => $expResolved
+                ? $expResolved->format('d M Y')
                 : null,
-            'prospect_expected_date_relative' => $this->prospectRelativeTime($p->expected_date ?? $p->leadProduct?->closure_date),
+            'prospect_expected_date_relative' => $this->prospectRelativeTime($expResolved ? $expResolved->toDateString() : null),
             'prospect_expected_value'         => $p->expected_value !== null
                 ? (float) $p->expected_value
-                : ($p->leadProduct?->expected_value !== null ? (float) $p->leadProduct->expected_value : null),
-            'prospect_expected_value_formatted' => ($p->expected_value !== null || $p->leadProduct?->expected_value !== null)
-                ? '₹' . number_format((float) ($p->expected_value ?? $p->leadProduct->expected_value), 2)
+                : ($p->leadProduct?->expected_value !== null ? (float) $p->leadProduct->expected_value : (((float)($p->leadProduct?->total_price ?? $p->lead_budget_amount ?? 0)) ?: null)),
+            'prospect_expected_value_formatted' => ($p->expected_value !== null || $p->leadProduct?->expected_value !== null || ($p->leadProduct?->total_price ?? $p->lead_budget_amount))
+                ? '₹' . number_format((float) ($p->expected_value ?? $p->leadProduct?->expected_value ?? ($p->leadProduct?->total_price ?? $p->lead_budget_amount ?? 0)), 2)
                 : null,
             'prospect_product_name'           => $p->product_name ?: ($p->leadProduct?->product_name ?? null),
             'prospect_department'             => optional($p->department)->name ?? null,

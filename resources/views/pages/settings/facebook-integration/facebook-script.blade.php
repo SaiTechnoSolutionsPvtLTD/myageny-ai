@@ -538,5 +538,43 @@
     $(document).on('change', '.crm-field-select', function () {
         initFieldMapping($(this).closest('.fbmappingfields'));
     });
+
+    // Update Access Token Modal Handlers
+    $(document).on('click', '.open-update-token-modal', function (event) {
+        event.preventDefault();
+        $('#tokenTargetType').val('all').trigger('change');
+        $('#tokenAdAccountSelect').val('');
+        $('#tokenCampaignSelect').val('');
+        openModal('updateTokenModal');
+    });
+
+    $(document).on('click', '.updatecampaigntoken', function (event) {
+        event.preventDefault();
+        var campId = $(this).data('camp_id');
+        $('#tokenTargetType').val('campaign').trigger('change');
+        $('#tokenCampaignSelect').val(campId);
+        openModal('updateTokenModal');
+    });
+
+    $('#tokenTargetType').on('change', function () {
+        var target = $(this).val();
+        if (target === 'ad_account') {
+            $('#adAccountSelectGroup').show();
+            $('#campaignSelectGroup').hide();
+            $('#tokenAdAccountSelect').prop('required', true);
+            $('#tokenCampaignSelect').prop('required', false);
+        } else if (target === 'campaign') {
+            $('#adAccountSelectGroup').hide();
+            $('#campaignSelectGroup').show();
+            $('#tokenAdAccountSelect').prop('required', false);
+            $('#tokenCampaignSelect').prop('required', true);
+        } else {
+            $('#adAccountSelectGroup').hide();
+            $('#campaignSelectGroup').hide();
+            $('#tokenAdAccountSelect').prop('required', false);
+            $('#tokenCampaignSelect').prop('required', false);
+        }
+    });
+
 })(jQuery);
 </script>

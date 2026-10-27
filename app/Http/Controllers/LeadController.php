@@ -862,6 +862,7 @@ class LeadController extends Controller
             ->values();
 
         $salesExecutives = $this->visibility->visibleAssignableUsers();
+        $invoices = $lead->invoices;
 
         return view('pages.leads.show', compact(
             'lead',
@@ -873,7 +874,8 @@ class LeadController extends Controller
             'reviewOnlyCount',
             'escalationOnlyCount',
             'convertedProducts',
-            'salesExecutives'
+            'salesExecutives',
+            'invoices'
         ));
     }
 

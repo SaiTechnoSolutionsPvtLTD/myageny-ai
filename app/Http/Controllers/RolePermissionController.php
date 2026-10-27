@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\EmployeeOnboarding;
+use App\Models\InternJoiningForm;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -443,7 +445,48 @@ class RolePermissionController extends Controller
 
         $this->syncCompanySuperAdmin($user, $data['roles'] ?? []);
 
+        // Sync role to employee onboarding and intern
+        $primaryRoleName = !empty($data['roles']) ? reset($data['roles']) : null;
+        $primaryRole = $primaryRoleName ? Role::withoutGlobalScopes()->where('name', $primaryRoleName)->first() : null;
+        $this->syncEmployeeOnboardingRole($user, $primaryRole);
+
         return back()->with('success', "Roles and permissions updated for {$user->name}.");
+    }
+
+    private function syncEmployeeOnboardingRole(User $user, ?Role $role): void
+    {
+        $employees = EmployeeOnboarding::withoutGlobalScopes()
+            ->where('portal_user_id', $user->id)
+            ->orWhere(function ($q) use ($user) {
+                $q->where('email', $user->email);
+                if (!empty($user->official_email)) {
+                    $q->orWhere('official_email', $user->official_email);
+                }
+            })
+            ->get();
+
+        foreach ($employees as $employee) {
+            $employee->portal_user_id = $user->id;
+            $employee->role_id = $role?->id;
+            if ($role && $role->department_id) {
+                $employee->department_id = $role->department_id;
+            }
+            $employee->save();
+        }
+
+        $interns = InternJoiningForm::withoutGlobalScopes()
+            ->where('portal_user_id', $user->id)
+            ->orWhere('email', $user->email)
+            ->get();
+
+        foreach ($interns as $intern) {
+            $intern->portal_user_id = $user->id;
+            $intern->role_id = $role?->id;
+            if ($role && $role->department_id) {
+                $intern->department_id = $role->department_id;
+            }
+            $intern->save();
+        }
     }
 
     private function syncCompanySuperAdmin(User $user, array $roleNames): void

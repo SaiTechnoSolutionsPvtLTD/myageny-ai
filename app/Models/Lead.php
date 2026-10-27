@@ -380,6 +380,38 @@ class Lead extends Model
         return $this->hasMany(\App\Models\Quotation::class)->latest();
     }
 
+    public function customerMasters()
+    {
+        return $this->hasMany(\App\Models\CustomerMaster::class, 'lead_id');
+    }
+
+    public function getInvoicesAttribute()
+    {
+        if ($this->relationLoaded('invoices')) {
+            return $this->getRelation('invoices');
+        }
+
+        $customerIds = \App\Models\CustomerMaster::where('lead_id', $this->id)
+            ->when(!empty($this->mobile_number), fn($q) => $q->orWhere('mobile_number', $this->mobile_number))
+            ->when(!empty($this->company_name), fn($q) => $q->orWhere(function($sub) {
+                $sub->whereNotNull('company_name')
+                    ->whereRaw('LOWER(TRIM(company_name)) = ?', [strtolower(trim($this->company_name))]);
+            }))
+            ->pluck('id')
+            ->unique()
+            ->toArray();
+
+        if (empty($customerIds)) {
+            return collect();
+        }
+
+        return \App\Models\Invoice::with(['customer', 'payments'])
+            ->whereIn('customer_id', $customerIds)
+            ->latest('invoice_date')
+            ->latest('id')
+            ->get();
+    }
+
     public function customFieldValues()
     {
         return $this->hasMany(LeadFieldValue::class);

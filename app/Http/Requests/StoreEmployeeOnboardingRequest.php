@@ -21,8 +21,12 @@ class StoreEmployeeOnboardingRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if (! $this->filled('portal_email') && $this->filled('email')) {
-            $this->merge(['portal_email' => $this->input('email')]);
+        if (! $this->filled('portal_email')) {
+            if ($this->filled('official_email')) {
+                $this->merge(['portal_email' => $this->input('official_email')]);
+            } elseif ($this->filled('email')) {
+                $this->merge(['portal_email' => $this->input('email')]);
+            }
         }
 
         if ($this->has('employee_id')) {
@@ -54,7 +58,9 @@ class StoreEmployeeOnboardingRequest extends FormRequest
             'correspondence_address' => ['nullable', 'string', 'max:2000'],
             'permanent_address' => ['nullable', 'string', 'max:2000'],
             'mobile' => ['required', 'string', 'max:20'],
+            'official_mobile' => ['nullable', 'string', 'max:20'],
             'email' => ['required', 'email', 'max:150'],
+            'official_email' => ['nullable', 'email', 'max:150'],
             'date_of_birth' => ['required', 'date'],
             'joining_date' => ['nullable', 'date'],
             'blood_group' => ['nullable', Rule::in(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])],
@@ -122,7 +128,7 @@ class StoreEmployeeOnboardingRequest extends FormRequest
             'total_deduction' => ['nullable', 'numeric', 'min:0'],
             'net_salary' => ['nullable', 'numeric', 'min:0'],
             'salary_payment_mode' => ['nullable', Rule::in(['bank_transfer', 'cash', 'cheque', 'upi'])],
-            'salary_cycle' => ['nullable', Rule::in(['25_to_25', '10_to_10'])],
+            'salary_cycle' => ['nullable', Rule::in(['26_to_25', '1_to_30', '25_to_25', '10_to_10'])],
             'deduction_notes' => ['nullable', 'string', 'max:2000'],
 
             'declaration_date' => ['nullable', 'date'],

@@ -1,7 +1,7 @@
 @php
-    $cycle = $payroll->salary_cycle ?? $item->employee?->salary_cycle ?? '25_to_25';
+    $cycle = $payroll->salary_cycle ?? $item->employee?->salary_cycle ?? '26_to_25';
     [$cStart, $cEnd] = \App\Http\Controllers\PayrollController::getCycleDateRange($payroll->salary_month, $cycle);
-    $cycleLabel = $cycle === '10_to_10' ? '10 to 10 cycle' : '25 to 25 days cycle';
+    $cycleLabel = in_array($cycle, ['1_to_30', '10_to_10'], true) ? '1 to 30 cycle' : '26 to 25 cycle';
     $monthLabel = $payroll->salary_month->format('F Y') . ' (' . $cStart->format('d M') . ' - ' . $cEnd->format('d M') . ')';
     $issuedOn = optional($payroll->salary_date)->format('d M, Y') ?: now()->format('d M, Y');
 @endphp

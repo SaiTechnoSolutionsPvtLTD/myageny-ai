@@ -65,6 +65,57 @@ tbody tr:last-child td { border-bottom: none; }
 .empty-state { text-align: center; padding: 60px 20px; color: #9e9e9e; }
 .empty-state i { font-size: 42px; margin-bottom: 12px; display: block; }
 
+.qi-subtab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+.qi-subtab-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+.qi-subtab-btn.active {
+    background: #fe5f04;
+    color: #ffffff;
+    border-color: #fe5f04;
+    box-shadow: 0 2px 8px rgba(254, 95, 4, 0.25);
+}
+.qi-subtab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    background: #e2e8f0;
+    color: #475569;
+    transition: all 0.2s ease;
+}
+.qi-subtab-btn.active .qi-subtab-badge {
+    background: rgba(255, 255, 255, 0.28);
+    color: #ffffff;
+}
+.acm-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
+.status-paid { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+.status-partially-paid { background:#fef3c7; color:#b45309; border:1px solid #fde68a; }
+.status-sent { background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; }
+.status-created { background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe; }
+.status-draft { background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; }
+.status-overdue { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
+.status-cancelled { background:#f1f5f9; color:#94a3b8; border:1px solid #cbd5e1; text-decoration:line-through; }
+
    #summaryPreview {
         background: #ffffff;
         border-radius: 12px;
@@ -210,6 +261,9 @@ tbody tr:last-child td { border-bottom: none; }
     $overdueRem    = $lead->reminders->where('is_completed', false)->filter(fn($r) => $r->is_overdue)->count();
     $prodCount     = $lead->products->count();
     $qtCount       = $lead->quotations->count();
+    $invList       = $invoices ?? $lead->invoices;
+    $invCount      = $invList->count();
+    $qiTotalCount  = $qtCount + $invCount;
     $customFieldValues = $lead->customFieldValues
         ->filter(fn ($fieldValue) => $fieldValue->field && $fieldValue->field->is_active && $fieldValue->field->show_on_lead_create)
         ->sortBy(fn ($fieldValue) => [$fieldValue->field->sort_order ?? 9999, strtolower($fieldValue->field->label ?? '')]);
@@ -317,8 +371,8 @@ tbody tr:last-child td { border-bottom: none; }
             </button>
             <button class="lsp-tab" onclick="switchTab('quotations', this)">
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                Quotations
-                <span class="lsp-tab-count">{{ $qtCount }}</span>
+                Quote &amp; Inv
+                <span class="lsp-tab-count">{{ $qiTotalCount }}</span>
             </button>
             @if(auth()->user()?->allowsProductionUpdates())
             <button class="lsp-tab" onclick="switchTab('production-updates', this)">
@@ -1216,170 +1270,257 @@ tbody tr:last-child td { border-bottom: none; }
 
         <div class="lsp-panel" id="panel-quotations">
 
-            <div class="page-header">
-                <div class="page-title"></div>
-
-                    <a href="/quotations/create/{{ $lead->id }}" class="btn-primary">
+            {{-- ── Sub-tabs Header: Quotations & Invoices ── --}}
+            <div class="qi-subtabs-wrap" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; border-bottom:1px solid #e2e8f0; padding-bottom:14px; gap:12px; flex-wrap:wrap;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button type="button" class="qi-subtab-btn active" id="btnSubtabQuotations" onclick="switchQiSubtab('quotations')">
+                        <i class="bi bi-file-earmark-text"></i>
+                        <span>Quotations</span>
+                        <span class="qi-subtab-badge">{{ $qtCount }}</span>
+                    </button>
+                    <button type="button" class="qi-subtab-btn" id="btnSubtabInvoices" onclick="switchQiSubtab('invoices')">
+                        <i class="bi bi-receipt"></i>
+                        <span>Invoices</span>
+                        <span class="qi-subtab-badge">{{ $invCount }}</span>
+                    </button>
+                </div>
+                <div id="quotationsHeaderAction">
+                    <a href="/quotations/create/{{ $lead->id }}" class="btn-primary" style="display:inline-flex; align-items:center; gap:6px;">
                         <i class="bi bi-plus-lg"></i> New Quotation
                     </a>
-                {{--  @else
-                    <button type="button" class="btn-primary" disabled style="opacity: 0.5; cursor: not-allowed;" title="Please add products to lead before creating a quotation">
-                        <i class="bi bi-plus-lg"></i> New Quotation
-                    </button>
-                @endif  --}}
+                </div>
             </div>
 
-            {{-- Create new quotation form --}}
-            <div class="lsp-qt-form-wrap">
+            {{-- ── 1. Quotations Sub-panel ── --}}
+            <div id="qiSubpanelQuotations">
+                {{-- Create new quotation form --}}
+                <div class="lsp-qt-form-wrap">
 
-                <div class="card">
-        <div class="table-responsive">
+                    <div class="card">
+            <div class="table-responsive">
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Quotation No</th>
-                        <th>Lead</th>
-                        <th>Date</th>
-                        <th>Valid Until</th>
-                        <th>Total Amount</th>
-                        {{--  <th>Status</th>  --}}
-                        {{--  <th>Approved By</th>  --}}
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @php
-                        $i=1;
-                    @endphp
-                    @forelse($lead->quotations as $q)
-                    <tr>
-                        {{--  <td>{{ $loop->iteration + ($quotations->firstItem() - 1) }}</td>  --}}
-                        <td>{{ $i++ }}</td>
-                        <td><strong>{{ $q->quotation_no }}</strong></td>
-                        <td>{{ $q->lead?->contact_name ?? '—' }}<br>
-                            <small style="color:#9e9e9e">{{ $q->lead->company_name ?? '' }}</small>
-                        </td>
-                        <td>{{ $q->quotation_date->format('d M Y') }}</td>
-                        <td>{{ $q->valid_until->format('d M Y') }}</td>
-                        <td><strong>₹{{ number_format($q->total_amount, 2) }}</strong></td>
-                        {{--  <td>
-                            @if($q->is_approved)
-                                <span class="badge badge-approved"><i class="bi bi-check-circle-fill"></i> Approved</span>
-                            @else
-                                <span class="badge badge-pending"><i class="bi bi-clock-fill"></i> Pending</span>
-                            @endif
-                        </td>
-                        <td>{{ $q->approver->name ?? '—' }}</td>  --}}
-                        <td>
-                            <div class="action-btns">
-                                <a href="{{ route('quotations.show', $q) }}" class="btn-outline-sm">
-                                    <i class="bi bi-eye"></i> View
-                                </a>
-                                @if(!$q->is_approved)
-                                <form method="POST" action="{{ route('quotations.approve', $q) }}" style="display:inline">
-                                    @csrf @method('PATCH')
-                                    <button class="btn-outline-sm" style="border-color:#4caf50;color:#2e7d32">
-                                        <i class="bi bi-check-lg"></i> Approve
-                                    </button>
-                                </form>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Quotation No</th>
+                            <th>Lead</th>
+                            <th>Date</th>
+                            <th>Valid Until</th>
+                            <th>Total Amount</th>
+                            {{--  <th>Status</th>  --}}
+                            {{--  <th>Approved By</th>  --}}
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @php
+                            $i=1;
+                        @endphp
+                        @forelse($lead->quotations as $q)
+                        <tr>
+                            {{--  <td>{{ $loop->iteration + ($quotations->firstItem() - 1) }}</td>  --}}
+                            <td>{{ $i++ }}</td>
+                            <td><strong>{{ $q->quotation_no }}</strong></td>
+                            <td>{{ $q->lead?->contact_name ?? '—' }}<br>
+                                <small style="color:#9e9e9e">{{ $q->lead->company_name ?? '' }}</small>
+                            </td>
+                            <td>{{ $q->quotation_date->format('d M Y') }}</td>
+                            <td>{{ $q->valid_until->format('d M Y') }}</td>
+                            <td><strong>₹{{ number_format($q->total_amount, 2) }}</strong></td>
+                            {{--  <td>
+                                @if($q->is_approved)
+                                    <span class="badge badge-approved"><i class="bi bi-check-circle-fill"></i> Approved</span>
+                                @else
+                                    <span class="badge badge-pending"><i class="bi bi-clock-fill"></i> Pending</span>
                                 @endif
-                                <form method="POST" action="{{ route('quotations.destroy', $q) }}"
-                                      onsubmit="return confirm('Delete this quotation?')" style="display:inline">
-                                    @csrf @method('DELETE')
-                                    <button class="btn-danger-sm"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                    @empty
-                    <tr>
-                        <td colspan="9">
-                            <div class="empty-state">
-                                <i class="bi bi-file-earmark-text"></i>
-                                No quotations found.
-                            </div>
-                        </td>
-                    </tr>
-                    @endforelse
-                </tbody>
-            </table>
+                            </td>
+                            <td>{{ $q->approver->name ?? '—' }}</td>  --}}
+                            <td>
+                                <div class="action-btns">
+                                    <a href="{{ route('quotations.show', $q) }}" class="btn-outline-sm">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+                                    @if(!$q->is_approved)
+                                    <form method="POST" action="{{ route('quotations.approve', $q) }}" style="display:inline">
+                                        @csrf @method('PATCH')
+                                        <button class="btn-outline-sm" style="border-color:#4caf50;color:#2e7d32">
+                                            <i class="bi bi-check-lg"></i> Approve
+                                        </button>
+                                    </form>
+                                    @endif
+                                    <form method="POST" action="{{ route('quotations.destroy', $q) }}"
+                                          onsubmit="return confirm('Delete this quotation?')" style="display:inline">
+                                        @csrf @method('DELETE')
+                                        <button class="btn-danger-sm"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="9">
+                                <div class="empty-state">
+                                    <i class="bi bi-file-earmark-text"></i>
+                                    No quotations found.
+                                </div>
+                            </td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+
+
+
         </div>
+                    {{--  <div class="lsp-qt-form-head" onclick="toggleQtForm()">
+                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Create New Quotation
+                        <svg id="qtArrow" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="margin-left:auto;transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>  --}}
+                    {{--  <div class="lsp-qt-form-body {{ $lead->quotations->isEmpty() ? 'open' : '' }}" id="qtFormBody">
+                        <form method="POST" action="{{ route('leads.quotations.store', $lead) }}" id="qtForm">
+                            @csrf
+                            <div style="display:flex;flex-direction:column;gap:14px;">
 
-
-
-    </div>
-                {{--  <div class="lsp-qt-form-head" onclick="toggleQtForm()">
-                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Create New Quotation
-                    <svg id="qtArrow" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="margin-left:auto;transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>
-                </div>  --}}
-                {{--  <div class="lsp-qt-form-body {{ $lead->quotations->isEmpty() ? 'open' : '' }}" id="qtFormBody">
-                    <form method="POST" action="{{ route('leads.quotations.store', $lead) }}" id="qtForm">
-                        @csrf
-                        <div style="display:flex;flex-direction:column;gap:14px;">
-
-                            <div class="lsp-form-row lsp-form-row-3">
-                                <div class="lsp-group">
-                                    <label class="lsp-label">Quotation Date <span class="lsp-req">*</span></label>
-                                    <input type="date" name="quotation_date" class="lsp-inp no-ico" value="{{ today()->toDateString() }}" required>
+                                <div class="lsp-form-row lsp-form-row-3">
+                                    <div class="lsp-group">
+                                        <label class="lsp-label">Quotation Date <span class="lsp-req">*</span></label>
+                                        <input type="date" name="quotation_date" class="lsp-inp no-ico" value="{{ today()->toDateString() }}" required>
+                                    </div>
+                                    <div class="lsp-group">
+                                        <label class="lsp-label">Valid Until</label>
+                                        <input type="date" name="valid_until" class="lsp-inp no-ico" value="{{ today()->addDays(30)->toDateString() }}">
+                                    </div>
+                                    <div class="lsp-group">
+                                        <label class="lsp-label">Tax %</label>
+                                        <input type="number" name="tax_percent" class="lsp-inp no-ico" placeholder="0" min="0" max="100" value="18" oninput="recalcQt()">
+                                    </div>
                                 </div>
-                                <div class="lsp-group">
-                                    <label class="lsp-label">Valid Until</label>
-                                    <input type="date" name="valid_until" class="lsp-inp no-ico" value="{{ today()->addDays(30)->toDateString() }}">
-                                </div>
-                                <div class="lsp-group">
-                                    <label class="lsp-label">Tax %</label>
-                                    <input type="number" name="tax_percent" class="lsp-inp no-ico" placeholder="0" min="0" max="100" value="18" oninput="recalcQt()">
-                                </div>
-                            </div>
 
 
-                            <div>
-                                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;">Line Items</div>
-                                <div style="overflow-x:auto;">
-                                <table class="lsp-items-table" id="qtItemsTable">
-                                    <thead>
-                                        <tr>
-                                            <th style="min-width:160px;">Product Name *</th>
-                                            <th style="min-width:140px;">Description</th>
-                                            <th style="min-width:60px;">Qty *</th>
-                                            <th style="min-width:60px;">Unit</th>
-                                            <th style="min-width:100px;">Unit Price *</th>
-                                            <th style="min-width:70px;">Disc %</th>
-                                            <th style="min-width:90px;text-align:right;">Total</th>
-                                            <th style="width:30px;"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="qtItemsBody">
-                                        <tr class="qt-item-row">
-                                            <td><input type="text" name="items[0][product_name]" class="lsp-item-inp" placeholder="Product name" required></td>
-                                            <td><input type="text" name="items[0][description]" class="lsp-item-inp" placeholder="Optional"></td>
-                                            <td><input type="number" name="items[0][quantity]" class="lsp-item-inp" value="1" min="1" onchange="recalcQt()" style="width:55px;"></td>
-                                            <td><input type="text" name="items[0][unit]" class="lsp-item-inp" value="Nos" style="width:55px;"></td>
-                                            <td><input type="number" name="items[0][unit_price]" class="lsp-item-inp" placeholder="0.00" step="0.01" min="0" onchange="recalcQt()"></td>
-                                            <td><input type="number" name="items[0][discount_percent]" class="lsp-item-inp" value="0" min="0" max="100" onchange="recalcQt()" style="width:65px;"></td>
-                                            <td class="lsp-item-total">₹0.00</td>
-                                            <td><button type="button" class="lsp-remove-row" onclick="removeQtRow(this)" style="display:none">✕</button></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                                </div>
-                                <button type="button" class="lsp-add-row-btn" onclick="addQtRow()">
-                                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                    Add Line Item
-                                </button>
+                                <div>
+                                    <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;">Line Items</div>
+                                    <div style="overflow-x:auto;">
+                                    <table class="lsp-items-table" id="qtItemsTable">
+                                        <thead>
+                                            <tr>
+                                                <th style="min-width:160px;">Product Name *</th>
+                                                <th style="min-width:140px;">Description</th>
+                                                <th style="min-width:60px;">Qty *</th>
+                                                <th style="min-width:60px;">Unit</th>
+                                                <th style="min-width:100px;">Unit Price *</th>
+                                                <th style="min-width:70px;">Disc %</th>
+                                                <th style="min-width:90px;text-align:right;">Total</th>
+                                                <th style="width:30px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="qtItemsBody">
+                                            <tr class="qt-item-row">
+                                                <td><input type="text" name="items[0][product_name]" class="lsp-item-inp" placeholder="Product name" required></td>
+                                                <td><input type="text" name="items[0][description]" class="lsp-item-inp" placeholder="Optional"></td>
+                                                <td><input type="number" name="items[0][quantity]" class="lsp-item-inp" value="1" min="1" onchange="recalcQt()" style="width:55px;"></td>
+                                                <td><input type="text" name="items[0][unit]" class="lsp-item-inp" value="Nos" style="width:55px;"></td>
+                                                <td><input type="number" name="items[0][unit_price]" class="lsp-item-inp" placeholder="0.00" step="0.01" min="0" onchange="recalcQt()"></td>
+                                                <td><input type="number" name="items[0][discount_percent]" class="lsp-item-inp" value="0" min="0" max="100" onchange="recalcQt()" style="width:65px;"></td>
+                                                <td class="lsp-item-total">₹0.00</td>
+                                                <td><button type="button" class="lsp-remove-row" onclick="removeQtRow(this)" style="display:none">✕</button></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    </div>
+                                    <button type="button" class="lsp-add-row-btn" onclick="addQtRow()">
+                                        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                        Add Line Item
+                                    </button>
 
 
-                                <div class="lsp-qt-totals-preview">
-                                    <div class="lsp-qt-pr"><span>Subtotal</span><span id="qtSubtotal">₹0.00</span></div>
-                                    <div class="lsp-qt-pr"><span>Discount</span><span>-<input type="number" name="discount_amount" id="qtDiscInput" value="0" min="0" style="width:70px;border:1px solid var(--border);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;" onchange="recalcQt()"></span></div>
-                                    <div class="lsp-qt-pr"><span>Tax</span><span id="qtTaxAmt">₹0.00</span></div>
-                                    <div class="lsp-qt-pr grand"><span>Grand Total</span><span id="qtGrandTotal">₹0.00</span></div>
+                                    <div class="lsp-qt-totals-preview">
+                                        <div class="lsp-qt-pr"><span>Subtotal</span><span id="qtSubtotal">₹0.00</span></div>
+                                        <div class="lsp-qt-pr"><span>Discount</span><span>-<input type="number" name="discount_amount" id="qtDiscInput" value="0" min="0" style="width:70px;border:1px solid var(--border);border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;" onchange="recalcQt()"></span></div>
+                                        <div class="lsp-qt-pr"><span>Tax</span><span id="qtTaxAmt">₹0.00</span></div>
+                                        <div class="lsp-qt-pr grand"><span>Grand Total</span><span id="qtGrandTotal">₹0.00</span></div>
+                                    </div>
                                 </div>
-                            </div>
-                </div>  --}}
+                    </div>  --}}
+                </div>
+            </div>
+
+            {{-- ── 2. Invoices Sub-panel ── --}}
+            <div id="qiSubpanelInvoices" style="display:none;">
+                <div class="card">
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;">#</th>
+                                    <th>Invoice No</th>
+                                    <th>Customer / Company</th>
+                                    <th>Invoice Date</th>
+                                    <th>Due Date</th>
+                                    <th style="text-align:right;">Total Amount</th>
+                                    <th style="text-align:right;">Paid</th>
+                                    <th style="text-align:right;">Balance Due</th>
+                                    <th style="text-align:center;">Status</th>
+                                    <th style="text-align:center; width:90px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @php $invIdx = 1; @endphp
+                                @forelse($invList as $inv)
+                                <tr>
+                                    <td>{{ $invIdx++ }}</td>
+                                    <td>
+                                        <strong style="color:#0f172a; font-size:12.5px;">{{ $inv->invoice_number }}</strong>
+                                        @if($inv->payment_terms)
+                                            <br><small style="color:#64748b; font-size:11px;">{{ $inv->payment_terms }}</small>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <div style="font-weight:600; color:#1e293b; font-size:12px;">{{ $inv->customer_name ?: ($inv->customer?->customer_name ?? '—') }}</div>
+                                        @if($inv->company_name || $inv->customer?->company_name)
+                                            <small style="color:#64748b; font-size:11px;">{{ $inv->company_name ?: $inv->customer?->company_name }}</small>
+                                        @endif
+                                    </td>
+                                    <td style="white-space:nowrap; font-size:12px;">
+                                        {{ $inv->invoice_date ? \Carbon\Carbon::parse($inv->invoice_date)->format('d M Y') : '—' }}
+                                    </td>
+                                    <td style="white-space:nowrap; font-size:12px;">
+                                        {{ $inv->due_date ? \Carbon\Carbon::parse($inv->due_date)->format('d M Y') : '—' }}
+                                    </td>
+                                    <td style="text-align:right; font-weight:700; color:#0f172a; font-size:12.5px; white-space:nowrap;">
+                                        ₹{{ number_format((float)$inv->total_amount, 2) }}
+                                    </td>
+                                    <td style="text-align:right; font-weight:600; color:#16a34a; font-size:12px; white-space:nowrap;">
+                                        ₹{{ number_format((float)$inv->paid_amount, 2) }}
+                                    </td>
+                                    <td style="text-align:right; font-weight:700; color:{{ (float)$inv->balance_due > 0 ? '#dc2626' : '#16a34a' }}; font-size:12px; white-space:nowrap;">
+                                        ₹{{ number_format((float)$inv->balance_due, 2) }}
+                                    </td>
+                                    <td style="text-align:center; white-space:nowrap;">
+                                        {!! $inv->status_badge !!}
+                                    </td>
+                                    <td style="text-align:center; white-space:nowrap;">
+                                        <a href="{{ route('accounts.sales.invoices.print', ['invoice' => $inv->id, 'from' => 'lead', 'lead_id' => $lead->id]) }}" class="btn-outline-sm" title="View / Print Invoice" style="display:inline-flex; align-items:center; gap:4px; padding:4px 10px; font-size:11px; text-decoration:none;">
+                                            <i class="bi bi-eye"></i> View
+                                        </a>
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr>
+                                    <td colspan="10">
+                                        <div class="empty-state" style="padding:40px 20px; text-align:center; color:#64748b;">
+                                            <i class="bi bi-receipt" style="font-size:32px; color:#cbd5e1; display:block; margin-bottom:8px;"></i>
+                                            <span style="font-weight:600; font-size:13px;">No invoices found for this customer / lead.</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1564,6 +1705,29 @@ function switchTab(name, btn) {
     document.querySelectorAll('.lsp-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-'+name).classList.add('active');
+}
+
+// ── Quote & Inv Subtab switching (Quotations vs Invoices) ────────────
+function switchQiSubtab(tab) {
+    const btnQt = document.getElementById('btnSubtabQuotations');
+    const btnInv = document.getElementById('btnSubtabInvoices');
+    const panelQt = document.getElementById('qiSubpanelQuotations');
+    const panelInv = document.getElementById('qiSubpanelInvoices');
+    const actionQt = document.getElementById('quotationsHeaderAction');
+
+    if (tab === 'invoices') {
+        if (btnQt) btnQt.classList.remove('active');
+        if (btnInv) btnInv.classList.add('active');
+        if (panelQt) panelQt.style.display = 'none';
+        if (panelInv) panelInv.style.display = 'block';
+        if (actionQt) actionQt.style.display = 'none';
+    } else {
+        if (btnInv) btnInv.classList.remove('active');
+        if (btnQt) btnQt.classList.add('active');
+        if (panelInv) panelInv.style.display = 'none';
+        if (panelQt) panelQt.style.display = 'block';
+        if (actionQt) actionQt.style.display = 'block';
+    }
 }
 
 function toggleApprovalHistory(trigger) {
