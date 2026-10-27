@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\App\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Models\AssetCategory;
 use App\Models\AssetEntry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -93,19 +94,27 @@ class AssetApiController extends Controller
     // ── Private: list shape (compact) ─────────────────────────────────────────
     private function mapList(AssetEntry $a): array
     {
+        $customValues = $a->custom_field_values ?? [];
+        if (is_string($customValues)) {
+            $customValues = json_decode($customValues, true) ?: [];
+        }
+        $brand = $a->brand ?: ($customValues['brand'] ?? $customValues['sim_brand'] ?? '');
+        $categoryOrName = $a->asset_category ?: $a->asset_name;
+        $avatarInitial = strtoupper(substr(trim((string)$categoryOrName), 0, 2));
+
         return [
             'id'                     => $a->id,
             'asset_code'             => $a->asset_code             ?? '',
             'asset_name'             => $a->asset_name             ?? '',
             'asset_category'         => $a->asset_category         ?? '',
-            'brand'                  => $a->brand                  ?? '',
+            'brand'                  => $brand,
             'model_name'             => $a->model_name             ?? '',
             'serial_number'          => $a->serial_number          ?? '',
             'asset_status'           => $a->asset_status           ?? 'available',
             'location'               => $a->location               ?? '',
             'assigned_employee_name' => optional($a->assignedEmployee)->name,
             'assigned_employee_id'   => optional($a->assignedEmployee)->employee_id,
-            'avatar_initial'         => avatar_initial($a->asset_name, 'A'),
+            'avatar_initial'         => $avatarInitial ?: 'AS',
             'created_at'             => optional($a->created_at)->format('d M Y'),
         ];
     }
@@ -113,35 +122,122 @@ class AssetApiController extends Controller
     // ── Private: detail shape (full) ──────────────────────────────────────────
     private function mapDetail(AssetEntry $a): array
     {
+        $category = AssetCategory::where('name', $a->asset_category)->first();
+        $customFields = $category?->custom_fields ?? [];
+        if (is_string($customFields)) {
+            $customFields = json_decode($customFields, true) ?: [];
+        }
+        $customValues = $a->custom_field_values ?? [];
+        if (is_string($customValues)) {
+            $customValues = json_decode($customValues, true) ?: [];
+        }
+
+        // Build specifications matching web display logic
+        $specifications = [];
+        if (!empty($customFields)) {
+            foreach ($customFields as $cf) {
+                $cfName = $cf['name'] ?? '';
+                $cfVal = $customValues[$cfName] ?? null;
+                $cfType = $cf['type'] ?? 'text';
+                $label = $cf['label'] ?? ucwords(str_replace('_', ' ', $cfName));
+
+                $displayVal = '—';
+                $fileUrl = null;
+                if ($cfType === 'file' && !empty($cfVal)) {
+                    $fileUrl = asset($cfVal);
+                    $displayVal = 'View Attached File';
+                } elseif ($cfType === 'checkbox') {
+                    if (is_array($cfVal)) {
+                        $displayVal = implode(', ', $cfVal);
+                    } elseif (!empty($cfVal) && $cfVal != '0') {
+                        $displayVal = '✓ Yes';
+                    } else {
+                        $displayVal = 'No';
+                    }
+                } elseif ($cfType === 'date' && !empty($cfVal)) {
+                    try {
+                        $displayVal = \Carbon\Carbon::parse($cfVal)->format('d M Y');
+                    } catch (\Throwable $e) {
+                        $displayVal = (string) $cfVal;
+                    }
+                } elseif (!empty($cfVal)) {
+                    $displayVal = is_array($cfVal) ? implode(', ', $cfVal) : (string) $cfVal;
+                }
+
+                $specifications[] = [
+                    'name'          => $cfName,
+                    'label'         => $label,
+                    'type'          => $cfType,
+                    'value'         => $cfVal,
+                    'display_value' => $displayVal,
+                    'file_url'      => $fileUrl,
+                ];
+            }
+        } elseif (!empty($customValues)) {
+            foreach ($customValues as $k => $v) {
+                $isUpload = is_string($v) && (str_starts_with($v, 'uploads/') || str_starts_with($v, '/uploads/'));
+                $specifications[] = [
+                    'name'          => $k,
+                    'label'         => ucwords(str_replace('_', ' ', $k)),
+                    'type'          => $isUpload ? 'file' : 'text',
+                    'value'         => $v,
+                    'display_value' => $isUpload ? 'View Attached File' : (is_array($v) ? implode(', ', $v) : ($v ?: '—')),
+                    'file_url'      => $isUpload ? asset($v) : null,
+                ];
+            }
+        }
+
+        // Brand & model fallback
+        $brand = $a->brand ?: ($customValues['brand'] ?? $customValues['sim_brand'] ?? '');
+        $model = $a->model_name ?: ($customValues['model'] ?? $customValues['model_name'] ?? '');
+
+        // Avatar initial matching web: category first, then asset_name
+        $categoryOrName = $a->asset_category ?: $a->asset_name;
+        $avatarInitial = strtoupper(substr(trim((string)$categoryOrName), 0, 2));
+
+        // Employee avatar initial
+        $empInitial = '';
+        if ($a->assignedEmployee && !empty($a->assignedEmployee->name)) {
+            $empInitial = strtoupper(substr(trim($a->assignedEmployee->name), 0, 2));
+        }
+
         return [
-            'id'                     => $a->id,
-            'asset_code'             => $a->asset_code             ?? '',
-            'asset_name'             => $a->asset_name             ?? '',
-            'asset_category'         => $a->asset_category         ?? '',
-            'brand'                  => $a->brand                  ?? '',
-            'model_name'             => $a->model_name             ?? '',
-            'serial_number'          => $a->serial_number          ?? '',
-            'asset_status'           => $a->asset_status           ?? 'available',
-            'location'               => $a->location               ?? '',
-            'avatar_initial'         => avatar_initial($a->asset_name, 'A'),
+            'id'                       => $a->id,
+            'asset_code'               => $a->asset_code               ?? '',
+            'asset_name'               => $a->asset_name               ?? '',
+            'asset_category'           => $a->asset_category           ?? '',
+            'brand'                    => $brand,
+            'model_name'               => $model,
+            'serial_number'            => $a->serial_number            ?? '',
+            'asset_status'             => $a->asset_status             ?? 'available',
+            'location'                 => $a->location                 ?? '',
+            'avatar_initial'           => $avatarInitial ?: 'AS',
+
+            // Created Info
+            'created_by'               => $a->creator?->name ?? 'System',
+            'created_at'               => optional($a->created_at)->format('d M Y') ?? '',
+
+            // Specifications & Custom Fields
+            'custom_fields'            => $customFields,
+            'custom_field_values'      => $customValues,
+            'specifications'           => $specifications,
 
             // Purchase
-            'purchase_date'          => optional($a->purchase_date)->format('d M Y') ?? '',
-            'purchase_cost'          => $a->purchase_cost          ? (float) $a->purchase_cost : null,
-            'vendor_name'            => $a->vendor_name            ?? '',
-            'invoice_number'         => $a->invoice_number         ?? '',
-            'warranty_expiry_date'   => optional($a->warranty_expiry_date)->format('d M Y') ?? '',
+            'purchase_date'            => optional($a->purchase_date)->format('d M Y') ?? '',
+            'purchase_cost'            => $a->purchase_cost            ? (float) $a->purchase_cost : null,
+            'vendor_name'              => $a->vendor_name              ?? '',
+            'invoice_number'           => $a->invoice_number           ?? '',
+            'warranty_expiry_date'     => optional($a->warranty_expiry_date)->format('d M Y') ?? '',
 
             // Assignment
-            'assigned_employee_name' => optional($a->assignedEmployee)->name      ?? '',
-            'assigned_employee_id'   => optional($a->assignedEmployee)->employee_id ?? '',
-            'assigned_date'          => optional($a->assigned_date)->format('d M Y') ?? '',
+            'assigned_employee_name'   => optional($a->assignedEmployee)->name        ?? '',
+            'assigned_employee_id'     => optional($a->assignedEmployee)->employee_id  ?? '',
+            'assigned_employee_avatar' => $empInitial,
+            'assigned_date'            => optional($a->assigned_date)->format('d M Y') ?? '',
 
             // Notes
-            'condition_notes'        => $a->condition_notes        ?? '',
-            'description'            => $a->description            ?? '',
-
-            'created_at'             => optional($a->created_at)->format('d M Y'),
+            'condition_notes'          => $a->condition_notes          ?? '',
+            'description'              => $a->description              ?? '',
         ];
     }
 }

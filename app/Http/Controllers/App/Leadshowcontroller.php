@@ -420,6 +420,157 @@ class LeadShowController extends Controller
         ]);
     }
 
+    public function updateReminder(Request $request, Lead $lead, LeadReminder $reminder): JsonResponse
+    {
+        abort_unless($this->visibility->canAccessLead($lead, request()->user()), 403);
+        abort_if($reminder->lead_id !== $lead->id, 403, 'Reminder does not belong to this lead.');
+
+        $data = $request->validate([
+            'title'          => ['sometimes', 'required', 'string', 'max:150'],
+            'description'    => ['nullable', 'string', 'max:500'],
+            'remind_at'      => ['sometimes', 'required', 'date'],
+            'type'           => ['sometimes', 'required', 'in:' . implode(',', array_keys(LeadReminder::TYPES))],
+            'priority'       => ['sometimes', 'required', 'in:low,medium,high'],
+            'remainder_time' => ['nullable'],
+            'is_completed'   => ['nullable', 'boolean'],
+        ]);
+
+        if (!empty($data['remind_at']) && empty($data['remainder_time'])) {
+            $data['remainder_time'] = \Carbon\Carbon::parse($data['remind_at'])->format('H:i:s');
+        }
+
+        if (isset($data['is_completed'])) {
+            $data['completed_at'] = $data['is_completed'] ? now() : null;
+        }
+
+        $reminder->update($data);
+        $reminder->load('user:id,name');
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Reminder updated successfully.',
+            'data'    => $this->formatReminder($reminder),
+        ]);
+    }
+
+    public function verifyReminder(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $reminder = LeadReminder::with('lead')->find($id);
+
+        if (!$reminder) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Reminder not found or deleted.',
+                'data'    => [
+                    'id'     => $id,
+                    'exists' => false,
+                    'status' => 'deleted',
+                ],
+            ], 200);
+        }
+
+        // Verify access: user owns reminder or has access to its lead
+        $hasAccess = ($reminder->user_id === $user->id) ||
+            ($reminder->lead && $this->visibility->canAccessLead($reminder->lead, $user));
+
+        if (!$hasAccess) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Unauthorized access to reminder.',
+            ], 403);
+        }
+
+        $statusStr = $reminder->is_completed ? 'completed' : ($reminder->is_overdue ? 'overdue' : 'pending');
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Reminder verified.',
+            'data'    => [
+                'id'             => $reminder->id,
+                'exists'         => true,
+                'lead_id'        => $reminder->lead_id,
+                'title'          => $reminder->title,
+                'description'    => $reminder->description,
+                'remind_at'      => $reminder->remind_at?->format('Y-m-d H:i:s'),
+                'remainder_time' => optional($reminder->remainder_time)->format('H:i:s'),
+                'type'           => $reminder->type,
+                'priority'       => $reminder->priority,
+                'is_completed'   => (bool) $reminder->is_completed,
+                'completed_at'   => $reminder->completed_at?->format('Y-m-d H:i:s'),
+                'is_overdue'     => (bool) $reminder->is_overdue,
+                'status'         => $statusStr,
+                'updated_at'     => $reminder->updated_at?->toIso8601String(),
+            ],
+        ]);
+    }
+
+    public function verifyRemindersBatch(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $ids = $request->input('ids', []);
+        if (!is_array($ids) || empty($ids)) {
+            return response()->json([
+                'status'  => true,
+                'message' => 'No IDs provided.',
+                'data'    => [],
+            ]);
+        }
+
+        // Limit batch size to 50 for performance
+        $ids = array_slice(array_unique(array_filter(array_map('intval', $ids))), 0, 50);
+
+        $reminders = LeadReminder::with('lead')
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        $result = [];
+        foreach ($ids as $id) {
+            if (!$reminders->has($id)) {
+                $result[] = [
+                    'id'     => $id,
+                    'exists' => false,
+                    'status' => 'deleted',
+                ];
+                continue;
+            }
+
+            $rem = $reminders->get($id);
+            $hasAccess = ($rem->user_id === $user->id) ||
+                ($rem->lead && $this->visibility->canAccessLead($rem->lead, $user));
+
+            if (!$hasAccess) {
+                continue;
+            }
+
+            $statusStr = $rem->is_completed ? 'completed' : ($rem->is_overdue ? 'overdue' : 'pending');
+
+            $result[] = [
+                'id'             => $rem->id,
+                'exists'         => true,
+                'lead_id'        => $rem->lead_id,
+                'title'          => $rem->title,
+                'description'    => $rem->description,
+                'remind_at'      => $rem->remind_at?->format('Y-m-d H:i:s'),
+                'remainder_time' => optional($rem->remainder_time)->format('H:i:s'),
+                'type'           => $rem->type,
+                'priority'       => $rem->priority,
+                'is_completed'   => (bool) $rem->is_completed,
+                'completed_at'   => $rem->completed_at?->format('Y-m-d H:i:s'),
+                'is_overdue'     => (bool) $rem->is_overdue,
+                'status'         => $statusStr,
+                'updated_at'     => $rem->updated_at?->toIso8601String(),
+            ];
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Batch verification complete.',
+            'data'    => $result,
+        ]);
+    }
+
     // ════════════════════════════════════════════════════════════════
     // CST & WEEKLY UPDATES
     // Mirrors LeadController::storeCstUpdate() (web) — Update Type +

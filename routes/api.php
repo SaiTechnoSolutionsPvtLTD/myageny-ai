@@ -165,6 +165,7 @@ Route::get('/get-lead-status', [LeadController::class, 'leadStatus'])->middlewar
 Route::get('/get-lead-source', [LeadController::class, 'leadSource']);
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/reminder-list', [\App\Http\Controllers\App\AppApiController::class, 'reminderList']);
     Route::get('/quotation/{quotation}', [QuotationController::class, 'apiShow']);
     Route::post('/create-quotation', [QuotationController::class, 'apiStore']);
     Route::put('/quotation/{quotation}', [QuotationController::class, 'apiUpdate']);
@@ -674,6 +675,11 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     Route::post('price-requests/{req}/approve', [MobileLeadController::class, 'priceRequestApprove']);
     Route::post('price-requests/{req}/reject', [MobileLeadController::class, 'priceRequestReject']);
 
+    // ── Reminder Verification & List ────────────────────────────────────────
+    Route::get('reminders/{id}/verify',      [MobileLeadShowController::class, 'verifyReminder'])->name('reminders.verify');
+    Route::post('reminders/verify-batch',    [MobileLeadShowController::class, 'verifyRemindersBatch'])->name('reminders.verify-batch');
+    Route::post('reminder-list',             [AppApiController::class, 'reminderList'])->name('reminders.list');
+
     // ── CRUD ────────────────────────────────────────────────────────────────
     Route::get('/',          [MobileLeadController::class, 'index'])->name('index');
     Route::post('/',         [MobileLeadController::class, 'store'])->name('store');
@@ -691,6 +697,7 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
 
     // ── Reminders ───────────────────────────────────────────────────────────
     Route::post('/{lead}/reminders',                      [MobileLeadShowController::class, 'storeReminder'])->name('reminders.store');
+    Route::put('/{lead}/reminders/{reminder}',            [MobileLeadShowController::class, 'updateReminder'])->name('reminders.update');
     Route::patch('/{lead}/reminders/{reminder}/complete', [MobileLeadShowController::class, 'completeReminder'])->name('reminders.complete');
     Route::delete('/{lead}/reminders/{reminder}',         [MobileLeadShowController::class, 'destroyReminder'])->name('reminders.destroy');
     Route::post('/reminder-list',                         [AppApiController::class, 'reminderList']);
