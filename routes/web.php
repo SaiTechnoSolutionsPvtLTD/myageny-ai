@@ -527,6 +527,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/callback', [App\Http\Controllers\ZohoBooksController::class, 'oauthCallback'])->name('oauth.callback');
             Route::post('/manual-token', [App\Http\Controllers\ZohoBooksController::class, 'manualToken'])->name('manual-token');
             Route::post('/select-organization', [App\Http\Controllers\ZohoBooksController::class, 'selectOrganization'])->name('select-organization');
+            Route::post('/fetch-organizations', [App\Http\Controllers\ZohoBooksController::class, 'fetchOrganizations'])->name('fetch-organizations');
             Route::get('/test-connection', [App\Http\Controllers\ZohoBooksController::class, 'testConnection'])->name('test-connection');
             Route::post('/disconnect', [App\Http\Controllers\ZohoBooksController::class, 'disconnect'])->name('disconnect');
 
@@ -540,6 +541,14 @@ Route::middleware(['auth'])->group(function () {
             // Expenses
             Route::get('/expenses', [App\Http\Controllers\ZohoBooksController::class, 'expenses'])->name('expenses');
             Route::post('/expenses/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncExpenses'])->name('expenses.sync');
+            Route::post('/expenses/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migrateExpense'])->name('expenses.migrate');
+            Route::post('/expenses/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigrateExpenses'])->name('expenses.bulk-migrate');
+
+            // Payment Collections (Customer Payments)
+            Route::get('/payments', [App\Http\Controllers\ZohoBooksController::class, 'payments'])->name('payments');
+            Route::post('/payments/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncPayments'])->name('payments.sync');
+            Route::post('/payments/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migratePayment'])->name('payments.migrate');
+            Route::post('/payments/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigratePayments'])->name('payments.bulk-migrate');
         });
     });
 

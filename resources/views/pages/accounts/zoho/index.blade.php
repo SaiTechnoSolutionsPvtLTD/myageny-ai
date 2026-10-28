@@ -67,18 +67,14 @@
                 API Settings
             </a>
             <a href="{{ route('accounts.zoho.invoices') }}" class="acm-btn acm-btn-secondary">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                View Zoho Invoices ({{ $totalInvoicesCount }})
+                Invoices ({{ $totalInvoicesCount }})
             </a>
-            @if($integration->is_connected)
-            <form action="{{ route('accounts.zoho.invoices.sync') }}" method="POST" style="margin:0;">
-                @csrf
-                <button type="submit" class="acm-btn acm-btn-primary" onclick="this.innerHTML='Syncing...'; this.disabled=true; this.form.submit();">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                    Sync Invoices Now
-                </button>
-            </form>
-            @endif
+            <a href="{{ route('accounts.zoho.expenses') }}" class="acm-btn acm-btn-secondary">
+                Expenses ({{ $totalExpensesCount }})
+            </a>
+            <a href="{{ route('accounts.zoho.payments') }}" class="acm-btn acm-btn-secondary">
+                Payments ({{ $totalPaymentsCount }})
+            </a>
         </div>
     </div>
 
@@ -114,7 +110,11 @@
                     </div>
                     <div style="font-size:12.5px; color:#64748b; margin-top:4px;">
                         @if($integration->is_connected)
-                            Active Organization: <strong style="color:#0f172a;">{{ $integration->organization_name ?: 'Default' }}</strong> (ID: {{ $integration->organization_id }}) &bull; Region: <strong>{{ strtoupper($integration->region) }}</strong> &bull; Last Synced: {{ $integration->last_synced_at ? $integration->last_synced_at->format('d M Y, h:i A') : 'Never' }}
+                            @if($integration->organization_id)
+                                Active Organization: <strong style="color:#0f172a;">{{ $integration->organization_name ?: 'Active' }}</strong> (ID: {{ $integration->organization_id }}) &bull; Region: <strong>{{ strtoupper($integration->region) }}</strong> &bull; Last Synced: {{ $integration->last_synced_at ? $integration->last_synced_at->format('d M Y, h:i A') : 'Never' }}
+                            @else
+                                Active Organization: <strong style="color:#ea580c;">Not set! <a href="{{ route('accounts.zoho.settings') }}" style="color:#fe5f04; text-decoration:underline;">Click here to enter your Organization ID</a></strong>
+                            @endif
                         @else
                             No active OAuth session. Please connect your Zoho account in settings to fetch invoices.
                         @endif
@@ -133,24 +133,96 @@
         <!-- Stats Grid -->
         <div class="zh-stats-grid">
             <div class="zh-stat-card">
-                <div class="zh-stat-label">Total Zoho Invoices</div>
+                <div class="zh-stat-label">Zoho Invoices</div>
                 <div class="zh-stat-value">{{ number_format($totalInvoicesCount) }}</div>
-                <div class="zh-stat-sub">Fetched from Zoho Books</div>
+                <div class="zh-stat-sub">₹{{ number_format($totalInvoiceAmount, 2) }} &bull; {{ $migratedInvoicesCount }} in CRM</div>
             </div>
             <div class="zh-stat-card">
-                <div class="zh-stat-label">Total Invoiced Value</div>
-                <div class="zh-stat-value">₹{{ number_format($totalInvoiceAmount, 2) }}</div>
-                <div class="zh-stat-sub">Gross Zoho Billing</div>
+                <div class="zh-stat-label">Zoho Expenses</div>
+                <div class="zh-stat-value">{{ number_format($totalExpensesCount) }}</div>
+                <div class="zh-stat-sub">₹{{ number_format($totalExpenseAmount, 2) }} &bull; {{ $migratedExpensesCount }} in CRM</div>
+            </div>
+            <div class="zh-stat-card">
+                <div class="zh-stat-label">Payments Received</div>
+                <div class="zh-stat-value">{{ number_format($totalPaymentsCount) }}</div>
+                <div class="zh-stat-sub">₹{{ number_format($totalPaymentAmount, 2) }} &bull; {{ $migratedPaymentsCount }} in CRM</div>
             </div>
             <div class="zh-stat-card">
                 <div class="zh-stat-label">Total Balance Due</div>
                 <div class="zh-stat-value" style="color:#dc2626;">₹{{ number_format($totalBalanceDue, 2) }}</div>
                 <div class="zh-stat-sub">Uncollected in Zoho</div>
             </div>
-            <div class="zh-stat-card">
-                <div class="zh-stat-label">Migrated to CRM</div>
-                <div class="zh-stat-value" style="color:#16a34a;">{{ number_format($migratedInvoicesCount) }} / {{ number_format($totalInvoicesCount) }}</div>
-                <div class="zh-stat-sub">{{ number_format($pendingInvoicesCount) }} pending migration</div>
+        </div>
+
+        <!-- 3 Quick Sync & Migration Modules -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">
+            <!-- Invoices Module Box -->
+            <div class="zh-card" style="border-top:4px solid #fe5f04;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                    <div>
+                        <h4 style="margin:0; font-size:15px; font-weight:800; color:#0f172a;">1. Sales Invoices</h4>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">{{ number_format($totalInvoicesCount) }} Invoices ({{ number_format($migratedInvoicesCount) }} Migrated)</div>
+                    </div>
+                    <span style="font-size:13px; font-weight:800; color:#fe5f04;">₹{{ number_format($totalInvoiceAmount, 2) }}</span>
+                </div>
+                <div style="font-size:12.5px; color:#475569; margin-bottom:14px; line-height:1.4;">
+                    Imports invoices, customer details, tax breakdowns, and line items from Zoho Books into CRM Sales Invoices.
+                </div>
+                <div style="display:flex; gap:8px;">
+                    @if($integration->is_connected)
+                    <form action="{{ route('accounts.zoho.invoices.sync') }}" method="POST" style="margin:0;">
+                        @csrf
+                        <button type="submit" class="acm-btn acm-btn-primary" style="padding:6px 12px; font-size:12px;">Sync Invoices</button>
+                    </form>
+                    @endif
+                    <a href="{{ route('accounts.zoho.invoices') }}" class="acm-btn acm-btn-outline" style="padding:6px 12px; font-size:12px;">View & Migrate</a>
+                </div>
+            </div>
+
+            <!-- Expenses Module Box -->
+            <div class="zh-card" style="border-top:4px solid #0284c7;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                    <div>
+                        <h4 style="margin:0; font-size:15px; font-weight:800; color:#0f172a;">2. Expenses</h4>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">{{ number_format($totalExpensesCount) }} Expenses ({{ number_format($migratedExpensesCount) }} Migrated)</div>
+                    </div>
+                    <span style="font-size:13px; font-weight:800; color:#0284c7;">₹{{ number_format($totalExpenseAmount, 2) }}</span>
+                </div>
+                <div style="font-size:12.5px; color:#475569; margin-bottom:14px; line-height:1.4;">
+                    Imports company expenses, vendor mappings, payment accounts, and categories from Zoho Books into CRM Expenses.
+                </div>
+                <div style="display:flex; gap:8px;">
+                    @if($integration->is_connected)
+                    <form action="{{ route('accounts.zoho.expenses.sync') }}" method="POST" style="margin:0;">
+                        @csrf
+                        <button type="submit" class="acm-btn acm-btn-primary" style="background:#0284c7; padding:6px 12px; font-size:12px;">Sync Expenses</button>
+                    </form>
+                    @endif
+                    <a href="{{ route('accounts.zoho.expenses') }}" class="acm-btn acm-btn-outline" style="padding:6px 12px; font-size:12px;">View & Migrate</a>
+                </div>
+            </div>
+
+            <!-- Payments Received Module Box -->
+            <div class="zh-card" style="border-top:4px solid #16a34a;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                    <div>
+                        <h4 style="margin:0; font-size:15px; font-weight:800; color:#0f172a;">3. Payment Collections</h4>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">{{ number_format($totalPaymentsCount) }} Collections ({{ number_format($migratedPaymentsCount) }} Migrated)</div>
+                    </div>
+                    <span style="font-size:13px; font-weight:800; color:#16a34a;">₹{{ number_format($totalPaymentAmount, 2) }}</span>
+                </div>
+                <div style="font-size:12.5px; color:#475569; margin-bottom:14px; line-height:1.4;">
+                    Imports customer payments, bank deposits, and settles applied invoices balance due in the CRM ledger.
+                </div>
+                <div style="display:flex; gap:8px;">
+                    @if($integration->is_connected)
+                    <form action="{{ route('accounts.zoho.payments.sync') }}" method="POST" style="margin:0;">
+                        @csrf
+                        <button type="submit" class="acm-btn acm-btn-primary" style="background:#16a34a; padding:6px 12px; font-size:12px;">Sync Payments</button>
+                    </form>
+                    @endif
+                    <a href="{{ route('accounts.zoho.payments') }}" class="acm-btn acm-btn-outline" style="padding:6px 12px; font-size:12px;">View & Migrate</a>
+                </div>
             </div>
         </div>
 

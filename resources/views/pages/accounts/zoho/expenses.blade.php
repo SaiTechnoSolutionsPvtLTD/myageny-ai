@@ -89,6 +89,13 @@
                 <input type="text" name="search" value="{{ request('search') }}" placeholder="Search Account, Vendor, Description..." style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
             </div>
             <div>
+                <select name="migration_status" style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+                    <option value="">All Migration Status</option>
+                    <option value="migrated" {{ request('migration_status') === 'migrated' ? 'selected' : '' }}>Migrated to CRM</option>
+                    <option value="pending" {{ request('migration_status') === 'pending' ? 'selected' : '' }}>Pending Migration</option>
+                </select>
+            </div>
+            <div>
                 <input type="date" name="from_date" value="{{ request('from_date') }}" style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
             </div>
             <div>
@@ -98,51 +105,89 @@
             <a href="{{ route('accounts.zoho.expenses') }}" class="acm-btn acm-btn-outline">Reset</a>
         </form>
 
-        <div class="zh-card" style="padding:0; overflow:hidden;">
-            @if($expenses->isEmpty())
-                <div style="text-align:center; padding:48px 20px;">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" style="margin-bottom:10px;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
-                    <div style="font-size:14px; font-weight:700; color:#334155;">No Expenses Synced Yet</div>
-                    <div style="font-size:12.5px; color:#64748b; margin-top:4px;">Click "Sync Expenses from Zoho" to pull expenses.</div>
-                </div>
-            @else
-                <div style="overflow-x:auto;">
-                    <table class="zh-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Account Name</th>
-                                <th>Paid Through</th>
-                                <th>Vendor / Payee</th>
-                                <th>Description / Ref</th>
-                                <th style="text-align:right;">Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($expenses as $exp)
-                            <tr>
-                                <td>{{ $exp->expense_date ? $exp->expense_date->format('d M Y') : '—' }}</td>
-                                <td><strong>{{ $exp->account_name ?: 'General Expense' }}</strong></td>
-                                <td>{{ $exp->paid_through_account_name ?: '—' }}</td>
-                                <td>{{ $exp->vendor_name ?: '—' }}</td>
-                                <td>
-                                    <div>{{ $exp->description ?: '—' }}</div>
-                                    @if($exp->reference_number)
-                                        <div style="font-size:11px; color:#94a3b8;">Ref: {{ $exp->reference_number }}</div>
-                                    @endif
-                                </td>
-                                <td style="text-align:right; font-weight:700;">₹{{ number_format((float)$exp->total, 2) }}</td>
-                            </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+        <form action="{{ route('accounts.zoho.expenses.bulk-migrate') }}" method="POST">
+            @csrf
+            <div class="zh-card" style="padding:0; overflow:hidden;">
+                <div style="padding:16px 20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div style="font-size:13.5px; font-weight:700; color:#0f172a;">
+                        Showing {{ $expenses->firstItem() ?? 0 }} to {{ $expenses->lastItem() ?? 0 }} of {{ $expenses->total() }} Expenses
+                    </div>
+                    <div>
+                        <button type="submit" class="acm-btn acm-btn-primary" onclick="return confirm('Migrate selected unmigrated expenses into CRM Expenses?')" style="font-size:12px;">
+                            Bulk Migrate to CRM Expenses
+                        </button>
+                    </div>
                 </div>
 
-                <div style="padding:14px 20px; border-top:1px solid #e2e8f0;">
-                    {{ $expenses->links() }}
-                </div>
-            @endif
-        </div>
+                @if($expenses->isEmpty())
+                    <div style="text-align:center; padding:48px 20px;">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" style="margin-bottom:10px;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+                        <div style="font-size:14px; font-weight:700; color:#334155;">No Expenses Synced Yet</div>
+                        <div style="font-size:12.5px; color:#64748b; margin-top:4px;">Click "Sync Expenses from Zoho" to pull expenses.</div>
+                    </div>
+                @else
+                    <div style="overflow-x:auto;">
+                        <table class="zh-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:36px; text-align:center;">
+                                        <input type="checkbox" onchange="document.querySelectorAll('.exp-checkbox').forEach(cb => cb.checked = this.checked)">
+                                    </th>
+                                    <th>Date</th>
+                                    <th>Account Name</th>
+                                    <th>Paid Through</th>
+                                    <th>Vendor / Payee</th>
+                                    <th>Description / Ref</th>
+                                    <th style="text-align:right;">Amount</th>
+                                    <th style="text-align:center;">CRM Status</th>
+                                    <th style="text-align:right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($expenses as $exp)
+                                <tr>
+                                    <td style="text-align:center;">
+                                        @if(!$exp->is_migrated_to_native)
+                                            <input type="checkbox" name="selected_ids[]" value="{{ $exp->id }}" class="exp-checkbox">
+                                        @endif
+                                    </td>
+                                    <td>{{ $exp->expense_date ? $exp->expense_date->format('d M Y') : '—' }}</td>
+                                    <td><strong>{{ $exp->account_name ?: 'General Expense' }}</strong></td>
+                                    <td>{{ $exp->paid_through_account_name ?: '—' }}</td>
+                                    <td>{{ $exp->vendor_name ?: '—' }}</td>
+                                    <td>
+                                        <div>{{ $exp->description ?: '—' }}</div>
+                                        @if($exp->reference_number)
+                                            <div style="font-size:11px; color:#94a3b8;">Ref: {{ $exp->reference_number }}</div>
+                                        @endif
+                                    </td>
+                                    <td style="text-align:right; font-weight:700;">₹{{ number_format((float)$exp->total, 2) }}</td>
+                                    <td style="text-align:center;">
+                                        @if($exp->is_migrated_to_native)
+                                            <a href="{{ route('accounts.expenses.show', $exp->migrated_native_expense_id) }}" target="_blank" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; color:#15803d; background:#dcfce7; padding:3px 8px; border-radius:6px; text-decoration:none;">
+                                                ✓ In CRM (#{{ $exp->migratedExpense?->expense_number ?? 'EXP' }})
+                                            </a>
+                                        @else
+                                            <span style="font-size:11px; color:#94a3b8; font-weight:600;">Pending</span>
+                                        @endif
+                                    </td>
+                                    <td style="text-align:right;">
+                                        @if(!$exp->is_migrated_to_native)
+                                            <button type="submit" formaction="{{ route('accounts.zoho.expenses.migrate', $exp->id) }}" class="acm-btn acm-btn-primary" style="padding:4px 8px; font-size:11.5px;">Migrate</button>
+                                        @endif
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="padding:14px 20px; border-top:1px solid #e2e8f0;">
+                        {{ $expenses->links() }}
+                    </div>
+                @endif
+            </div>
+        </form>
     </div>
 </div>
 @endsection

@@ -2,16 +2,23 @@
 
 namespace App\Services;
 
+use App\Models\AccountExpense;
+use App\Models\AccountExpenseCategory;
+use App\Models\AccountExpenseSubcategory;
 use App\Models\CustomerMaster;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\InvoicePayment;
+use App\Models\VendorMaster;
 use App\Models\ZohoExpense;
 use App\Models\ZohoIntegration;
 use App\Models\ZohoInvoice;
+use App\Models\ZohoPayment;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ZohoBooksService
 {
@@ -54,7 +61,7 @@ class ZohoBooksService
     /**
      * Required Zoho Books OAuth Scopes.
      */
-    public const SCOPES = 'ZohoBooks.fullaccess.all,ZohoBooks.invoices.all,ZohoBooks.expenses.all,ZohoBooks.settings.READ,ZohoBooks.contacts.READ';
+    public const SCOPES = 'ZohoBooks.fullaccess.all,ZohoBooks.invoices.all,ZohoBooks.expenses.all,ZohoBooks.customerpayments.all,ZohoBooks.settings.READ,ZohoBooks.contacts.READ';
 
     /**
      * Build the Zoho OAuth authorization redirect URL.
@@ -229,6 +236,12 @@ class ZohoBooksService
         }
 
         $data = $response->json();
+
+        if (isset($data['code']) && (int) $data['code'] !== 0) {
+            $err = $data['message'] ?? 'Zoho Error Code ' . $data['code'];
+            throw new \Exception("Zoho organizations error: {$err}");
+        }
+
         $orgs = $data['organizations'] ?? [];
 
         $update = [
@@ -236,11 +249,11 @@ class ZohoBooksService
             'last_error'         => null,
         ];
 
-        // Auto-select first organization if none is active
+        // Auto-select default/first organization if none is active
         if (empty($integration->organization_id) && count($orgs) > 0) {
-            $firstOrg = $orgs[0];
-            $update['organization_id']   = (string) ($firstOrg['organization_id'] ?? '');
-            $update['organization_name'] = (string) ($firstOrg['name'] ?? '');
+            $defaultOrg = collect($orgs)->firstWhere('is_default_org', true) ?: $orgs[0];
+            $update['organization_id']   = (string) ($defaultOrg['organization_id'] ?? '');
+            $update['organization_name'] = (string) ($defaultOrg['name'] ?? '');
         }
 
         $integration->update($update);
@@ -649,5 +662,322 @@ class ZohoBooksService
             'new_count'     => $newCount,
             'updated_count' => $updatedCount,
         ];
+    }
+
+    /**
+     * Migrate / Convert a ZohoExpense into a native CRM AccountExpense.
+     */
+    public function migrateExpenseToNative(ZohoExpense $zohoExpense, ?int $userId = null): AccountExpense
+    {
+        return DB::transaction(function () use ($zohoExpense, $userId) {
+            $companyId = $zohoExpense->company_id ?: 1;
+
+            // 1. Find or create AccountExpenseCategory matching account_name
+            $catName = trim($zohoExpense->account_name ?: 'General Expense');
+            $category = AccountExpenseCategory::firstOrCreate(
+                [
+                    'name' => $catName,
+                ],
+                [
+                    'company_id'  => $companyId,
+                    'code'        => strtoupper(Str::slug($catName, '_')),
+                    'description' => 'Imported from Zoho Books',
+                    'status'      => 'active',
+                    'created_by'  => $userId,
+                ]
+            );
+
+            // 2. Find or create AccountExpenseSubcategory
+            $subcategory = AccountExpenseSubcategory::firstOrCreate(
+                [
+                    'account_expense_category_id' => $category->id,
+                    'name'                        => $catName,
+                ],
+                [
+                    'company_id'  => $companyId,
+                    'code'        => strtoupper(Str::slug($catName, '_')),
+                    'description' => 'Imported from Zoho Books',
+                    'status'      => 'active',
+                    'created_by'  => $userId,
+                ]
+            );
+
+            // 3. Find or create VendorMaster if vendor_name present
+            $vendorId = null;
+            if (! empty($zohoExpense->vendor_name)) {
+                $vName = trim($zohoExpense->vendor_name);
+                $vendor = VendorMaster::firstOrCreate(
+                    [
+                        'vendor_name' => $vName,
+                    ],
+                    [
+                        'company_id'   => $companyId,
+                        'company_name' => $vName,
+                        'status'       => 'active',
+                        'created_by'   => $userId,
+                    ]
+                );
+                $vendorId = $vendor->id;
+            }
+
+            // 4. Create or update AccountExpense
+            $expense = AccountExpense::create([
+                'company_id'                     => $companyId,
+                'expense_date'                   => $zohoExpense->expense_date,
+                'account_expense_category_id'    => $category->id,
+                'account_expense_subcategory_id' => $subcategory->id,
+                'vendor_id'                      => $vendorId,
+                'amount'                         => (float) $zohoExpense->total,
+                'expense_type'                   => 'company',
+                'invoice_no'                     => $zohoExpense->reference_number,
+                'remarks'                        => $zohoExpense->description ?: ('Imported from Zoho Books (ID: ' . $zohoExpense->zoho_expense_id . ')'),
+                'created_by'                     => $userId,
+                'updated_by'                     => $userId,
+            ]);
+
+            // 5. Mark ZohoExpense as migrated
+            $zohoExpense->update([
+                'is_migrated_to_native'      => true,
+                'migrated_native_expense_id' => $expense->id,
+            ]);
+
+            return $expense;
+        });
+    }
+
+    /**
+     * Fetch a paginated list of Customer Payments (Payment Collections) from Zoho Books.
+     */
+    public function fetchPayments(ZohoIntegration $integration, int $page = 1, int $perPage = 200, array $filters = []): array
+    {
+        $token = $this->ensureValidAccessToken($integration);
+        $apiUrl = rtrim($integration->api_url ?: 'https://www.zohoapis.in', '/');
+
+        $params = array_merge([
+            'organization_id' => $integration->organization_id,
+            'page'            => $page,
+            'per_page'        => $perPage,
+        ], $filters);
+
+        $response = Http::withHeaders([
+            'Authorization' => "Zoho-oauthtoken {$token}",
+        ])->get("{$apiUrl}/books/v3/customerpayments", $params);
+
+        if (! $response->successful()) {
+            $msg = $response->json('message') ?: $response->body();
+            throw new \Exception("Zoho API Customer Payments error: {$msg}");
+        }
+
+        return $response->json();
+    }
+
+    /**
+     * Fetch details of a single Customer Payment (includes applied invoice details).
+     */
+    public function fetchPaymentDetails(ZohoIntegration $integration, string $zohoPaymentId): array
+    {
+        $token = $this->ensureValidAccessToken($integration);
+        $apiUrl = rtrim($integration->api_url ?: 'https://www.zohoapis.in', '/');
+
+        $response = Http::withHeaders([
+            'Authorization' => "Zoho-oauthtoken {$token}",
+        ])->get("{$apiUrl}/books/v3/customerpayments/{$zohoPaymentId}", [
+            'organization_id' => $integration->organization_id,
+        ]);
+
+        if (! $response->successful()) {
+            $msg = $response->json('message') ?: $response->body();
+            throw new \Exception("Zoho payment detail error for ID {$zohoPaymentId}: {$msg}");
+        }
+
+        $data = $response->json();
+
+        return $data['customer_payment'] ?? [];
+    }
+
+    /**
+     * Sync and import all customer payments from Zoho Books into `zoho_payments` table.
+     */
+    public function syncAllPayments(ZohoIntegration $integration, bool $fetchDetails = true): array
+    {
+        $page = 1;
+        $hasMore = true;
+        $totalSynced = 0;
+        $newCount = 0;
+        $updatedCount = 0;
+
+        while ($hasMore) {
+            $result = $this->fetchPayments($integration, $page, 200);
+            $payments = $result['customer_payments'] ?? [];
+
+            if (empty($payments)) {
+                break;
+            }
+
+            foreach ($payments as $summary) {
+                $zohoId = (string) ($summary['payment_id'] ?? '');
+                if (! $zohoId) {
+                    continue;
+                }
+
+                $full = $summary;
+                if ($fetchDetails) {
+                    try {
+                        $fetched = $this->fetchPaymentDetails($integration, $zohoId);
+                        if (! empty($fetched)) {
+                            $full = $fetched;
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning("Could not fetch detailed payment {$zohoId}: " . $e->getMessage());
+                    }
+                }
+
+                $existing = ZohoPayment::where('zoho_payment_id', $zohoId)->first();
+                $isNew = ! $existing;
+
+                ZohoPayment::updateOrCreate(
+                    ['zoho_payment_id' => $zohoId],
+                    [
+                        'company_id'        => $integration->company_id,
+                        'zoho_payment_id'   => $zohoId,
+                        'payment_number'    => (string) ($full['payment_number'] ?? $summary['payment_number'] ?? ''),
+                        'customer_id'       => (string) ($full['customer_id'] ?? $summary['customer_id'] ?? ''),
+                        'customer_name'     => (string) ($full['customer_name'] ?? $summary['customer_name'] ?? ''),
+                        'payment_date'      => ! empty($full['date']) ? Carbon::parse($full['date'])->toDateString() : now()->toDateString(),
+                        'payment_mode'      => (string) ($full['payment_mode'] ?? $summary['payment_mode'] ?? ''),
+                        'amount'            => (float) ($full['amount'] ?? $summary['amount'] ?? 0.0),
+                        'unused_amount'     => (float) ($full['unused_amount'] ?? $summary['unused_amount'] ?? 0.0),
+                        'reference_number'  => (string) ($full['reference_number'] ?? $summary['reference_number'] ?? ''),
+                        'bank_account_id'   => (string) ($full['account_id'] ?? ''),
+                        'bank_account_name' => (string) ($full['account_name'] ?? ''),
+                        'description'       => (string) ($full['description'] ?? ''),
+                        'status'            => (string) ($full['status'] ?? $summary['status'] ?? ''),
+                        'invoices_applied'  => $full['invoices'] ?? [],
+                        'raw_data'          => $full,
+                        'synced_at'         => now(),
+                    ]
+                );
+
+                $totalSynced++;
+                if ($isNew) {
+                    $newCount++;
+                } else {
+                    $updatedCount++;
+                }
+            }
+
+            $pageContext = $result['page_context'] ?? [];
+            $hasMore = ! empty($pageContext['has_more_page']);
+            $page++;
+        }
+
+        $integration->update([
+            'last_synced_at' => now(),
+            'last_error'     => null,
+        ]);
+
+        return [
+            'total_synced'  => $totalSynced,
+            'new_count'     => $newCount,
+            'updated_count' => $updatedCount,
+        ];
+    }
+
+    /**
+     * Migrate / Convert a ZohoPayment into a native CRM InvoicePayment.
+     */
+    public function migratePaymentToNative(ZohoPayment $zohoPayment, ?int $userId = null): InvoicePayment
+    {
+        return DB::transaction(function () use ($zohoPayment, $userId) {
+            $companyId = $zohoPayment->company_id ?: 1;
+
+            // 1. Identify applied invoice
+            $appliedInvoices = $zohoPayment->invoices_applied ?? [];
+            $targetInvoice = null;
+            $amountApplied = (float) $zohoPayment->amount;
+
+            if (! empty($appliedInvoices) && is_array($appliedInvoices)) {
+                $firstApplied = $appliedInvoices[0];
+                $invNumber = $firstApplied['invoice_number'] ?? null;
+                $zohoInvId = (string) ($firstApplied['invoice_id'] ?? '');
+                $amountApplied = (float) ($firstApplied['amount_applied'] ?? $zohoPayment->amount);
+
+                if ($invNumber) {
+                    $targetInvoice = Invoice::where('invoice_number', $invNumber)->first();
+                }
+
+                if (! $targetInvoice && $zohoInvId) {
+                    $zohoInv = ZohoInvoice::where('zoho_invoice_id', $zohoInvId)->first();
+                    if ($zohoInv) {
+                        if ($zohoInv->migrated_native_invoice_id) {
+                            $targetInvoice = Invoice::find($zohoInv->migrated_native_invoice_id);
+                        } else {
+                            // Auto-migrate the related Zoho invoice first!
+                            $targetInvoice = $this->migrateInvoiceToNative($zohoInv, $userId);
+                        }
+                    }
+                }
+            }
+
+            // Fallback: If no invoice applied, find latest invoice of matching customer
+            if (! $targetInvoice && ! empty($zohoPayment->customer_name)) {
+                $targetInvoice = Invoice::where('customer_name', $zohoPayment->customer_name)
+                    ->orderBy('id', 'desc')
+                    ->first();
+            }
+
+            if (! $targetInvoice) {
+                throw new \Exception("Cannot find corresponding CRM Invoice for this payment. Please migrate the related Invoice first.");
+            }
+
+            // Map payment mode
+            $mode = strtolower(trim((string) ($zohoPayment->payment_mode ?? '')));
+            $nativeMode = match (true) {
+                str_contains($mode, 'cash')                      => 'cash',
+                str_contains($mode, 'cheque') || str_contains($mode, 'check') => 'cheque',
+                str_contains($mode, 'card')                      => 'card',
+                str_contains($mode, 'upi')                       => 'upi',
+                str_contains($mode, 'bank') || str_contains($mode, 'transfer') || str_contains($mode, 'neft') || str_contains($mode, 'rtgs') => 'bank_transfer',
+                default                                          => 'other',
+            };
+
+            // 2. Generate or use payment number
+            $pNumber = $zohoPayment->payment_number ?: ('PAY-ZH-' . str_pad($zohoPayment->id, 4, '0', STR_PAD_LEFT));
+
+            // Check if payment already exists
+            $existingPayment = InvoicePayment::where('payment_number', $pNumber)->first();
+            $paymentData = [
+                'company_id'           => $companyId,
+                'invoice_id'           => $targetInvoice->id,
+                'customer_id'          => $targetInvoice->customer_id,
+                'payment_number'       => $pNumber,
+                'payment_date'         => $zohoPayment->payment_date,
+                'amount_received'      => $amountApplied,
+                'total_settled_amount' => $amountApplied,
+                'payment_mode'         => $nativeMode,
+                'reference_number'     => $zohoPayment->reference_number,
+                'bank_name'            => $zohoPayment->bank_account_name,
+                'notes'                => $zohoPayment->description ?: ('Imported from Zoho Books (Payment ID: ' . $zohoPayment->zoho_payment_id . ')'),
+                'recorded_by'          => $userId,
+            ];
+
+            if ($existingPayment) {
+                $existingPayment->update($paymentData);
+                $invoicePayment = $existingPayment;
+            } else {
+                $invoicePayment = InvoicePayment::create($paymentData);
+            }
+
+            // 3. Recalculate Invoice payment status & balance
+            $targetInvoice->recalculatePaymentStatus();
+
+            // 4. Mark ZohoPayment as migrated
+            $zohoPayment->update([
+                'is_migrated_to_native'       => true,
+                'migrated_native_payment_id'  => $invoicePayment->id,
+            ]);
+
+            return $invoicePayment;
+        });
     }
 }

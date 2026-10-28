@@ -93,8 +93,12 @@
                     </h3>
                     <div style="font-size:13px; color:#64748b; margin-top:4px;">
                         @if($integration->is_connected)
-                            Connected to Organization: <strong>{{ $integration->organization_name ?: 'Default' }}</strong> (ID: {{ $integration->organization_id }})
-                            &bull; Token valid until: {{ $integration->token_expires_at ? $integration->token_expires_at->format('d M Y, h:i A') : 'N/A' }}
+                            @if($integration->organization_id)
+                                Connected to Organization: <strong>{{ $integration->organization_name ?: 'Active' }}</strong> (ID: {{ $integration->organization_id }})
+                                &bull; Token valid until: {{ $integration->token_expires_at ? $integration->token_expires_at->format('d M Y, h:i A') : 'N/A' }}
+                            @else
+                                <span style="color:#ea580c; font-weight:700;">⚠ Organization ID is not set yet! Enter your Zoho Organization ID below and click Save.</span>
+                            @endif
                         @else
                             Configure your Zoho Developer credentials below and click <strong>"Authorize with Zoho"</strong>.
                         @endif
@@ -167,10 +171,28 @@
                     <div class="zh-form-group">
                         <label class="zh-label">Authorized Redirect URI</label>
                         <div style="display:flex; gap:8px;">
-                            <input type="text" id="redirectUriInput" name="redirect_uri" class="zh-input" value="{{ old('redirect_uri', $integration->redirect_uri ?: url('/accounts/zoho/callback')) }}" readonly style="background:#f8fafc;">
+                            <input type="text" id="redirectUriInput" name="redirect_uri" class="zh-input" value="{{ old('redirect_uri', $integration->redirect_uri ?: url('/accounts/zoho/callback')) }}">
                             <button type="button" onclick="copyRedirectUri()" class="acm-btn acm-btn-outline" style="white-space:nowrap;">Copy</button>
+                            <button type="button" onclick="setMyAgenciRedirect()" class="acm-btn acm-btn-secondary" style="white-space:nowrap;" title="Set to review.myagenci.ai">Set Review URL</button>
                         </div>
-                        <div class="zh-help">Copy and paste this exact Redirect URI into your Zoho Developer Console application settings.</div>
+                        <div class="zh-help">
+                            Must match <strong>character-by-character</strong> with the Authorized Redirect URIs in your <a href="https://api-console.zoho.com/" target="_blank" style="color:#fe5f04; font-weight:700;">Zoho Developer Console</a>.
+                        </div>
+                    </div>
+
+                    <div class="zh-form-group">
+                        <label class="zh-label">Zoho Books Organization ID</label>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" name="organization_id" class="zh-input" value="{{ old('organization_id', $integration->organization_id) }}" placeholder="e.g. 60012345678">
+                            @if($integration->is_connected)
+                                <button type="submit" formaction="{{ route('accounts.zoho.fetch-organizations') }}" class="acm-btn acm-btn-secondary" style="white-space:nowrap;" title="Fetch from Zoho API">
+                                    Fetch from Zoho
+                                </button>
+                            @endif
+                        </div>
+                        <div class="zh-help">
+                            Your Zoho Books Organization ID. Find it in Zoho Books (top-right under your company name) or from the URL (e.g. <code>books.zoho.in/app/<b>60012345678</b></code>).
+                        </div>
                     </div>
 
                     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:24px;">
@@ -202,7 +224,7 @@
                     <h3 style="font-size:15px; font-weight:800; color:#0f172a; margin:0;">Zoho Books OAuth Terminology</h3>
                 </div>
                 <div style="font-size:12.5px; color:#64748b; margin-bottom:14px;">
-                    Summary of <a href="https://www.zoho.com/books/api/v3/oauth/#terminologies" target="_blank" style="color:#fe5f04; font-weight:700;">Zoho Books OAuth v3 Document</a>:
+                    Summary of <a href="https://www.zoho.com/books/api/v3/oauth/#terminologies" target="_blank" style="color:#fe5f04; font-weight:700;">Zoho Books OAuth v3 Documentation</a>:
                 </div>
 
                 <div class="zh-term-item">
@@ -210,7 +232,7 @@
                         <span style="color:#fe5f04;">●</span> Client ID & Client Secret
                     </div>
                     <div class="zh-term-desc">
-                        Zoho Developer Console-la create panra application credentials. Client ID is the public identifier and Client Secret is the secure private key for token exchange.
+                        Application credentials generated when you register your app in the Zoho Developer Console. The <strong>Client ID</strong> is the public identifier, and the <strong>Client Secret</strong> is the confidential private key used to securely authenticate your application during token exchange.
                     </div>
                 </div>
 
@@ -219,7 +241,7 @@
                         <span style="color:#0284c7;">●</span> Redirect URI (Callback URL)
                     </div>
                     <div class="zh-term-desc">
-                        Zoho authorization mudinjudha odane user-a thirumba redirect panra endpoint. Zoho code-ah indha URL-ku query param-a anupum.
+                        The registered callback endpoint where Zoho redirects the user after they grant authorization. Zoho passes the temporary authorization code to this URL as a query parameter. It must match the configured URI in Zoho Developer Console character-for-character.
                     </div>
                 </div>
 
@@ -228,7 +250,7 @@
                         <span style="color:#16a34a;">●</span> Authorization Code (Grant Token)
                     </div>
                     <div class="zh-term-desc">
-                        User "Accept" kudutha odane Zoho kudukura short-lived temporary token. Indha software adhoda Access Token & Refresh Token-ah exchange pannum.
+                        A short-lived, temporary token generated by Zoho after the user approves access on the consent screen. The software immediately exchanges this code with Zoho Accounts to obtain an Access Token and a Refresh Token.
                     </div>
                 </div>
 
@@ -237,17 +259,17 @@
                         <span style="color:#9333ea;">●</span> Access Token & Refresh Token
                     </div>
                     <div class="zh-term-desc">
-                        <strong>Access Token:</strong> 1 hour valid. API calls-ku Authorization header-la <code>Zoho-oauthtoken ...</code> poga venum.<br>
-                        <strong>Refresh Token:</strong> Permanent token. Access token expire aanalum software automatically pudhu token generate pannikollum.
+                        <strong>Access Token:</strong> Valid for 1 hour. Passed in API requests under the <code>Authorization: Zoho-oauthtoken ...</code> header.<br>
+                        <strong>Refresh Token:</strong> A permanent credential used to automatically generate new access tokens in the background whenever the active token expires, without requiring the user to re-login.
                     </div>
                 </div>
 
                 <div class="zh-term-item">
                     <div class="zh-term-title">
-                        <span style="color:#ea580c;">●</span> Organization ID
+                        <span style="color:#ea580c;">●</span> Organization ID (organization_id)
                     </div>
                     <div class="zh-term-desc">
-                        Zoho Books-la oru account-ku multiple company/organization irukalam. Invoices and Expenses fetch panna mandatory-a <code>organization_id</code> query param venum.
+                        A single Zoho account can manage multiple company accounts. The <strong>Organization ID</strong> is a mandatory numeric parameter required in all Zoho Books API requests to specify which company ledger data to query.
                     </div>
                 </div>
 
@@ -256,7 +278,8 @@
                         <span style="color:#0d9488;">●</span> Required Scopes
                     </div>
                     <div class="zh-term-desc">
-                        <code>ZohoBooks.invoices.all</code>, <code>ZohoBooks.expenses.all</code>, <code>ZohoBooks.settings.READ</code>, <code>ZohoBooks.contacts.READ</code>
+                        Defines the level of access requested from Zoho Books:<br>
+                        <code>ZohoBooks.fullaccess.all</code>, <code>ZohoBooks.invoices.all</code>, <code>ZohoBooks.expenses.all</code>, <code>ZohoBooks.settings.READ</code>, <code>ZohoBooks.contacts.READ</code>
                     </div>
                 </div>
             </div>
@@ -265,6 +288,11 @@
 </div>
 
 <script>
+function setMyAgenciRedirect() {
+    const input = document.getElementById('redirectUriInput');
+    input.value = 'https://review.myagenci.ai/accounts/zoho/callback';
+}
+
 function copyRedirectUri() {
     const input = document.getElementById('redirectUriInput');
     input.select();
