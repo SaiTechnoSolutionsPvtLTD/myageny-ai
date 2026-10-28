@@ -482,6 +482,12 @@ class LeadShowController extends Controller
         }
 
         $statusStr = $reminder->is_completed ? 'completed' : ($reminder->is_overdue ? 'overdue' : 'pending');
+        $lead = $reminder->lead;
+        $companyName = $lead?->company_name;
+        $contactName = $lead?->contact_name;
+        $leadName = ($companyName && trim($companyName) !== '' && trim($companyName) !== '-')
+            ? trim($companyName)
+            : ($contactName && trim($contactName) !== '' ? trim($contactName) : null);
 
         return response()->json([
             'status'  => true,
@@ -490,6 +496,10 @@ class LeadShowController extends Controller
                 'id'             => $reminder->id,
                 'exists'         => true,
                 'lead_id'        => $reminder->lead_id,
+                'lead_name'      => $leadName,
+                'company_name'   => $companyName,
+                'contact_name'   => $contactName,
+                'client_name'    => $contactName,
                 'title'          => $reminder->title,
                 'description'    => $reminder->description,
                 'remind_at'      => $reminder->remind_at?->format('Y-m-d H:i:s'),
@@ -545,11 +555,21 @@ class LeadShowController extends Controller
             }
 
             $statusStr = $rem->is_completed ? 'completed' : ($rem->is_overdue ? 'overdue' : 'pending');
+            $lead = $rem->lead;
+            $companyName = $lead?->company_name;
+            $contactName = $lead?->contact_name;
+            $leadName = ($companyName && trim($companyName) !== '' && trim($companyName) !== '-')
+                ? trim($companyName)
+                : ($contactName && trim($contactName) !== '' ? trim($contactName) : null);
 
             $result[] = [
                 'id'             => $rem->id,
                 'exists'         => true,
                 'lead_id'        => $rem->lead_id,
+                'lead_name'      => $leadName,
+                'company_name'   => $companyName,
+                'contact_name'   => $contactName,
+                'client_name'    => $contactName,
                 'title'          => $rem->title,
                 'description'    => $rem->description,
                 'remind_at'      => $rem->remind_at?->format('Y-m-d H:i:s'),
@@ -1650,10 +1670,28 @@ class LeadShowController extends Controller
 
     private function formatReminder(LeadReminder $reminder): array
     {
+        $reminder->loadMissing(['lead:id,company_name,contact_name']);
+        $lead = $reminder->lead;
+        $companyName = $lead?->company_name;
+        $contactName = $lead?->contact_name;
+        $leadName = ($companyName && trim($companyName) !== '' && trim($companyName) !== '-')
+            ? trim($companyName)
+            : ($contactName && trim($contactName) !== '' ? trim($contactName) : null);
+
         return [
-            'id'           => $reminder->id,
-            'title'        => $reminder->title,
-            'description'  => $reminder->description,
+            'id'             => $reminder->id,
+            'lead_id'        => $reminder->lead_id,
+            'lead_name'      => $leadName,
+            'company_name'   => $companyName,
+            'contact_name'   => $contactName,
+            'client_name'    => $contactName,
+            'lead'           => $lead ? [
+                'id'           => $lead->id,
+                'company_name' => $lead->company_name,
+                'contact_name' => $lead->contact_name,
+            ] : null,
+            'title'          => $reminder->title,
+            'description'    => $reminder->description,
             'remind_at'    => optional($reminder->remind_at)->format('Y-m-d H:i:s'),
             // Must be an explicit ->format() string, not the raw Carbon
             // instance — Carbon's default JSON serialization converts to UTC

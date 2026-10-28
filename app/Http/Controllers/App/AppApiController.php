@@ -13,13 +13,30 @@ class AppApiController extends Controller
     {
         $userId = $request->user()->id;
 
-        $reminders = LeadReminder::where('user_id', $userId)
+        $reminders = LeadReminder::with(['lead:id,company_name,contact_name'])
+            ->where('user_id', $userId)
             ->orderBy('remind_at', 'asc')
             ->get()
             ->map(function ($reminder) {
+                $lead = $reminder->lead;
+                $companyName = $lead?->company_name;
+                $contactName = $lead?->contact_name;
+                $leadName = ($companyName && trim($companyName) !== '' && trim($companyName) !== '-')
+                    ? trim($companyName)
+                    : ($contactName && trim($contactName) !== '' ? trim($contactName) : null);
+
                 return [
                     'id'             => $reminder->id,
                     'lead_id'        => $reminder->lead_id,
+                    'lead_name'      => $leadName,
+                    'company_name'   => $companyName,
+                    'contact_name'   => $contactName,
+                    'client_name'    => $contactName,
+                    'lead'           => $lead ? [
+                        'id'           => $lead->id,
+                        'company_name' => $lead->company_name,
+                        'contact_name' => $lead->contact_name,
+                    ] : null,
                     'title'          => $reminder->title,
                     'description'    => $reminder->description,
                     'remind_at'      => $reminder->remind_at?->format('Y-m-d H:i:s'),
