@@ -591,6 +591,53 @@ class LeadShowController extends Controller
         ]);
     }
 
+    public function syncReminders(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $userId = $user->id;
+        $since = $request->input('since');
+
+        $query = LeadReminder::with(['lead:id,company_name,contact_name'])
+            ->where('user_id', $userId);
+
+        if ($since) {
+            try {
+                $sinceCarbon = \Carbon\Carbon::parse($since);
+                $query->where(function ($q) use ($sinceCarbon) {
+                    $q->where('updated_at', '>=', $sinceCarbon)
+                      ->orWhere('created_at', '>=', $sinceCarbon);
+                });
+            } catch (\Exception $e) {
+                $query->where('is_completed', false)
+                      ->where('remind_at', '>=', now()->subHours(2));
+            }
+        } else {
+            $query->where('is_completed', false)
+                  ->where('remind_at', '>=', now()->subHours(2));
+        }
+
+        $reminders = $query->orderBy('remind_at', 'asc')->limit(100)->get();
+
+        $formatted = $reminders->map(fn($r) => $this->formatReminder($r))->values();
+
+        // All active pending reminder IDs for this user
+        $activeIds = LeadReminder::where('user_id', $userId)
+            ->where('is_completed', false)
+            ->where('remind_at', '>=', now()->subHours(2))
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->values()
+            ->toArray();
+
+        return response()->json([
+            'status'      => true,
+            'message'     => 'Reminders synced successfully.',
+            'server_time' => now()->toIso8601String(),
+            'data'        => $formatted,
+            'active_ids'  => $activeIds,
+        ]);
+    }
+
     // ════════════════════════════════════════════════════════════════
     // CST & WEEKLY UPDATES
     // Mirrors LeadController::storeCstUpdate() (web) — Update Type +

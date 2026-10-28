@@ -676,6 +676,7 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
     Route::post('price-requests/{req}/reject', [MobileLeadController::class, 'priceRequestReject']);
 
     // ── Reminder Verification & List ────────────────────────────────────────
+    Route::get('reminders/sync',             [MobileLeadShowController::class, 'syncReminders'])->name('reminders.sync');
     Route::get('reminders/{id}/verify',      [MobileLeadShowController::class, 'verifyReminder'])->name('reminders.verify');
     Route::post('reminders/verify-batch',    [MobileLeadShowController::class, 'verifyRemindersBatch'])->name('reminders.verify-batch');
     Route::post('reminder-list',             [AppApiController::class, 'reminderList'])->name('reminders.list');
