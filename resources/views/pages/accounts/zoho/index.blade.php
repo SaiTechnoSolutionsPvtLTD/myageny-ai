@@ -69,6 +69,9 @@
             <a href="{{ route('accounts.zoho.invoices') }}" class="acm-btn acm-btn-secondary">
                 Invoices ({{ $totalInvoicesCount }})
             </a>
+            <a href="{{ route('accounts.zoho.quotations') }}" class="acm-btn acm-btn-secondary">
+                Quotations ({{ $totalQuotationsCount }})
+            </a>
             <a href="{{ route('accounts.zoho.expenses') }}" class="acm-btn acm-btn-secondary">
                 Expenses ({{ $totalExpensesCount }})
             </a>
@@ -136,6 +139,11 @@
                 <div class="zh-stat-label">Zoho Invoices</div>
                 <div class="zh-stat-value">{{ number_format($totalInvoicesCount) }}</div>
                 <div class="zh-stat-sub">₹{{ number_format($totalInvoiceAmount, 2) }} &bull; {{ $migratedInvoicesCount }} in CRM</div>
+            </div>
+            <div class="zh-stat-card">
+                <div class="zh-stat-label">Zoho Quotations</div>
+                <div class="zh-stat-value">{{ number_format($totalQuotationsCount) }}</div>
+                <div class="zh-stat-sub">₹{{ number_format($totalQuotationAmount, 2) }} &bull; {{ $migratedQuotationsCount }} in CRM</div>
             </div>
             <div class="zh-stat-card">
                 <div class="zh-stat-label">Zoho Expenses</div>
@@ -222,6 +230,29 @@
                     </form>
                     @endif
                     <a href="{{ route('accounts.zoho.payments') }}" class="acm-btn acm-btn-outline" style="padding:6px 12px; font-size:12px;">View & Migrate</a>
+                </div>
+            </div>
+
+            <!-- Quotations / Estimates Module Box -->
+            <div class="zh-card" style="border-top:4px solid #8b5cf6;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                    <div>
+                        <h4 style="margin:0; font-size:15px; font-weight:800; color:#0f172a;">4. Quotations & Estimates</h4>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">{{ number_format($totalQuotationsCount) }} Quotations ({{ number_format($migratedQuotationsCount) }} Migrated)</div>
+                    </div>
+                    <span style="font-size:13px; font-weight:800; color:#8b5cf6;">₹{{ number_format($totalQuotationAmount, 2) }}</span>
+                </div>
+                <div style="font-size:12.5px; color:#475569; margin-bottom:14px; line-height:1.4;">
+                    Imports Zoho estimates and line items, validates customer mobile numbers, and maps directly to CRM Leads.
+                </div>
+                <div style="display:flex; gap:8px;">
+                    @if($integration->is_connected)
+                    <form action="{{ route('accounts.zoho.quotations.sync') }}" method="POST" style="margin:0;">
+                        @csrf
+                        <button type="submit" class="acm-btn acm-btn-primary" style="background:#8b5cf6; padding:6px 12px; font-size:12px;">Sync Quotations</button>
+                    </form>
+                    @endif
+                    <a href="{{ route('accounts.zoho.quotations') }}" class="acm-btn acm-btn-outline" style="padding:6px 12px; font-size:12px;">View & Migrate</a>
                 </div>
             </div>
         </div>

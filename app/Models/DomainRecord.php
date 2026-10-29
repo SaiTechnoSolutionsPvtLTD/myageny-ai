@@ -23,6 +23,7 @@ class DomainRecord extends Model
         'privacy',
         'client_name',
         'lead_id',
+        'hosting_record_id',
         'notes',
         'godaddy_domain_id',
         'created_by',
@@ -42,6 +43,11 @@ class DomainRecord extends Model
     public function lead()
     {
         return $this->belongsTo(Lead::class, 'lead_id');
+    }
+
+    public function hosting()
+    {
+        return $this->belongsTo(HostingRecord::class, 'hosting_record_id');
     }
 
     public function renewals()

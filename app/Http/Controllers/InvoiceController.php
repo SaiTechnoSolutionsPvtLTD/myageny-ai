@@ -73,7 +73,7 @@ class InvoiceController extends Controller
     {
         $companyId = auth()->user()?->company_id;
 
-        $query = Invoice::query()->with(['customer', 'salesPerson'])->withCount(['payments', 'creditNotes']);
+        $query = Invoice::query()->with(['customer', 'salesPerson', 'lead'])->withCount(['payments', 'creditNotes']);
 
         if ($companyId) {
             $query->where('company_id', $companyId);
@@ -1101,5 +1101,30 @@ class InvoiceController extends Controller
         }
 
         return $salesUsers;
+    }
+
+    /**
+     * Map or change the Lead linked to this invoice.
+     */
+    public function mapLead(Request $request, Invoice $invoice)
+    {
+        $request->validate([
+            'lead_id' => 'required|exists:leads,id',
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->findOrFail($request->lead_id);
+
+        $invoice->update([
+            'lead_id' => $lead->id,
+            'branch_id' => $invoice->branch_id ?: $lead->branch_id,
+        ]);
+
+        if ($invoice->customer && empty($invoice->customer->lead_id)) {
+            $invoice->customer->update(['lead_id' => $lead->id]);
+        }
+
+        $leadName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #' . $lead->id);
+
+        return redirect()->back()->with('success', "Invoice #{$invoice->invoice_number} successfully mapped to Lead #{$lead->id} ({$leadName})!");
     }
 }

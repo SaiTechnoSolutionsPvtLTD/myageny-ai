@@ -26,6 +26,11 @@ class AccountExpenseCategory extends Model
         return $this->hasMany(AccountExpenseSubcategory::class, 'account_expense_category_id');
     }
 
+    public function expenses()
+    {
+        return $this->hasMany(AccountExpense::class, 'account_expense_category_id');
+    }
+
     public function activeSubcategories()
     {
         return $this->hasMany(AccountExpenseSubcategory::class, 'account_expense_category_id')->where('status', 'active');

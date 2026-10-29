@@ -1237,4 +1237,47 @@ class LeadController extends Controller
             return null;
         }
     }
+
+    /**
+     * AJAX search leads for mapping dropdowns / modals.
+     */
+    public function searchApi(Request $request)
+    {
+        $q = trim((string) $request->input('q', $request->input('search', '')));
+        if (empty($q)) {
+            return response()->json(['results' => []]);
+        }
+
+        $leads = Lead::withoutGlobalScopes()
+            ->where(function ($query) use ($q) {
+                $query->where('contact_name', 'LIKE', "%{$q}%")
+                      ->orWhere('company_name', 'LIKE', "%{$q}%")
+                      ->orWhere('mobile_number', 'LIKE', "%{$q}%")
+                      ->orWhere('email', 'LIKE', "%{$q}%");
+                if (is_numeric($q)) {
+                    $query->orWhere('id', (int) $q);
+                }
+            })
+            ->latest('id')
+            ->limit(25)
+            ->get(['id', 'contact_name', 'company_name', 'mobile_number', 'email']);
+
+        $results = $leads->map(function ($lead) {
+            $name = $lead->contact_name ?: ($lead->company_name ?: 'Lead #' . $lead->id);
+            $sub = array_filter([
+                $lead->company_name && $lead->company_name !== $name ? $lead->company_name : null,
+                $lead->mobile_number,
+                $lead->email
+            ]);
+            return [
+                'id'    => $lead->id,
+                'text'  => "#{$lead->id} - {$name}" . (!empty($sub) ? " (" . implode(' • ', $sub) . ")" : ""),
+                'name'  => $name,
+                'phone' => $lead->mobile_number,
+                'email' => $lead->email,
+            ];
+        });
+
+        return response()->json(['results' => $results]);
+    }
 }

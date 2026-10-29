@@ -27,6 +27,11 @@ class AccountExpenseSubcategory extends Model
         return $this->belongsTo(AccountExpenseCategory::class, 'account_expense_category_id');
     }
 
+    public function expenses()
+    {
+        return $this->hasMany(AccountExpense::class, 'account_expense_subcategory_id');
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');

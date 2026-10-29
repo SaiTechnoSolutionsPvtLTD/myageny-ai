@@ -1158,4 +1158,24 @@ class QuotationController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Map or change the Lead linked to this quotation.
+     */
+    public function mapLead(Request $request, Quotation $quotation)
+    {
+        $request->validate([
+            'lead_id' => 'required|exists:leads,id',
+        ]);
+
+        $lead = Lead::withoutGlobalScopes()->findOrFail($request->lead_id);
+
+        $quotation->update([
+            'lead_id' => $lead->id,
+        ]);
+
+        $leadName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #' . $lead->id);
+
+        return redirect()->back()->with('success', "Quotation #{$quotation->quotation_no} successfully mapped to Lead #{$lead->id} ({$leadName})!");
+    }
 }

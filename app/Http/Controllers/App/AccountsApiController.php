@@ -4950,15 +4950,23 @@ class AccountsApiController extends Controller
             $companyId = $request->user()?->company_id;
 
             $now = Carbon::now();
-            $defaultFrom = $now->copy()->startOfMonth()->toDateString();
-            $defaultTo   = $now->toDateString();
+            $earliestDate = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->min('expense_date');
+            $latestDate   = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->max('expense_date');
+
+            $defaultFrom = $earliestDate ?: $now->copy()->startOfMonth()->toDateString();
+            $defaultTo   = ($latestDate && $latestDate > $now->toDateString()) ? $latestDate : $now->toDateString();
 
             $dateFrom    = $request->input('date_from', $defaultFrom);
             $dateTo      = $request->input('date_to', $defaultTo);
             $categoryId  = $request->input('category_id');
             $expenseType = $request->input('expense_type', 'all');
 
-            $categories = AccountExpenseCategory::active()
+            $categories = AccountExpenseCategory::query()
+                ->where(function ($q) {
+                    $q->where('status', 'active')
+                      ->orWhereNull('status')
+                      ->orWhereHas('expenses');
+                })
                 ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
                 ->orderBy('name')
                 ->get();
@@ -5121,8 +5129,11 @@ class AccountsApiController extends Controller
             $companyId = $request->user()?->company_id;
 
             $now = Carbon::now();
-            $defaultFrom = $now->copy()->startOfMonth()->toDateString();
-            $defaultTo   = $now->toDateString();
+            $earliestDate = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->min('expense_date');
+            $latestDate   = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->max('expense_date');
+
+            $defaultFrom = $earliestDate ?: $now->copy()->startOfMonth()->toDateString();
+            $defaultTo   = ($latestDate && $latestDate > $now->toDateString()) ? $latestDate : $now->toDateString();
 
             $dateFrom      = $request->input('date_from', $defaultFrom);
             $dateTo        = $request->input('date_to', $defaultTo);
@@ -5130,17 +5141,32 @@ class AccountsApiController extends Controller
             $subcategoryId = $request->input('subcategory_id');
             $expenseType   = $request->input('expense_type', 'all');
 
-            $categories = AccountExpenseCategory::active()
+            $categories = AccountExpenseCategory::query()
+                ->where(function ($q) {
+                    $q->where('status', 'active')
+                      ->orWhereNull('status')
+                      ->orWhereHas('expenses');
+                })
                 ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
                 ->orderBy('name')
                 ->get();
 
-            $allSubcategories = AccountExpenseSubcategory::active()
+            $allSubcategories = AccountExpenseSubcategory::query()
+                ->where(function ($q) {
+                    $q->where('status', 'active')
+                      ->orWhereNull('status')
+                      ->orWhereHas('expenses');
+                })
                 ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
                 ->orderBy('name')
                 ->get(['id', 'name', 'code', 'account_expense_category_id']);
 
-            $subcategoriesQuery = AccountExpenseSubcategory::active()
+            $subcategoriesQuery = AccountExpenseSubcategory::query()
+                ->where(function ($q) {
+                    $q->where('status', 'active')
+                      ->orWhereNull('status')
+                      ->orWhereHas('expenses');
+                })
                 ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')));
 
             if (!empty($categoryId) && $categoryId !== 'all') {

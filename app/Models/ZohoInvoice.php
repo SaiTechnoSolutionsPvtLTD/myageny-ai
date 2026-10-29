@@ -59,4 +59,45 @@ class ZohoInvoice extends Model
     {
         return $this->belongsTo(Invoice::class, 'migrated_native_invoice_id');
     }
+
+    /**
+     * Always resolve sub_total from column, raw_data, line_items, or total - tax_total.
+     */
+    public function getSubTotalAttribute($value): float
+    {
+        $val = (float) $value;
+        if ($val > 0) {
+            return $val;
+        }
+
+        $raw = (float) ($this->raw_data['sub_total'] ?? $this->raw_data['bcy_sub_total'] ?? 0);
+        if ($raw > 0) {
+            return $raw;
+        }
+
+        $items = $this->line_items ?? [];
+        if (! empty($items) && is_array($items)) {
+            $sum = 0.0;
+            foreach ($items as $item) {
+                $qty = (float) ($item['quantity'] ?? 1);
+                $rate = (float) ($item['rate'] ?? 0);
+                $amt = (float) ($item['item_total'] ?? ($qty * $rate));
+                if ($amt == 0 && $rate > 0 && $qty > 0) {
+                    $amt = $qty * $rate;
+                }
+                $sum += $amt;
+            }
+            if ($sum > 0) {
+                return $sum;
+            }
+        }
+
+        $total = (float) ($this->attributes['total'] ?? 0);
+        $tax   = (float) ($this->attributes['tax_total'] ?? 0);
+        if ($total > 0) {
+            return $tax > 0 ? max(0.0, round($total - $tax, 2)) : $total;
+        }
+
+        return 0.0;
+    }
 }

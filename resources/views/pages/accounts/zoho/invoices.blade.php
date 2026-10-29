@@ -59,6 +59,13 @@
             <a href="{{ route('accounts.zoho.index') }}" class="acm-btn acm-btn-secondary">
                 Hub Overview
             </a>
+            <form action="{{ route('accounts.zoho.auto-map-leads') }}" method="POST" style="margin:0;" onsubmit="return confirm('Scan and auto-map all unmapped invoices & quotations to matching CRM Leads?');">
+                @csrf
+                <button type="submit" class="acm-btn acm-btn-outline" title="Auto-match invoices & quotations to leads by phone, email, company, or contact name">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
+                    Auto-Map Leads
+                </button>
+            </form>
             @if($integration->is_connected)
             <form action="{{ route('accounts.zoho.invoices.sync') }}" method="POST" style="margin:0;">
                 @csrf
@@ -148,9 +155,13 @@
                     <div style="font-size:13.5px; font-weight:700; color:#0f172a;">
                         Showing {{ $invoices->firstItem() ?? 0 }} to {{ $invoices->lastItem() ?? 0 }} of {{ $invoices->total() }} Invoices
                     </div>
-                    <div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button type="button" class="acm-btn" style="background:#0284c7; color:#fff; font-size:12px;" onclick="openBatchModal()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            Batch Migrate All (Auto Runner)
+                        </button>
                         <button type="submit" class="acm-btn acm-btn-primary" onclick="return confirm('Migrate selected unmigrated invoices into CRM Invoices?')" style="font-size:12px;">
-                            Bulk Migrate to CRM
+                            Bulk Migrate Selected
                         </button>
                     </div>
                 </div>
@@ -247,10 +258,170 @@
     </div>
 </div>
 
+<!-- Batch Migration Modal for Safe 2000+ Records Migration -->
+<div id="batchMigrateModal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(15,23,42,0.65); backdrop-filter:blur(3px); align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; border-radius:16px; width:100%; max-width:540px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); overflow:hidden; border:1px solid #e2e8f0;">
+        <div style="padding:20px 24px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:36px; height:36px; border-radius:10px; background:#e0f2fe; display:flex; align-items:center; justify-content:center; color:#0284c7;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                </div>
+                <div>
+                    <h3 style="margin:0; font-size:16px; font-weight:800; color:#0f172a;">Batch Invoice Migration</h3>
+                    <div style="font-size:12px; color:#64748b;">Processes in safe chunks of 50 records to prevent 504 timeouts.</div>
+                </div>
+            </div>
+            <button type="button" onclick="closeBatchModal()" style="border:none; background:none; cursor:pointer; color:#94a3b8; font-size:20px;">&times;</button>
+        </div>
+
+        <div style="padding:24px;">
+            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">
+                <span id="batchStatusText">Ready to start migration...</span>
+                <span id="batchPercentText" style="color:#0284c7;">0%</span>
+            </div>
+
+            <!-- Progress Bar -->
+            <div style="background:#f1f5f9; border-radius:10px; height:18px; overflow:hidden; border:1px solid #e2e8f0; position:relative;">
+                <div id="batchProgressBar" style="width:0%; background:linear-gradient(90deg, #0284c7, #38bdf8); height:100%; transition:width 0.3s ease; border-radius:9px;"></div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:#64748b; margin-top:8px;">
+                <span id="batchDetailsText">Pending records: Calculating...</span>
+                <span>Chunk size: 50 records / batch</span>
+            </div>
+
+            <div id="batchLogBox" style="margin-top:16px; max-height:120px; overflow-y:auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:11.5px; color:#475569; font-family:monospace; display:none;">
+            </div>
+        </div>
+
+        <div style="padding:16px 24px; background:#f8fafc; border-top:1px solid #f1f5f9; display:flex; justify-content:flex-end; gap:10px;">
+            <button type="button" id="btnBatchCancel" onclick="closeBatchModal()" class="acm-btn acm-btn-outline" style="font-size:13px;">Cancel</button>
+            <button type="button" id="btnBatchStart" onclick="runBatchMigration()" class="acm-btn acm-btn-primary" style="background:#0284c7; font-size:13px;">
+                Start Batch Migration
+            </button>
+            <button type="button" id="btnBatchFinish" onclick="window.location.reload()" class="acm-btn acm-btn-primary" style="background:#16a34a; font-size:13px; display:none;">
+                Done & Reload Page
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
 function toggleSelectAll(master) {
     const checkboxes = document.querySelectorAll('.inv-checkbox');
     checkboxes.forEach(cb => cb.checked = master.checked);
+}
+
+let isBatchRunning = false;
+let batchShouldStop = false;
+
+function openBatchModal() {
+    document.getElementById('batchMigrateModal').style.display = 'flex';
+}
+
+function closeBatchModal() {
+    if (isBatchRunning) {
+        if (!confirm('Migration is in progress. Are you sure you want to pause/cancel?')) {
+            return;
+        }
+        batchShouldStop = true;
+    }
+    document.getElementById('batchMigrateModal').style.display = 'none';
+}
+
+function appendBatchLog(msg) {
+    const box = document.getElementById('batchLogBox');
+    box.style.display = 'block';
+    const line = document.createElement('div');
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+}
+
+async function runBatchMigration() {
+    isBatchRunning = true;
+    batchShouldStop = false;
+
+    document.getElementById('btnBatchStart').disabled = true;
+    document.getElementById('btnBatchStart').style.display = 'none';
+    document.getElementById('btnBatchCancel').textContent = 'Pause / Stop';
+
+    const progressBar = document.getElementById('batchProgressBar');
+    const percentText = document.getElementById('batchPercentText');
+    const statusText = document.getElementById('batchStatusText');
+    const detailsText = document.getElementById('batchDetailsText');
+
+    statusText.textContent = 'Migrating records in chunks of 50...';
+    appendBatchLog('Started batch migration session...');
+
+    let totalMigratedSoFar = 0;
+
+    while (!batchShouldStop) {
+        try {
+            const response = await fetch('{{ route("accounts.zoho.invoices.migrate-batch") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ limit: 50 })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.message || `Server returned HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            const pct = data.progress_pct || 0;
+            progressBar.style.width = pct + '%';
+            percentText.textContent = pct + '%';
+            detailsText.textContent = `Remaining: ${data.remaining} unmigrated (Total: ${data.total_all})`;
+            statusText.textContent = `Processing... Migrated ${data.total_migrated} of ${data.total_all}`;
+
+            appendBatchLog(`Batch completed: +${data.batch_migrated} invoices. Remaining: ${data.remaining}`);
+
+            if (data.errors && data.errors.length > 0) {
+                data.errors.forEach(err => appendBatchLog(`⚠ Warning: ${err}`));
+            }
+
+            if (data.completed || data.remaining === 0) {
+                progressBar.style.width = '100%';
+                percentText.textContent = '100%';
+                statusText.textContent = '✓ All Invoices Migrated Successfully!';
+                detailsText.textContent = `All ${data.total_all} invoices are now inside CRM!`;
+                appendBatchLog('Completed! All records safely migrated.');
+
+                document.getElementById('btnBatchCancel').style.display = 'none';
+                document.getElementById('btnBatchFinish').style.display = 'inline-flex';
+                isBatchRunning = false;
+                break;
+            }
+
+            // Small 300ms pause between batches to prevent DB lock contention
+            await new Promise(r => setTimeout(r, 300));
+
+        } catch (err) {
+            appendBatchLog(`❌ Batch Error: ${err.message}`);
+            statusText.textContent = 'Encountered error during batch';
+            alert('Batch migration paused due to error: ' + err.message);
+            document.getElementById('btnBatchStart').disabled = false;
+            document.getElementById('btnBatchStart').style.display = 'inline-flex';
+            document.getElementById('btnBatchStart').textContent = 'Resume Migration';
+            isBatchRunning = false;
+            break;
+        }
+    }
+
+    if (batchShouldStop) {
+        appendBatchLog('Migration paused by user.');
+        document.getElementById('btnBatchStart').disabled = false;
+        document.getElementById('btnBatchStart').style.display = 'inline-flex';
+        document.getElementById('btnBatchStart').textContent = 'Resume Migration';
+        isBatchRunning = false;
+    }
 }
 </script>
 @endsection

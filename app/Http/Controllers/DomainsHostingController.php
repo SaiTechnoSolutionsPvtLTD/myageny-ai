@@ -31,7 +31,7 @@ class DomainsHostingController extends Controller
 
         // Fetch Domains
         $domainQuery = DomainRecord::query()
-            ->with(['lead', 'renewals'])
+            ->with(['lead', 'renewals', 'hosting.server'])
             ->withCount('renewals')
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->when($request->filled('search') && $activeTab === 'domains', function ($q) use ($request) {
@@ -45,6 +45,15 @@ class DomainsHostingController extends Controller
                            $lq->where('contact_name', 'like', "%{$search}%")
                               ->orWhere('company_name', 'like', "%{$search}%")
                               ->orWhere('mobile_number', 'like', "%{$search}%");
+                       })
+                       ->orWhereHas('hosting', function ($hq) use ($search) {
+                           $hq->where('hosting_name', 'like', "%{$search}%")
+                              ->orWhere('provider', 'like', "%{$search}%")
+                              ->orWhere('ip_address', 'like', "%{$search}%")
+                              ->orWhereHas('server', function ($sq) use ($search) {
+                                  $sq->where('server_name', 'like', "%{$search}%")
+                                     ->orWhere('ip_address', 'like', "%{$search}%");
+                              });
                        });
                 });
             })
@@ -55,6 +64,13 @@ class DomainsHostingController extends Controller
                     $q->where('expires_at', '<', now()->startOfDay());
                 } else {
                     $q->where('status', $request->status);
+                }
+            })
+            ->when($request->filled('hosting_id') && $activeTab === 'domains', function ($q) use ($request) {
+                if ($request->hosting_id === 'unmapped') {
+                    $q->whereNull('hosting_record_id');
+                } else {
+                    $q->where('hosting_record_id', (int) $request->hosting_id);
                 }
             });
 
@@ -67,12 +83,14 @@ class DomainsHostingController extends Controller
             'active'        => $allDomains->where('status', 'ACTIVE')->count(),
             'expiring_soon' => $allDomains->filter(fn ($d) => $d->expires_at && $d->days_until_expiration >= 0 && $d->days_until_expiration <= 30)->count(),
             'expired'       => $allDomains->filter(fn ($d) => $d->expires_at && $d->days_until_expiration < 0)->count(),
+            'mapped_to_hosting' => $allDomains->whereNotNull('hosting_record_id')->count(),
+            'unmapped_hosting'  => $allDomains->whereNull('hosting_record_id')->count(),
         ];
 
         // Fetch Hostings
         $hostingQuery = HostingRecord::query()
             ->with(['lead', 'renewals', 'server'])
-            ->withCount('renewals')
+            ->withCount(['renewals', 'domains'])
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->when($request->filled('search') && $activeTab === 'hostings', function ($q) use ($request) {
                 $search = trim($request->search);
@@ -112,6 +130,12 @@ class DomainsHostingController extends Controller
         // Fetch Active Servers from Server Master
         $servers = ServerMaster::forCompany($companyId)->active()->orderBy('server_name')->get();
 
+        // Fetch All Hostings List with Server for Domain mapping dropdowns & modals
+        $allHostingsList = HostingRecord::when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->with('server')
+            ->orderBy('hosting_name')
+            ->get();
+
         return view('pages.accounts.domains_hosting.index', compact(
             'activeTab',
             'domains',
@@ -119,6 +143,7 @@ class DomainsHostingController extends Controller
             'hostings',
             'hostingStats',
             'servers',
+            'allHostingsList',
             'isGodaddyConfigured'
         ));
     }
@@ -129,21 +154,23 @@ class DomainsHostingController extends Controller
     public function storeDomain(Request $request)
     {
         $validated = $request->validate([
-            'domain_name' => 'required|string|max:255',
-            'registrar'   => 'required|string|max:100',
-            'status'      => 'required|string|in:ACTIVE,EXPIRED,CANCELLED,PENDING_RENEWAL',
-            'expires_at'  => 'nullable|date',
-            'auto_renew'  => 'nullable|boolean',
-            'privacy'     => 'nullable|boolean',
-            'client_name' => 'nullable|string|max:255',
-            'notes'       => 'nullable|string',
+            'domain_name'       => 'required|string|max:255',
+            'registrar'         => 'required|string|max:100',
+            'status'            => 'required|string|in:ACTIVE,EXPIRED,CANCELLED,PENDING_RENEWAL',
+            'expires_at'        => 'nullable|date',
+            'auto_renew'        => 'nullable|boolean',
+            'privacy'           => 'nullable|boolean',
+            'hosting_record_id' => 'nullable|integer',
+            'client_name'       => 'nullable|string|max:255',
+            'notes'             => 'nullable|string',
         ]);
 
         $user = auth()->user();
-        $validated['company_id'] = $user?->company_id;
-        $validated['created_by'] = $user?->id;
-        $validated['auto_renew'] = filter_var($request->input('auto_renew', false), FILTER_VALIDATE_BOOLEAN);
-        $validated['privacy']    = filter_var($request->input('privacy', false), FILTER_VALIDATE_BOOLEAN);
+        $validated['company_id']        = $user?->company_id;
+        $validated['created_by']        = $user?->id;
+        $validated['auto_renew']        = filter_var($request->input('auto_renew', false), FILTER_VALIDATE_BOOLEAN);
+        $validated['privacy']           = filter_var($request->input('privacy', false), FILTER_VALIDATE_BOOLEAN);
+        $validated['hosting_record_id'] = $request->filled('hosting_record_id') ? (int) $request->hosting_record_id : null;
 
         DomainRecord::create($validated);
 
@@ -157,18 +184,20 @@ class DomainsHostingController extends Controller
     public function updateDomain(Request $request, DomainRecord $domain)
     {
         $validated = $request->validate([
-            'domain_name' => 'required|string|max:255',
-            'registrar'   => 'required|string|max:100',
-            'status'      => 'required|string|in:ACTIVE,EXPIRED,CANCELLED,PENDING_RENEWAL',
-            'expires_at'  => 'nullable|date',
-            'auto_renew'  => 'nullable|boolean',
-            'privacy'     => 'nullable|boolean',
-            'client_name' => 'nullable|string|max:255',
-            'notes'       => 'nullable|string',
+            'domain_name'       => 'required|string|max:255',
+            'registrar'         => 'required|string|max:100',
+            'status'            => 'required|string|in:ACTIVE,EXPIRED,CANCELLED,PENDING_RENEWAL',
+            'expires_at'        => 'nullable|date',
+            'auto_renew'        => 'nullable|boolean',
+            'privacy'           => 'nullable|boolean',
+            'hosting_record_id' => 'nullable|integer',
+            'client_name'       => 'nullable|string|max:255',
+            'notes'             => 'nullable|string',
         ]);
 
-        $validated['auto_renew'] = filter_var($request->input('auto_renew', false), FILTER_VALIDATE_BOOLEAN);
-        $validated['privacy']    = filter_var($request->input('privacy', false), FILTER_VALIDATE_BOOLEAN);
+        $validated['auto_renew']        = filter_var($request->input('auto_renew', false), FILTER_VALIDATE_BOOLEAN);
+        $validated['privacy']           = filter_var($request->input('privacy', false), FILTER_VALIDATE_BOOLEAN);
+        $validated['hosting_record_id'] = $request->filled('hosting_record_id') ? (int) $request->hosting_record_id : null;
 
         $domain->update($validated);
 
@@ -182,18 +211,26 @@ class DomainsHostingController extends Controller
     }
 
     /**
-     * Display a specific Domain record details, mapped lead, and renewal history.
+     * Display a specific Domain record details, mapped lead, hosting & server, and renewal history.
      */
     public function showDomain(DomainRecord $domain)
     {
-        $domain->load(['lead', 'creator', 'renewals.creator']);
+        $domain->load(['lead', 'creator', 'renewals.creator', 'hosting.server']);
         $renewalsCount = $domain->renewals->count();
         $totalRenewalSpend = $domain->renewals->sum('amount');
+
+        $user = auth()->user();
+        $companyId = $user?->company_id;
+        $hostings = HostingRecord::when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->with('server')
+            ->orderBy('hosting_name')
+            ->get();
 
         return view('pages.accounts.domains_hosting.show', compact(
             'domain',
             'renewalsCount',
-            'totalRenewalSpend'
+            'totalRenewalSpend',
+            'hostings'
         ));
     }
 
@@ -227,6 +264,57 @@ class DomainsHostingController extends Controller
 
         return redirect()->route('accounts.domains-hosting.domains.show', $domain->id)
             ->with('success', "Lead unlinked from domain '{$domain->domain_name}'.");
+    }
+
+    /**
+     * Map a Domain to a Hosting.
+     */
+    public function mapDomainHosting(Request $request, DomainRecord $domain)
+    {
+        $validated = $request->validate([
+            'hosting_record_id' => 'required|exists:hosting_records,id',
+        ]);
+
+        $hosting = HostingRecord::findOrFail($validated['hosting_record_id']);
+        $domain->hosting_record_id = $hosting->id;
+        $domain->save();
+
+        return back()->with('success', "Domain '{$domain->domain_name}' successfully mapped to hosting: {$hosting->hosting_name}!");
+    }
+
+    /**
+     * Unlink Domain from Hosting.
+     */
+    public function unlinkDomainHosting(DomainRecord $domain)
+    {
+        $domain->hosting_record_id = null;
+        $domain->save();
+
+        return back()->with('success', "Domain '{$domain->domain_name}' unlinked from hosting.");
+    }
+
+    /**
+     * Bulk Map multiple domains to a hosting.
+     */
+    public function bulkMapHosting(Request $request)
+    {
+        $validated = $request->validate([
+            'domain_ids'        => 'required|array|min:1',
+            'domain_ids.*'      => 'required|integer|exists:domain_records,id',
+            'hosting_record_id' => 'required|exists:hosting_records,id',
+        ]);
+
+        $user = auth()->user();
+        $companyId = $user?->company_id;
+        $hosting = HostingRecord::findOrFail($validated['hosting_record_id']);
+
+        $updatedCount = DomainRecord::whereIn('id', $validated['domain_ids'])
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->update([
+                'hosting_record_id' => $hosting->id,
+            ]);
+
+        return back()->with('success', "Successfully mapped {$updatedCount} domain(s) to hosting: {$hosting->hosting_name}!");
     }
 
     /**
@@ -522,16 +610,27 @@ class DomainsHostingController extends Controller
      */
     public function showHosting(HostingRecord $hosting)
     {
-        $hosting->load(['lead', 'creator', 'renewals.creator', 'server']);
+        $hosting->load(['lead', 'creator', 'renewals.creator', 'server', 'domains.lead']);
         $renewalsCount = $hosting->renewals->count();
         $totalRenewalSpend = $hosting->renewals->sum('amount');
         $servers = ServerMaster::forCompany($hosting->company_id)->active()->orderBy('server_name')->get();
+
+        $companyId = $hosting->company_id ?: auth()->user()?->company_id;
+        $availableDomains = DomainRecord::when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->where(function ($q) use ($hosting) {
+                $q->whereNull('hosting_record_id')
+                  ->orWhere('hosting_record_id', '!=', $hosting->id);
+            })
+            ->with(['lead', 'hosting'])
+            ->orderBy('domain_name')
+            ->get();
 
         return view('pages.accounts.domains_hosting.show_hosting', compact(
             'hosting',
             'renewalsCount',
             'totalRenewalSpend',
-            'servers'
+            'servers',
+            'availableDomains'
         ));
     }
 
@@ -638,5 +737,42 @@ class DomainsHostingController extends Controller
 
         return redirect()->route('accounts.domains-hosting.index', ['tab' => 'hostings'])
             ->with('success', 'Hosting record deleted successfully!');
+    }
+
+    /**
+     * Map multiple domains to this hosting from the hosting view.
+     */
+    public function mapHostingDomains(Request $request, HostingRecord $hosting)
+    {
+        $validated = $request->validate([
+            'domain_ids'   => 'required|array|min:1',
+            'domain_ids.*' => 'required|integer|exists:domain_records,id',
+        ]);
+
+        $user = auth()->user();
+        $companyId = $hosting->company_id ?: $user?->company_id;
+
+        $updatedCount = DomainRecord::whereIn('id', $validated['domain_ids'])
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->update([
+                'hosting_record_id' => $hosting->id,
+            ]);
+
+        return redirect()->route('accounts.domains-hosting.hostings.show', $hosting->id)
+            ->with('success', "Successfully mapped {$updatedCount} domain(s) to this hosting!");
+    }
+
+    /**
+     * Unlink a domain from this hosting.
+     */
+    public function unlinkHostingDomain(HostingRecord $hosting, DomainRecord $domain)
+    {
+        if ($domain->hosting_record_id === $hosting->id) {
+            $domain->hosting_record_id = null;
+            $domain->save();
+        }
+
+        return redirect()->route('accounts.domains-hosting.hostings.show', $hosting->id)
+            ->with('success', "Domain '{$domain->domain_name}' unlinked from this hosting.");
     }
 }

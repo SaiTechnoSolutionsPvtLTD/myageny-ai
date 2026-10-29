@@ -112,9 +112,13 @@
                     <div style="font-size:13.5px; font-weight:700; color:#0f172a;">
                         Showing {{ $expenses->firstItem() ?? 0 }} to {{ $expenses->lastItem() ?? 0 }} of {{ $expenses->total() }} Expenses
                     </div>
-                    <div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button type="button" class="acm-btn" style="background:#0284c7; color:#fff; font-size:12px;" onclick="openBatchExpModal()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            Batch Migrate All (Auto Runner)
+                        </button>
                         <button type="submit" class="acm-btn acm-btn-primary" onclick="return confirm('Migrate selected unmigrated expenses into CRM Expenses?')" style="font-size:12px;">
-                            Bulk Migrate to CRM Expenses
+                            Bulk Migrate Selected
                         </button>
                     </div>
                 </div>
@@ -190,4 +194,163 @@
         </form>
     </div>
 </div>
+
+<!-- Batch Migration Modal for Safe 2000+ Records Migration -->
+<div id="batchExpModal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(15,23,42,0.65); backdrop-filter:blur(3px); align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; border-radius:16px; width:100%; max-width:540px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); overflow:hidden; border:1px solid #e2e8f0;">
+        <div style="padding:20px 24px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:36px; height:36px; border-radius:10px; background:#e0f2fe; display:flex; align-items:center; justify-content:center; color:#0284c7;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                </div>
+                <div>
+                    <h3 style="margin:0; font-size:16px; font-weight:800; color:#0f172a;">Batch Expense Migration</h3>
+                    <div style="font-size:12px; color:#64748b;">Processes in safe chunks of 50 records to prevent 504 timeouts.</div>
+                </div>
+            </div>
+            <button type="button" onclick="closeBatchExpModal()" style="border:none; background:none; cursor:pointer; color:#94a3b8; font-size:20px;">&times;</button>
+        </div>
+
+        <div style="padding:24px;">
+            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">
+                <span id="batchExpStatusText">Ready to start migration...</span>
+                <span id="batchExpPercentText" style="color:#0284c7;">0%</span>
+            </div>
+
+            <!-- Progress Bar -->
+            <div style="background:#f1f5f9; border-radius:10px; height:18px; overflow:hidden; border:1px solid #e2e8f0; position:relative;">
+                <div id="batchExpProgressBar" style="width:0%; background:linear-gradient(90deg, #0284c7, #38bdf8); height:100%; transition:width 0.3s ease; border-radius:9px;"></div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:#64748b; margin-top:8px;">
+                <span id="batchExpDetailsText">Pending records: Calculating...</span>
+                <span>Chunk size: 50 records / batch</span>
+            </div>
+
+            <div id="batchExpLogBox" style="margin-top:16px; max-height:120px; overflow-y:auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:11.5px; color:#475569; font-family:monospace; display:none;">
+            </div>
+        </div>
+
+        <div style="padding:16px 24px; background:#f8fafc; border-top:1px solid #f1f5f9; display:flex; justify-content:flex-end; gap:10px;">
+            <button type="button" id="btnBatchExpCancel" onclick="closeBatchExpModal()" class="acm-btn acm-btn-outline" style="font-size:13px;">Cancel</button>
+            <button type="button" id="btnBatchExpStart" onclick="runBatchExpMigration()" class="acm-btn acm-btn-primary" style="background:#0284c7; font-size:13px;">
+                Start Batch Migration
+            </button>
+            <button type="button" id="btnBatchExpFinish" onclick="window.location.reload()" class="acm-btn acm-btn-primary" style="background:#16a34a; font-size:13px; display:none;">
+                Done & Reload Page
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let isBatchExpRunning = false;
+let batchExpShouldStop = false;
+
+function openBatchExpModal() {
+    document.getElementById('batchExpModal').style.display = 'flex';
+}
+
+function closeBatchExpModal() {
+    if (isBatchExpRunning) {
+        if (!confirm('Migration is in progress. Are you sure you want to pause/cancel?')) {
+            return;
+        }
+        batchExpShouldStop = true;
+    }
+    document.getElementById('batchExpModal').style.display = 'none';
+}
+
+function appendBatchExpLog(msg) {
+    const box = document.getElementById('batchExpLogBox');
+    box.style.display = 'block';
+    const line = document.createElement('div');
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+}
+
+async function runBatchExpMigration() {
+    isBatchExpRunning = true;
+    batchExpShouldStop = false;
+
+    document.getElementById('btnBatchExpStart').disabled = true;
+    document.getElementById('btnBatchExpStart').style.display = 'none';
+    document.getElementById('btnBatchExpCancel').textContent = 'Pause / Stop';
+
+    const progressBar = document.getElementById('batchExpProgressBar');
+    const percentText = document.getElementById('batchExpPercentText');
+    const statusText = document.getElementById('batchExpStatusText');
+    const detailsText = document.getElementById('batchExpDetailsText');
+
+    statusText.textContent = 'Migrating expenses in chunks of 50...';
+    appendBatchExpLog('Started batch expense migration session...');
+
+    while (!batchExpShouldStop) {
+        try {
+            const response = await fetch('{{ route("accounts.zoho.expenses.migrate-batch") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ limit: 50 })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.message || `Server returned HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            const pct = data.progress_pct || 0;
+            progressBar.style.width = pct + '%';
+            percentText.textContent = pct + '%';
+            detailsText.textContent = `Remaining: ${data.remaining} unmigrated (Total: ${data.total_all})`;
+            statusText.textContent = `Processing... Migrated ${data.total_migrated} of ${data.total_all}`;
+
+            appendBatchExpLog(`Batch completed: +${data.batch_migrated} expenses. Remaining: ${data.remaining}`);
+
+            if (data.errors && data.errors.length > 0) {
+                data.errors.forEach(err => appendBatchExpLog(`⚠ Warning: ${err}`));
+            }
+
+            if (data.completed || data.remaining === 0) {
+                progressBar.style.width = '100%';
+                percentText.textContent = '100%';
+                statusText.textContent = '✓ All Expenses Migrated Successfully!';
+                detailsText.textContent = `All ${data.total_all} expenses are now inside CRM!`;
+                appendBatchExpLog('Completed! All records safely migrated.');
+
+                document.getElementById('btnBatchExpCancel').style.display = 'none';
+                document.getElementById('btnBatchExpFinish').style.display = 'inline-flex';
+                isBatchExpRunning = false;
+                break;
+            }
+
+            await new Promise(r => setTimeout(r, 300));
+
+        } catch (err) {
+            appendBatchExpLog(`❌ Batch Error: ${err.message}`);
+            statusText.textContent = 'Encountered error during batch';
+            alert('Batch migration paused due to error: ' + err.message);
+            document.getElementById('btnBatchExpStart').disabled = false;
+            document.getElementById('btnBatchExpStart').style.display = 'inline-flex';
+            document.getElementById('btnBatchExpStart').textContent = 'Resume Migration';
+            isBatchExpRunning = false;
+            break;
+        }
+    }
+
+    if (batchExpShouldStop) {
+        appendBatchExpLog('Migration paused by user.');
+        document.getElementById('btnBatchExpStart').disabled = false;
+        document.getElementById('btnBatchExpStart').style.display = 'inline-flex';
+        document.getElementById('btnBatchExpStart').textContent = 'Resume Migration';
+        isBatchExpRunning = false;
+    }
+}
+</script>
 @endsection

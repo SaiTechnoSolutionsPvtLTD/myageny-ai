@@ -28,7 +28,8 @@ class ServerMasterController extends Controller
 
         // Search & Filters
         $servers = (clone $baseQuery)
-            ->with(['creator', 'updater'])
+            ->with(['creator', 'updater', 'hostings.domains'])
+            ->withCount(['hostings', 'domains'])
             ->when($request->filled('search'), function ($q) use ($request) {
                 $search = trim($request->search);
                 $q->where(function ($sub) use ($search) {
@@ -49,6 +50,36 @@ class ServerMasterController extends Controller
             ->withQueryString();
 
         return view('pages.accounts.master.servers', compact('servers', 'stats'));
+    }
+
+    /**
+     * Display the specified server view page with all mapped domains and hostings.
+     */
+    public function show(ServerMaster $server)
+    {
+        $server->load([
+            'creator',
+            'updater',
+            'hostings.lead',
+            'hostings.creator',
+            'hostings.renewals',
+            'hostings.domains.lead',
+            'domains.lead',
+            'domains.hosting',
+        ]);
+
+        $hostings = $server->hostings;
+        $domains = $server->domains;
+
+        $stats = [
+            'total_hostings' => $hostings->count(),
+            'active_hostings'=> $hostings->where('status', 'ACTIVE')->count(),
+            'total_domains'  => $domains->count(),
+            'active_domains' => $domains->filter(fn ($d) => strtoupper($d->status ?? '') === 'ACTIVE')->count(),
+            'expiring_soon'  => $domains->filter(fn ($d) => $d->days_until_expiration !== null && $d->days_until_expiration >= 0 && $d->days_until_expiration <= 30)->count(),
+        ];
+
+        return view('pages.accounts.master.show_server', compact('server', 'hostings', 'domains', 'stats'));
     }
 
     /**

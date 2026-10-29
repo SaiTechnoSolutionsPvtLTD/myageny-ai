@@ -50,6 +50,11 @@ class HostingRecord extends Model
         return $this->belongsTo(Lead::class, 'lead_id');
     }
 
+    public function domains()
+    {
+        return $this->hasMany(DomainRecord::class, 'hosting_record_id')->orderBy('domain_name');
+    }
+
     public function renewals()
     {
         return $this->hasMany(HostingRenewal::class, 'hosting_record_id')->orderBy('renewal_date', 'desc')->orderBy('id', 'desc');

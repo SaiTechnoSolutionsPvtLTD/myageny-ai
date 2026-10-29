@@ -127,6 +127,7 @@
         <div class="nav-section">
             <div class="nav-title">ACCOUNTS MODULE</div>
             <div class="nav-items">
+                @if(auth()->user()?->can('accounts_dashboard.menuview') || auth()->user()?->can('accounts_dashboard.view'))
                 <a href="{{ route('accounts.dashboard') }}" class="nav-item {{ request()->routeIs('accounts.dashboard') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.dashboard'))
                         <div class="active-indicator"></div>
@@ -141,7 +142,9 @@
                         <span>Dashboard</span>
                     </div>
                 </a>
+                @endif
 
+                @if(auth()->user()?->can('accounts_ad_budget.menuview') || auth()->user()?->can('accounts_ad_budget.view'))
                 <a href="javascript:void(0)"
                    class="nav-item has-dropdown {{ request()->routeIs('accounts.ad-budget.*') ? 'active open' : '' }}"
                    onclick="toggleDropdown(this)">
@@ -172,7 +175,9 @@
                         Allocation Vs Spend
                     </a>
                 </div>
+                @endif
 
+                @if(auth()->user()?->can('accounts_domains_hosting.menuview') || auth()->user()?->can('accounts_domains_hosting.view'))
                 <a href="{{ route('accounts.domains-hosting.index') }}" class="nav-item {{ request()->routeIs('accounts.domains-hosting.*') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.domains-hosting.*'))
                         <div class="active-indicator"></div>
@@ -186,9 +191,10 @@
                         <span>Domains & Hosting</span>
                     </div>
                 </a>
+                @endif
 
                 <!-- Quotations -->
-                @if(auth()->user()?->can('quotations.menuview') || auth()->user()?->can('quotations.view'))
+                @if(auth()->user()?->can('accounts_quotations.menuview') || auth()->user()?->can('accounts_quotations.view') || auth()->user()?->can('quotations.menuview') || auth()->user()?->can('quotations.view'))
                 <a href="{{ route('accounts.quotations.index') }}" class="nav-item {{ request()->routeIs('accounts.quotations.*') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.quotations.*'))
                         <div class="active-indicator"></div>
@@ -206,6 +212,14 @@
                 @endif
 
                 <!-- Sales Dropdown -->
+                @php
+                    $canSalesInvoices = auth()->user()?->can('accounts_invoices.menuview') || auth()->user()?->can('accounts_invoices.view') || auth()->user()?->can('accounts_sales.menuview') || auth()->user()?->can('accounts_sales.view');
+                    $canSalesPayments = auth()->user()?->can('accounts_payments.menuview') || auth()->user()?->can('accounts_payments.view') || auth()->user()?->can('accounts_sales.menuview') || auth()->user()?->can('accounts_sales.view');
+                    $canSalesCreditNotes = auth()->user()?->can('accounts_credit_notes.menuview') || auth()->user()?->can('accounts_credit_notes.view') || auth()->user()?->can('accounts_sales.menuview') || auth()->user()?->can('accounts_sales.view');
+                    $canSalesCreateInvoice = auth()->user()?->can('accounts_invoices.create') || auth()->user()?->can('accounts_sales.create');
+                    $canSalesGroup = $canSalesInvoices || $canSalesPayments || $canSalesCreditNotes || $canSalesCreateInvoice;
+                @endphp
+                @if($canSalesGroup)
                 <a href="javascript:void(0)"
                    class="nav-item has-dropdown {{ request()->routeIs('accounts.sales.*') ? 'active open' : '' }}"
                    onclick="toggleDropdown(this)">
@@ -227,21 +241,36 @@
 
                 <!-- Sales Submenu -->
                 <div class="submenu {{ request()->routeIs('accounts.sales.*') ? 'show' : '' }}">
+                    @if($canSalesInvoices)
                     <a href="{{ route('accounts.sales.invoices.index') }}" class="submenu-item {{ request()->routeIs('accounts.sales.invoices.*') && !request()->routeIs('accounts.sales.invoices.create') ? 'active' : '' }}">
                         Invoices
                     </a>
+                    @endif
+                    @if($canSalesPayments)
                     <a href="{{ route('accounts.sales.payments.index') }}" class="submenu-item {{ request()->routeIs('accounts.sales.payments.*') ? 'active' : '' }}">
                         Payments
                     </a>
+                    @endif
+                    @if($canSalesCreditNotes)
                     <a href="{{ route('accounts.sales.credit-notes.index') }}" class="submenu-item {{ request()->routeIs('accounts.sales.credit-notes.*') ? 'active' : '' }}">
                         Credit Notes
                     </a>
+                    @endif
+                    @if($canSalesCreateInvoice)
                     <a href="{{ route('accounts.sales.invoices.create') }}" class="submenu-item {{ request()->routeIs('accounts.sales.invoices.create') ? 'active' : '' }}">
                         New Invoice
                     </a>
+                    @endif
                 </div>
+                @endif
 
                 <!-- PO Orders Dropdown -->
+                @php
+                    $canPoView = auth()->user()?->can('accounts_purchase_orders.menuview') || auth()->user()?->can('accounts_purchase_orders.view');
+                    $canPoCreate = auth()->user()?->can('accounts_purchase_orders.create');
+                    $canPoGroup = $canPoView || $canPoCreate;
+                @endphp
+                @if($canPoGroup)
                 <a href="javascript:void(0)"
                    class="nav-item has-dropdown {{ request()->routeIs('accounts.purchase-orders.*') ? 'active open' : '' }}"
                    onclick="toggleDropdown(this)">
@@ -261,14 +290,26 @@
 
                 <!-- PO Orders Submenu -->
                 <div class="submenu {{ request()->routeIs('accounts.purchase-orders.*') ? 'show' : '' }}">
+                    @if($canPoView)
                     <a href="{{ route('accounts.purchase-orders.index') }}" class="submenu-item {{ request()->routeIs('accounts.purchase-orders.index') ? 'active' : '' }}">
                         PO Orders List
                     </a>
+                    @endif
+                    @if($canPoCreate)
                     <a href="{{ route('accounts.purchase-orders.create') }}" class="submenu-item {{ request()->routeIs('accounts.purchase-orders.create') ? 'active' : '' }}">
                         Create PO
                     </a>
+                    @endif
                 </div>
+                @endif
 
+                <!-- Expense Dropdown -->
+                @php
+                    $canExpenseView = auth()->user()?->can('accounts_expenses.menuview') || auth()->user()?->can('accounts_expenses.view');
+                    $canExpenseCreate = auth()->user()?->can('accounts_expenses.create');
+                    $canExpenseGroup = $canExpenseView || $canExpenseCreate;
+                @endphp
+                @if($canExpenseGroup)
                 <a href="javascript:void(0)"
                    class="nav-item has-dropdown {{ request()->routeIs('accounts.expenses.*') ? 'active open' : '' }}"
                    onclick="toggleDropdown(this)">
@@ -287,18 +328,26 @@
 
                 <!-- Expense Submenu -->
                 <div class="submenu {{ request()->routeIs('accounts.expenses.*') ? 'show' : '' }}">
+                    @if($canExpenseView)
                     <a href="{{ route('accounts.expenses.index') }}" class="submenu-item {{ request()->routeIs('accounts.expenses.index') ? 'active' : '' }}">
                         Expense List
                     </a>
+                    @endif
+                    @if($canExpenseCreate)
                     <a href="{{ route('accounts.expenses.create') }}" class="submenu-item {{ request()->routeIs('accounts.expenses.create') ? 'active' : '' }}">
                         Add Expense
                     </a>
+                    @endif
+                    @if($canExpenseView)
                     <a href="{{ route('accounts.expenses.pivot') }}" class="submenu-item {{ request()->routeIs('accounts.expenses.pivot') ? 'active' : '' }}">
                         Expense Pivot
                     </a>
+                    @endif
                 </div>
+                @endif
 
                 <!-- Reports (Direct link to Cards Hub, identical to CRM module) -->
+                @if(auth()->user()?->can('accounts_reports.menuview') || auth()->user()?->can('accounts_reports.view'))
                 <a href="{{ route('accounts.reports.index') }}" class="nav-item {{ request()->routeIs('accounts.reports.*') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.reports.*'))
                         <div class="active-indicator"></div>
@@ -312,7 +361,9 @@
                         <span>Reports</span>
                     </div>
                 </a>
+                @endif
 
+                @if(auth()->user()?->can('accounts_master.menuview') || auth()->user()?->can('accounts_master.view'))
                 <a href="{{ route('accounts.master.index') }}" class="nav-item {{ request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.master.*', 'accounts.ad-accounts-master.*'))
                         <div class="active-indicator"></div>
@@ -327,7 +378,9 @@
                         <span>Master</span>
                     </div>
                 </a>
+                @endif
 
+                @if(auth()->user()?->can('accounts_zoho.menuview') || auth()->user()?->can('accounts_zoho.view'))
                 <a href="{{ route('accounts.zoho.index') }}" class="nav-item {{ request()->routeIs('accounts.zoho.*') ? 'active' : '' }}">
                     @if(request()->routeIs('accounts.zoho.*'))
                         <div class="active-indicator"></div>
@@ -341,6 +394,9 @@
                         <span>Zoho Books Sync</span>
                     </div>
                 </a>
+                @endif
+            </div>
+        </div>
             </div>
         </div>
         @elseif($isProjectsModule)
