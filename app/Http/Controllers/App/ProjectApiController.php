@@ -414,6 +414,260 @@ class ProjectApiController extends Controller
         ]);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    //  GET /mobile/projects/notifications/summary
+    //  Lightweight, index-assisted aggregate counts for scheduled push notifications
+    // ─────────────────────────────────────────────────────────────────────────
+    public function notificationsSummary(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return response()->json(['status' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
+        $now = Carbon::now('Asia/Kolkata');
+        $today = $now->toDateString();
+        $upcomingEnd = $now->copy()->addDays(2)->toDateString();
+        $recentPast = $now->copy()->subDays(14)->toDateString();
+        $startOfMonth = $now->copy()->startOfMonth()->toDateString();
+        $endOfMonth = $now->copy()->endOfMonth()->toDateString();
+
+        // 1. Resolve role scope
+        if ($user->hasAdminLikeRole()) {
+            $roleScope = 'admin';
+        } elseif ($this->hasProjectCoordinatorRole($user)) {
+            $roleScope = 'project_coordinator';
+        } elseif ($this->isUserTl($user)) {
+            $roleScope = 'team_lead';
+        } elseif ($user->belongsToDesigningDepartment()) {
+            $roleScope = 'design';
+        } elseif ($user->belongsToDigitalMarketingDepartment()) {
+            $roleScope = 'digital_marketing';
+        } else {
+            $roleScope = 'development';
+        }
+
+        // 2. Deliveries (Development projects)
+        $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+        $deliveriesQuery = ProductionInitiation::query()
+            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->where(function ($q) use ($devDeptIds) {
+                if (!empty($devDeptIds)) {
+                    $q->whereIn('department_id', $devDeptIds);
+                }
+                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']))
+                  ->orWhere(function ($sq) {
+                      $sq->whereNull('department_id')
+                         ->whereHas('product.category', fn ($cq) => $cq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+                  });
+            })
+            ->whereNotIn('project_execution_status', ['delivered', 'lost']);
+
+        if (! $user->hasAdminLikeRole()) {
+            if ($this->isUserTl($user)) {
+                $deliveriesQuery->where(function ($q) use ($user) {
+                    $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
+                      ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
+                });
+            } else {
+                $deliveriesQuery->where(function ($q) use ($user) {
+                    $q->whereJsonContains('project_allocated_employee_user_ids', $user->id)
+                      ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%')
+                      ->orWhere('initiated_by', $user->id);
+                });
+            }
+        }
+
+        $deliveriesToday = (clone $deliveriesQuery)->whereDate('project_delivery_date', $today)->count();
+        $deliveriesUpcoming = (clone $deliveriesQuery)
+            ->whereDate('project_delivery_date', '>', $today)
+            ->whereDate('project_delivery_date', '<=', $upcomingEnd)
+            ->count();
+        $deliveriesOverdue = (clone $deliveriesQuery)
+            ->whereDate('project_delivery_date', '<', $today)
+            ->count();
+
+        // 3. Allocation Pending
+        $allocationPending = 0;
+        if ($user->hasAdminLikeRole() || $this->isUserTl($user) || $this->hasProjectCoordinatorRole($user)) {
+            $allocationPending = ProductionInitiation::query()
+                ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                ->where(function ($q) {
+                    $q->where('project_allocation_status', 'allocation_pending')
+                      ->orWhere('status', 'allocation_pending');
+                })
+                ->count();
+        }
+
+        // 4. Digital Marketing Campaigns & Renewals
+        $dmRenewalsToday = 0;
+        $dmCampaignsEndingToday = 0;
+        $dmRenewalsUpcoming = 0;
+        $dmRenewalsOverdue = 0;
+
+        if ($user->hasAdminLikeRole() || $this->isUserTl($user) || $this->hasProjectCoordinatorRole($user) || $user->belongsToDigitalMarketingDepartment()) {
+            $extendedParentIds = CustomerCampaign::whereNotNull('extended_from_id')
+                ->pluck('extended_from_id')
+                ->filter()
+                ->unique()
+                ->toArray();
+
+            $campaignsBase = CustomerCampaign::query()
+                ->when($user->company_id, fn ($q) => $q->where('customer_campaigns.company_id', $user->company_id));
+
+            if (! $user->hasAdminLikeRole() && ! $this->hasProjectCoordinatorRole($user)) {
+                if ($this->isUserTl($user)) {
+                    $dmDeptIds = Department::where(function ($q) {
+                        $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
+                          ->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%'])
+                          ->orWhereRaw('LOWER(name) LIKE ?', ['%dm%']);
+                    })->pluck('id')->toArray();
+
+                    $dmEmpIds = User::query()
+                        ->where('is_active', true)
+                        ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                        ->where(function ($q) use ($dmDeptIds) {
+                            $q->whereHas('roles.department', fn ($dq) => $dq->whereIn('id', $dmDeptIds))
+                              ->orWhereHas('roles', fn ($rq) => $rq->whereRaw('LOWER(name) LIKE ?', ['%digital%'])->orWhereRaw('LOWER(name) LIKE ?', ['%marketing%']))
+                              ->orWhereHas('employeeOnboarding.department', fn ($dq) => $dq->whereIn('id', $dmDeptIds));
+                        })
+                        ->pluck('id')
+                        ->push($user->id)
+                        ->unique()
+                        ->toArray();
+
+                    $campaignsBase->where(function ($q) use ($user, $dmEmpIds) {
+                        $q->whereIn('customer_campaigns.created_by', $dmEmpIds)
+                          ->orWhere('customer_campaigns.created_by', $user->id)
+                          ->orWhereHas('productionInitiation', function ($piq) use ($dmEmpIds, $user) {
+                              $piq->where(function ($sub) use ($dmEmpIds, $user) {
+                                  foreach ($dmEmpIds as $mId) {
+                                      $sub->orWhereJsonContains('project_allocated_employee_user_ids', $mId);
+                                  }
+                                  $sub->orWhereJsonContains('project_allocated_tl_user_ids', $user->id);
+                              });
+                          });
+                    });
+                } else {
+                    $campaignsBase->where(function ($q) use ($user) {
+                        $q->where('customer_campaigns.created_by', $user->id)
+                          ->orWhereHas('productionInitiation', function ($piq) use ($user) {
+                              $piq->whereJsonContains('project_allocated_employee_user_ids', $user->id)
+                                  ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
+                          });
+                    });
+                }
+            }
+
+            $dmCampaignsEndingToday = (clone $campaignsBase)
+                ->where('status', 'active')
+                ->whereDate('end_date', $today)
+                ->count();
+
+            $renewalsTodayQuery = (clone $campaignsBase)
+                ->where('status', 'active')
+                ->whereDate('end_date', $today);
+            if (!empty($extendedParentIds)) {
+                $renewalsTodayQuery->whereNotIn('id', $extendedParentIds);
+            }
+            $dmRenewalsToday = $renewalsTodayQuery->count();
+
+            $renewalsUpcomingQuery = (clone $campaignsBase)
+                ->where('status', 'active')
+                ->whereDate('end_date', '>', $today)
+                ->whereDate('end_date', '<=', Carbon::today()->addDays(3)->toDateString());
+            if (!empty($extendedParentIds)) {
+                $renewalsUpcomingQuery->whereNotIn('id', $extendedParentIds);
+            }
+            $dmRenewalsUpcoming = $renewalsUpcomingQuery->count();
+
+            $renewalsOverdueQuery = (clone $campaignsBase)
+                ->whereIn('status', ['active', 'expired'])
+                ->whereDate('end_date', '<', $today)
+                ->whereDate('end_date', '>=', $recentPast);
+            if (!empty($extendedParentIds)) {
+                $renewalsOverdueQuery->whereNotIn('id', $extendedParentIds);
+            }
+            $dmRenewalsOverdue = $renewalsOverdueQuery->count();
+        }
+
+        // 5. Production Tasks & Deadlines (Current Calendar Date Only)
+        // Uses the task_date field filtered for the current date only ($today)
+        // following the application's Asia/Kolkata timezone convention. Excludes past & future dates.
+        $productionTasksToday = 0;
+        $designOverdue = 0;
+
+        $tasksTodayQuery = ProductionTask::query()
+            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+            ->whereDate('task_date', $today);
+
+        if (! $user->hasAdminLikeRole() && ! $this->hasProjectCoordinatorRole($user)) {
+            if ($this->isUserTl($user)) {
+                $managedUsers = $user->managedUsers()->where('users.user_status', 'active')->pluck('users.id')->all();
+                $accessibleUserIds = array_values(array_unique(array_merge([$user->id], $managedUsers)));
+                $tasksTodayQuery->where(function ($q) use ($accessibleUserIds, $user) {
+                    $q->whereIn('assigned_to', $accessibleUserIds)
+                      ->orWhere('created_by', $user->id);
+                });
+            } else {
+                $tasksTodayQuery->where(function ($q) use ($user) {
+                    $q->where('assigned_to', $user->id)
+                      ->orWhere('created_by', $user->id);
+                });
+            }
+        }
+        $productionTasksToday = $tasksTodayQuery->count();
+
+        $designDeptId = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->value('id');
+        if ($designDeptId && ($user->hasAdminLikeRole() || $this->isUserTl($user) || $this->hasProjectCoordinatorRole($user) || $user->belongsToDesigningDepartment())) {
+            $designOverdueQuery = ProductionInitiation::query()
+                ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                ->where('department_id', $designDeptId)
+                ->whereDate('project_delivery_date', '<', $today)
+                ->whereNotIn('project_execution_status', ['delivered', 'lost']);
+
+            if (! $user->hasAdminLikeRole() && ! $this->hasProjectCoordinatorRole($user)) {
+                if ($this->isUserTl($user)) {
+                    $designOverdueQuery->where(function ($q) use ($user) {
+                        $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
+                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
+                    });
+                } else {
+                    $designOverdueQuery->where(function ($q) use ($user) {
+                        $q->whereJsonContains('project_allocated_employee_user_ids', $user->id)
+                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
+                    });
+                }
+            }
+            $designOverdue = $designOverdueQuery->count();
+        }
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'role_scope'                  => $roleScope,
+                'date'                        => $today,
+                'current_month'               => $now->format('F Y'),
+                'start_of_month'              => $startOfMonth,
+                'end_of_month'                => $endOfMonth,
+                'deliveries_today'            => $deliveriesToday,
+                'deliveries_upcoming'         => $deliveriesUpcoming,
+                'deliveries_overdue'          => $deliveriesOverdue,
+                'allocation_pending'          => $allocationPending,
+                'renewals_today'              => $dmRenewalsToday,
+                'campaigns_ending_today'      => $dmCampaignsEndingToday,
+                'renewals_upcoming'           => $dmRenewalsUpcoming,
+                'renewals_overdue'            => $dmRenewalsOverdue,
+                'production_tasks_today'      => $productionTasksToday,
+                'tasks_today'                 => $productionTasksToday,
+                'production_tasks_this_month' => $productionTasksToday, // backward-compatibility alias
+                'tasks_this_month'            => $productionTasksToday,
+                'design_tasks_today'          => $productionTasksToday,
+                'design_overdue'              => $designOverdue,
+            ],
+        ]);
+    }
+
     private function resolveDeliverySectionLabels(array $dashboardFilters): array
     {
         $from = $this->parseFilterDate($dashboardFilters['date_from'] ?? '');

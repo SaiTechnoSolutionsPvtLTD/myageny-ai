@@ -5551,7 +5551,7 @@ class AccountsApiController extends Controller
                         ],
                         'rows'                => $rows,
                         'export_urls'         => [
-                            'pdf'   => url("/accounts/reports/customer-balance-sheet/export-pdf?customer_id={$cId}&date_from={$dateFrom}&date_to={$dateTo}"),
+                            'pdf'   => url("/api/mobile/accounts/reports/customer-balance-sheet/pdf?customer_id={$cId}&date_from={$dateFrom}&date_to={$dateTo}"),
                             'print' => url("/accounts/reports/customer-balance-sheet/print?customer_id={$cId}&date_from={$dateFrom}&date_to={$dateTo}"),
                         ],
                     ],
@@ -5668,12 +5668,242 @@ class AccountsApiController extends Controller
     }
 
     /**
+     * Mobile Customer Statement PDF Generator (Streams DOMPDF).
+     */
+    public function reportCustomerBalanceSheetPdf(Request $request)
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+            $setting   = InvoiceSetting::forCompany($companyId);
+
+            $customers = CustomerMaster::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->active()
+                ->orderBy('customer_name')
+                ->get();
+
+            $now = Carbon::now();
+            $fyStartYear = $now->month >= 4 ? $now->year : $now->year - 1;
+            $defaultFrom = Carbon::create($fyStartYear, 4, 1)->format('Y-m-d');
+            $defaultTo   = $now->format('Y-m-d');
+
+            $dateFrom   = $request->input('date_from', $defaultFrom);
+            $dateTo     = $request->input('date_to', $defaultTo);
+            $customerId = $request->input('customer_id');
+
+            $selectedCustomer = null;
+            if (!empty($customerId) && $customerId !== 'all') {
+                $selectedCustomer = CustomerMaster::query()
+                    ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                    ->find($customerId);
+            }
+
+            if (!$selectedCustomer) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => 'Please select a valid customer to generate statement PDF.',
+                ], 422);
+            }
+
+            $cId = $selectedCustomer->id;
+
+            // 1. Opening Balance
+            $invoicesBefore = (float) Invoice::query()
+                ->where('customer_id', $cId)
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereDate('invoice_date', '<', $dateFrom)
+                ->whereNotIn('status', ['cancelled', 'draft'])
+                ->sum('total_amount');
+
+            $paymentsBefore = (float) InvoicePayment::query()
+                ->where('customer_id', $cId)
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereDate('payment_date', '<', $dateFrom)
+                ->sum(DB::raw('COALESCE(NULLIF(total_settled_amount, 0), amount_received + tds_amount)'));
+
+            $creditNotesBefore = (float) CreditNote::query()
+                ->where('customer_id', $cId)
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereDate('credit_note_date', '<', $dateFrom)
+                ->where('status', '!=', 'void')
+                ->sum('total_amount');
+
+            $openingBalance = $invoicesBefore - $paymentsBefore - $creditNotesBefore;
+
+            // 2. Fetch Period Invoices
+            $periodInvoices = Invoice::query()
+                ->where('customer_id', $cId)
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereBetween('invoice_date', [$dateFrom, $dateTo])
+                ->whereNotIn('status', ['cancelled', 'draft'])
+                ->orderBy('invoice_date', 'asc')
+                ->get();
+
+            // 3. Fetch Period Payments
+            $periodPayments = InvoicePayment::with('invoice')
+                ->where('customer_id', $cId)
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereBetween('payment_date', [$dateFrom, $dateTo])
+                ->orderBy('payment_date', 'asc')
+                ->get();
+
+            // 4. Fetch Period Credit Notes
+            $periodCreditNotes = CreditNote::with('invoice')
+                ->where('customer_id', $cId)
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereBetween('credit_note_date', [$dateFrom, $dateTo])
+                ->where('status', '!=', 'void')
+                ->orderBy('credit_note_date', 'asc')
+                ->get();
+
+            // Build chronological rows
+            $rows = [];
+            foreach ($periodInvoices as $inv) {
+                $invDate = Carbon::parse($inv->invoice_date);
+                $rows[] = [
+                    'date'        => $invDate,
+                    'sort_key'    => $invDate->format('Y-m-d') . '_1_' . str_pad($inv->id, 8, '0', STR_PAD_LEFT),
+                    'type'        => 'invoice',
+                    'type_label'  => 'Tax Invoice',
+                    'badge_style' => 'background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;',
+                    'ref_no'      => $inv->invoice_number,
+                    'particulars' => 'Tax Invoice (' . ($inv->title ?: 'Sales') . ')',
+                    'details'     => 'Due Date: ' . ($inv->due_date ? Carbon::parse($inv->due_date)->format('d M, Y') : '—'),
+                    'status'      => ucfirst($inv->status),
+                    'debit'       => (float) $inv->total_amount,
+                    'credit'      => 0.0,
+                ];
+            }
+
+            foreach ($periodPayments as $pay) {
+                $payDate = Carbon::parse($pay->payment_date);
+                $part = 'Payment Received';
+                if ($pay->invoice) {
+                    $part .= ' for Inv #' . $pay->invoice->invoice_number;
+                }
+
+                $settled = (float) ($pay->total_settled_amount > 0 ? $pay->total_settled_amount : ($pay->amount_received + $pay->tds_amount));
+                $details = '';
+                if ($pay->tds_amount > 0) {
+                    $details .= 'TDS: ₹' . number_format($pay->tds_amount, 2) . ' ';
+                }
+                if ($pay->payment_method) {
+                    $details .= ($details ? '| ' : '') . 'Mode: ' . ucfirst(str_replace('_', ' ', $pay->payment_method));
+                }
+                if ($pay->transaction_reference) {
+                    $details .= ($details ? '| ' : '') . 'Ref: ' . $pay->transaction_reference;
+                }
+                if ($pay->notes) {
+                    $details .= ($details ? '| ' : '') . $pay->notes;
+                }
+
+                $rows[] = [
+                    'date'        => $payDate,
+                    'sort_key'    => $payDate->format('Y-m-d') . '_2_' . str_pad($pay->id, 8, '0', STR_PAD_LEFT),
+                    'type'        => 'payment',
+                    'type_label'  => 'Payment',
+                    'badge_style' => 'background:#ecfdf5; color:#047857; border:1px solid #a7f3d0;',
+                    'ref_no'      => $pay->payment_number ?: ('REC-' . str_pad($pay->id, 5, '0', STR_PAD_LEFT)),
+                    'particulars' => $part,
+                    'details'     => $details,
+                    'status'      => 'Settled',
+                    'debit'       => 0.0,
+                    'credit'      => $settled,
+                ];
+            }
+
+            foreach ($periodCreditNotes as $cn) {
+                $cnDate = $cn->credit_note_date ? Carbon::parse($cn->credit_note_date) : Carbon::parse($cn->created_at);
+                $part = 'Credit Note (' . ($cn->reason ?: 'Adjustment') . ')';
+                if ($cn->invoice) {
+                    $part .= ' for Inv #' . $cn->invoice->invoice_number;
+                }
+
+                $rows[] = [
+                    'date'        => $cnDate,
+                    'sort_key'    => $cnDate->format('Y-m-d') . '_3_' . str_pad($cn->id, 8, '0', STR_PAD_LEFT),
+                    'type'        => 'credit_note',
+                    'type_label'  => 'Credit Note',
+                    'badge_style' => 'background:#fffbeb; color:#b45309; border:1px solid #fde68a;',
+                    'ref_no'      => $cn->credit_note_number,
+                    'particulars' => $part,
+                    'details'     => $cn->notes ?: '',
+                    'status'      => $cn->status ?: 'Issued',
+                    'debit'       => 0.0,
+                    'credit'      => (float) $cn->total_amount,
+                ];
+            }
+
+            usort($rows, fn ($a, $b) => strcmp($a['sort_key'], $b['sort_key']));
+
+            $runningBalance = $openingBalance;
+            $totalPeriodDebit = 0.0;
+            $totalPeriodCredit = 0.0;
+            $totalPeriodPaid = 0.0;
+            $totalPeriodCredited = 0.0;
+
+            foreach ($rows as &$r) {
+                $runningBalance += ($r['debit'] - $r['credit']);
+                $r['running_balance'] = $runningBalance;
+                $totalPeriodDebit += $r['debit'];
+                $totalPeriodCredit += $r['credit'];
+
+                if ($r['type'] === 'payment') {
+                    $totalPeriodPaid += $r['credit'];
+                } elseif ($r['type'] === 'credit_note') {
+                    $totalPeriodCredited += $r['credit'];
+                }
+            }
+            unset($r);
+
+            $closingBalance = $runningBalance;
+
+            $data = [
+                'mode'                => 'single',
+                'customers'           => $customers,
+                'selectedCustomer'    => $selectedCustomer,
+                'dateFrom'            => $dateFrom,
+                'dateTo'              => $dateTo,
+                'setting'             => $setting,
+                'openingBalance'      => $openingBalance,
+                'rows'                => $rows,
+                'closingBalance'      => $closingBalance,
+                'totalPeriodDebit'    => $totalPeriodDebit,
+                'totalPeriodCredit'   => $totalPeriodCredit,
+                'totalPeriodPaid'     => $totalPeriodPaid,
+                'totalPeriodCredited' => $totalPeriodCredited,
+            ];
+
+            $customerSlug = preg_replace('/[^A-Za-z0-9_\-]/', '_', $selectedCustomer->company_name ?: $selectedCustomer->customer_name);
+            $filename = 'Customer_Statement_' . $customerSlug . '_' . Carbon::parse($dateFrom)->format('Ymd') . '_to_' . Carbon::parse($dateTo)->format('Ymd') . '.pdf';
+
+            $pdf = Pdf::loadView('pages.accounts.reports.customer_balance_sheet_pdf', $data)
+                ->setPaper('a4', 'portrait')
+                ->setOptions([
+                    'defaultFont'          => 'DejaVu Sans',
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled'      => true,
+                    'isPhpEnabled'         => true,
+                ]);
+
+            return $pdf->stream($filename);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts reportCustomerBalanceSheetPdf error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to generate Customer Statement PDF: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Profit & Loss (P & L) Statement Report.
      */
     public function reportProfitAndLoss(Request $request): JsonResponse
     {
         try {
             $companyId = $request->user()?->company_id;
+            $setting   = InvoiceSetting::forCompany($companyId);
 
             $now = Carbon::now();
             $fyStartYear = $now->month >= 4 ? $now->year : $now->year - 1;
@@ -5846,6 +6076,7 @@ class AccountsApiController extends Controller
             return response()->json([
                 'status' => true,
                 'data'   => [
+                    'company_name' => $setting?->company_name,
                     'filters' => [
                         'date_from'       => $dateFrom,
                         'date_to'         => $dateTo,
@@ -5879,7 +6110,7 @@ class AccountsApiController extends Controller
                     'monthly_trend'        => $monthlyTrend,
                     'export_urls'          => [
                         'excel' => url("/accounts/reports/profit-and-loss/export-excel?date_from={$dateFrom}&date_to={$dateTo}&period={$selectedPeriod}"),
-                        'pdf'   => url("/accounts/reports/profit-and-loss/export-pdf?date_from={$dateFrom}&date_to={$dateTo}&period={$selectedPeriod}"),
+                        'pdf'   => url("/api/mobile/accounts/reports/profit-and-loss/pdf?date_from={$dateFrom}&date_to={$dateTo}&period={$selectedPeriod}"),
                     ],
                 ],
             ]);
@@ -5888,6 +6119,238 @@ class AccountsApiController extends Controller
             return response()->json([
                 'status'  => false,
                 'message' => 'Failed to load Profit & Loss report: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Mobile Profit & Loss PDF Generator (Streams DOMPDF).
+     */
+    public function reportProfitAndLossPdf(Request $request)
+    {
+        try {
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+            $setting   = InvoiceSetting::forCompany($companyId);
+
+            $now = Carbon::now();
+            $fyStartYear = $now->month >= 4 ? $now->year : $now->year - 1;
+            $defaultFrom = Carbon::create($fyStartYear, 4, 1)->format('Y-m-d');
+            $defaultTo   = $now->format('Y-m-d');
+
+            $dateFrom       = $request->input('date_from', $defaultFrom);
+            $dateTo         = $request->input('date_to', $defaultTo);
+            $selectedPeriod = $request->input('period', 'this_fy');
+
+            // Invoices
+            $invoicesQuery = Invoice::query()
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereDate('invoice_date', '>=', $dateFrom)
+                ->whereDate('invoice_date', '<=', $dateTo)
+                ->whereNotIn('status', ['cancelled', 'draft']);
+
+            $invoices = (clone $invoicesQuery)->orderBy('invoice_date', 'desc')->get();
+
+            $grossSales       = (float) $invoices->sum('total_amount');
+            $netSalesSubtotal = (float) $invoices->sum('subtotal');
+            $totalSalesTax    = (float) $invoices->sum('total_tax');
+            $totalPaidAmount  = (float) $invoices->sum('paid_amount');
+            $totalBalanceDue  = (float) $invoices->sum('balance_due');
+            $invoicesCount    = $invoices->count();
+
+            // Credit Notes
+            $creditNotes = CreditNote::query()
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                ->whereDate('credit_note_date', '>=', $dateFrom)
+                ->whereDate('credit_note_date', '<=', $dateTo)
+                ->where('status', '!=', 'void')
+                ->get();
+
+            $totalCreditNotes         = (float) $creditNotes->sum('total_amount');
+            $totalCreditNotesSubtotal = (float) $creditNotes->sum('subtotal');
+            $creditNotesCount         = $creditNotes->count();
+
+            $netOperatingRevenue   = max(0, $netSalesSubtotal - $totalCreditNotesSubtotal);
+            $grossOperatingRevenue = max(0, $grossSales - $totalCreditNotes);
+
+            // Expenses
+            $expensesQuery = AccountExpense::query()
+                ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
+                ->whereDate('expense_date', '>=', $dateFrom)
+                ->whereDate('expense_date', '<=', $dateTo)
+                ->with(['category', 'subcategory', 'vendor']);
+
+            $expenses = (clone $expensesQuery)->orderBy('expense_date', 'desc')->get();
+
+            $totalExpenses         = (float) $expenses->sum('amount');
+            $totalFixedExpenses    = (float) $expenses->where('expense_type', 'Fixed')->sum('amount');
+            $totalVariableExpenses = (float) $expenses->where('expense_type', 'Variable')->sum('amount');
+            $expensesCount         = $expenses->count();
+
+            $netProfit     = $netOperatingRevenue - $totalExpenses;
+            $grossProfit   = $grossOperatingRevenue - $totalExpenses;
+            $profitMargin  = $netOperatingRevenue > 0 ? round(($netProfit / $netOperatingRevenue) * 100, 2) : 0.0;
+            $expenseRatio  = $netOperatingRevenue > 0 ? round(($totalExpenses / $netOperatingRevenue) * 100, 2) : 0.0;
+            $cashRealized  = $totalPaidAmount;
+            $cashProfit    = $cashRealized - $totalExpenses;
+
+            // Categories breakdown
+            $categoriesBreakdown = [];
+            $groupedByCategory = $expenses->groupBy('account_expense_category_id');
+
+            foreach ($groupedByCategory as $catId => $catExpenses) {
+                $first = $catExpenses->first();
+                $categoryName = $first?->category?->name ?? 'Uncategorized';
+                $categoryCode = $first?->category?->code ?? 'OTHER';
+                $catTotal     = (float) $catExpenses->sum('amount');
+                $catFixed     = (float) $catExpenses->where('expense_type', 'Fixed')->sum('amount');
+                $catVariable  = (float) $catExpenses->where('expense_type', 'Variable')->sum('amount');
+                $catCount     = $catExpenses->count();
+
+                $subBreakdown = [];
+                $groupedBySub = $catExpenses->groupBy('account_expense_subcategory_id');
+                foreach ($groupedBySub as $subId => $subExpenses) {
+                    $subFirst = $subExpenses->first();
+                    $subName  = $subFirst?->subcategory?->name ?? 'General';
+                    $subCode  = $subFirst?->subcategory?->code ?? '-';
+                    $subTotal = (float) $subExpenses->sum('amount');
+                    $subBreakdown[] = [
+                        'id'          => $subId,
+                        'name'        => $subName,
+                        'code'        => $subCode,
+                        'count'       => $subExpenses->count(),
+                        'fixed'       => (float) $subExpenses->where('expense_type', 'Fixed')->sum('amount'),
+                        'variable'    => (float) $subExpenses->where('expense_type', 'Variable')->sum('amount'),
+                        'total'       => $subTotal,
+                        'pct_of_cat'  => $catTotal > 0 ? round(($subTotal / $catTotal) * 100, 1) : 0.0,
+                    ];
+                }
+                usort($subBreakdown, fn ($a, $b) => $b['total'] <=> $a['total']);
+
+                $categoriesBreakdown[] = [
+                    'id'              => $catId,
+                    'name'            => $categoryName,
+                    'code'            => $categoryCode,
+                    'count'           => $catCount,
+                    'fixed'           => $catFixed,
+                    'variable'        => $catVariable,
+                    'total'           => $catTotal,
+                    'pct_of_expenses' => $totalExpenses > 0 ? round(($catTotal / $totalExpenses) * 100, 1) : 0.0,
+                    'pct_of_revenue'  => $netOperatingRevenue > 0 ? round(($catTotal / $netOperatingRevenue) * 100, 1) : 0.0,
+                    'subcategories'   => $subBreakdown,
+                ];
+            }
+            usort($categoriesBreakdown, fn ($a, $b) => $b['total'] <=> $a['total']);
+
+            // Client revenue breakdown
+            $clientRevenue = [];
+            $groupedByClient = $invoices->groupBy(fn ($inv) => $inv->company_name ?: ($inv->customer_name ?: 'Unknown Client'));
+            foreach ($groupedByClient as $clientName => $clientInvoices) {
+                $cTotal = (float) $clientInvoices->sum('subtotal');
+                $cGST   = (float) $clientInvoices->sum('total_tax');
+                $cGross = (float) $clientInvoices->sum('total_amount');
+                $cPaid  = (float) $clientInvoices->sum('paid_amount');
+                $clientRevenue[] = [
+                    'name'           => $clientName,
+                    'count'          => $clientInvoices->count(),
+                    'subtotal'       => $cTotal,
+                    'tax'            => $cGST,
+                    'gross'          => $cGross,
+                    'paid'           => $cPaid,
+                    'pct_of_revenue' => $netOperatingRevenue > 0 ? round(($cTotal / $netOperatingRevenue) * 100, 1) : 0.0,
+                ];
+            }
+            usort($clientRevenue, fn ($a, $b) => $b['subtotal'] <=> $a['subtotal']);
+
+            // Monthly Trend
+            $monthlyTrend = [];
+            try {
+                $startPeriod = Carbon::parse($dateFrom)->startOfMonth();
+                $endPeriod   = Carbon::parse($dateTo)->startOfMonth();
+
+                $safety = 0;
+                $cursor = $startPeriod->copy();
+                while ($cursor->lte($endPeriod) && $safety < 60) {
+                    $monthKey   = $cursor->format('Y-m');
+                    $monthLabel = $cursor->format('M Y');
+
+                    $mInvoices    = $invoices->filter(fn ($inv) => Carbon::parse($inv->invoice_date)->format('Y-m') === $monthKey);
+                    $mExpenses    = $expenses->filter(fn ($exp) => Carbon::parse($exp->expense_date)->format('Y-m') === $monthKey);
+                    $mCreditNotes = $creditNotes->filter(fn ($cn) => Carbon::parse($cn->credit_note_date)->format('Y-m') === $monthKey);
+
+                    $mRevenue   = max(0, (float) $mInvoices->sum('subtotal') - (float) $mCreditNotes->sum('subtotal'));
+                    $mExpense   = (float) $mExpenses->sum('amount');
+                    $mNetProfit = $mRevenue - $mExpense;
+                    $mMargin    = $mRevenue > 0 ? round(($mNetProfit / $mRevenue) * 100, 1) : 0.0;
+
+                    $monthlyTrend[] = [
+                        'month_key'    => $monthKey,
+                        'month_label'  => $monthLabel,
+                        'revenue'      => $mRevenue,
+                        'expense'      => $mExpense,
+                        'net_profit'   => $mNetProfit,
+                        'margin'       => $mMargin,
+                        'invoice_cnt'  => $mInvoices->count(),
+                        'expense_cnt'  => $mExpenses->count(),
+                    ];
+
+                    $cursor->addMonth();
+                    $safety++;
+                }
+            } catch (\Throwable $e) {
+                $monthlyTrend = [];
+            }
+
+            $data = [
+                'dateFrom'                 => $dateFrom,
+                'dateTo'                   => $dateTo,
+                'selectedPeriod'           => $selectedPeriod,
+                'setting'                  => $setting,
+                'invoices'                 => $invoices,
+                'invoicesCount'            => $invoicesCount,
+                'grossSales'               => $grossSales,
+                'netSalesSubtotal'         => $netSalesSubtotal,
+                'totalSalesTax'            => $totalSalesTax,
+                'totalPaidAmount'          => $totalPaidAmount,
+                'totalBalanceDue'          => $totalBalanceDue,
+                'creditNotes'              => $creditNotes,
+                'creditNotesCount'         => $creditNotesCount,
+                'totalCreditNotes'         => $totalCreditNotes,
+                'totalCreditNotesSubtotal' => $totalCreditNotesSubtotal,
+                'netOperatingRevenue'      => $netOperatingRevenue,
+                'grossOperatingRevenue'    => $grossOperatingRevenue,
+                'expenses'                 => $expenses,
+                'expensesCount'            => $expensesCount,
+                'totalExpenses'            => $totalExpenses,
+                'totalFixedExpenses'       => $totalFixedExpenses,
+                'totalVariableExpenses'    => $totalVariableExpenses,
+                'netProfit'                => $netProfit,
+                'grossProfit'              => $grossProfit,
+                'profitMargin'             => $profitMargin,
+                'expenseRatio'             => $expenseRatio,
+                'cashRealized'             => $cashRealized,
+                'cashProfit'               => $cashProfit,
+                'categoriesBreakdown'      => $categoriesBreakdown,
+                'clientRevenue'            => $clientRevenue,
+                'monthlyTrend'             => $monthlyTrend,
+            ];
+
+            $filename = 'Profit_and_Loss_Statement_' . Carbon::parse($dateFrom)->format('Ymd') . '_to_' . Carbon::parse($dateTo)->format('Ymd') . '.pdf';
+
+            $pdf = Pdf::loadView('pages.accounts.reports.profit_and_loss_pdf', $data)
+                ->setPaper('a4', 'portrait')
+                ->setOptions([
+                    'defaultFont'          => 'DejaVu Sans',
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled'      => true,
+                    'isPhpEnabled'         => true,
+                ]);
+
+            return $pdf->stream($filename);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts reportProfitAndLossPdf error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to generate Profit & Loss PDF: ' . $e->getMessage(),
             ], 500);
         }
     }

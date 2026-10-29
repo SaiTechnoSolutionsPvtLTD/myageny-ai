@@ -2768,6 +2768,7 @@ class SuperAdminDashboardController extends ApiController
                 $items->push([
                     'pi_id'            => $pi->id,
                     'lead_id'          => $pi->lead_id,
+                    'lead_product_id'  => $pi->lead_product_id,
                     'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
                     'project_view_url' => url('/projects-details/' . $pi->id),
                     'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
@@ -2880,6 +2881,7 @@ class SuperAdminDashboardController extends ApiController
             $items->push([
                 'pi_id'            => $pi->id,
                 'lead_id'          => $pi->lead_id,
+                'lead_product_id'  => $pi->lead_product_id,
                 'lead_view_url'    => $pi->lead_id ? route('leads.show', $pi->lead_id) : null,
                 'project_view_url' => url('/projects-details/' . $pi->id),
                 'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: ($pi->company_name ?: '-')),
@@ -3142,6 +3144,9 @@ class SuperAdminDashboardController extends ApiController
                 return [
                     'index'            => $idx + 1,
                     'lead_id'          => $lead?->id,
+                    'lead_product_id'  => $item->id,
+                    'pi_id'            => null,
+                    'source_type'      => 'nst',
                     'lead_view_url'    => $lead ? route('leads.show', $lead->id) : null,
                     'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: '-'),
                     'customer_name'    => $lead?->contact_name ?: '-',
@@ -3594,6 +3599,9 @@ class SuperAdminDashboardController extends ApiController
                 return [
                     'index'            => $idx + 1,
                     'lead_id'          => $lead?->id,
+                    'lead_product_id'  => $item->id,
+                    'pi_id'            => null,
+                    'source_type'      => 'nst',
                     'lead_view_url'    => $lead ? route('leads.show', $lead->id) : null,
                     'company_name'     => $lead?->company_name ?: ($lead?->business_name ?: '-'),
                     'customer_name'    => $lead?->contact_name ?: '-',
@@ -3649,6 +3657,9 @@ class SuperAdminDashboardController extends ApiController
                 $rows->push([
                     'index'            => $rows->count() + 1,
                     'lead_id'          => $cItem['lead_id'],
+                    'pi_id'            => $cItem['pi_id'] ?? null,
+                    'lead_product_id'  => $cItem['lead_product_id'] ?? null,
+                    'source_type'      => $cItem['source_type'] ?? 'cst',
                     'lead_view_url'    => $cItem['lead_view_url'],
                     'project_view_url' => $cItem['project_view_url'] ?? null,
                     'company_name'     => $cItem['company_name'],
@@ -3704,6 +3715,7 @@ class SuperAdminDashboardController extends ApiController
         $validator = Validator::make($request->all(), [
             'lead_id'         => ['nullable', 'integer'],
             'pi_id'           => ['nullable', 'integer'],
+            'lead_product_id' => ['nullable', 'integer'],
             'new_date'        => ['required', 'date'],
             'expected_amount' => ['nullable', 'numeric', 'min:0'],
             'expected_value'  => ['nullable', 'numeric', 'min:0'],
@@ -3719,9 +3731,10 @@ class SuperAdminDashboardController extends ApiController
             ], 422);
         }
 
-        $leadId  = $request->input('lead_id');
-        $piId    = $request->input('pi_id');
-        $newDate = Carbon::parse($request->input('new_date'));
+        $leadId        = $request->input('lead_id');
+        $piId          = $request->input('pi_id');
+        $leadProductId = $request->input('lead_product_id');
+        $newDate       = Carbon::parse($request->input('new_date'));
         $reason  = trim((string)$request->input('reason'));
         $remarks = trim((string)$request->input('remarks'));
 
@@ -3817,7 +3830,7 @@ class SuperAdminDashboardController extends ApiController
             }
         };
 
-        // 1. If ProductionInitiation ID (Project item)
+        // 1. If ProductionInitiation ID (Project item / CST renewal)
         if ($piId) {
             $pi = ProductionInitiation::find($piId);
             if ($pi) {
@@ -3849,21 +3862,34 @@ class SuperAdminDashboardController extends ApiController
                 $updated = true;
             }
         }
-
-        // 2. If Lead ID (or fallback when piId not provided or lead needs update)
-        if ($leadId) {
+        // 2. If LeadProduct ID specifically passed (NST prospect item)
+        elseif ($leadProductId) {
+            $lp = LeadProduct::find($leadProductId);
+            if ($lp) {
+                $lpUpdates = ['closure_date' => $formattedNewDateRaw];
+                $reqExpAmount = $request->filled('expected_amount') ? (float)$request->input('expected_amount') : ($request->filled('expected_value') ? (float)$request->input('expected_value') : null);
+                $targetLpExp = $reqExpAmount ?? ($lp->expected_value ?? (float)($lp->total_price ?? 0));
+                if ($targetLpExp > 0) {
+                    $lpUpdates['expected_value'] = $targetLpExp;
+                }
+                $lp->update($lpUpdates);
+                $updated = true;
+            }
+        }
+        // 3. Fallback when neither piId nor leadProductId provided
+        elseif ($leadId) {
             $lead = Lead::find($leadId);
             if ($lead) {
                 // Find or update lead products
                 $lps = LeadProduct::where('lead_id', $leadId)->get();
                 $reqExpAmount = $request->filled('expected_amount') ? (float)$request->input('expected_amount') : ($request->filled('expected_value') ? (float)$request->input('expected_value') : null);
-                foreach ($lps as $lp) {
+                foreach ($lps as $lpItem) {
                     $lpUpdates = ['closure_date' => $formattedNewDateRaw];
-                    $targetLpExp = $reqExpAmount ?? ($lp->expected_value ?? (float)($lp->total_price ?? 0));
+                    $targetLpExp = $reqExpAmount ?? ($lpItem->expected_value ?? (float)($lpItem->total_price ?? 0));
                     if ($targetLpExp > 0) {
                         $lpUpdates['expected_value'] = $targetLpExp;
                     }
-                    $lp->update($lpUpdates);
+                    $lpItem->update($lpUpdates);
                 }
 
                 // Update associated CustomerCampaign records by lead_id
@@ -3872,31 +3898,28 @@ class SuperAdminDashboardController extends ApiController
                 // Update associated SmmSheet records by lead_id
                 SmmSheet::where('lead_id', $leadId)->update(['end_date' => $formattedNewDateRaw]);
 
-                // If lead has production initiations that weren't updated above, update them too
-                if (!$piId) {
-                    $pis = ProductionInitiation::where('lead_id', $leadId)->get();
-                    foreach ($pis as $pItem) {
-                        $oldDateStr = $pItem->project_delivery_date ? Carbon::parse($pItem->project_delivery_date)->format('d M Y') : 'None';
+                $pis = ProductionInitiation::where('lead_id', $leadId)->get();
+                foreach ($pis as $pItem) {
+                    $oldDateStr = $pItem->project_delivery_date ? Carbon::parse($pItem->project_delivery_date)->format('d M Y') : 'None';
 
-                        $applyInitiationDateUpdates($pItem);
+                    $applyInitiationDateUpdates($pItem);
 
-                        $timelineContent = "Closure / End Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
-                        if ($pItem->expected_value !== null && (float)$pItem->expected_value > 0) {
-                            $timelineContent .= "<br><strong>Expected Amount:</strong> ₹" . number_format((float)$pItem->expected_value, 2);
-                        }
-                        if (!empty($reason)) {
-                            $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
-                        }
-                        if (!empty($remarks)) {
-                            $timelineContent .= "<br><strong>Remarks:</strong> " . e($remarks);
-                        }
-
-                        $pItem->projectUpdates()->create([
-                            'type'       => 'schedule_history',
-                            'content'    => $timelineContent,
-                            'created_by' => $currentUser->id,
-                        ]);
+                    $timelineContent = "Closure / End Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
+                    if ($pItem->expected_value !== null && (float)$pItem->expected_value > 0) {
+                        $timelineContent .= "<br><strong>Expected Amount:</strong> ₹" . number_format((float)$pItem->expected_value, 2);
                     }
+                    if (!empty($reason)) {
+                        $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
+                    }
+                    if (!empty($remarks)) {
+                        $timelineContent .= "<br><strong>Remarks:</strong> " . e($remarks);
+                    }
+
+                    $pItem->projectUpdates()->create([
+                        'type'       => 'schedule_history',
+                        'content'    => $timelineContent,
+                        'created_by' => $currentUser->id,
+                    ]);
                 }
 
                 $updated = true;
@@ -3910,6 +3933,8 @@ class SuperAdminDashboardController extends ApiController
         $finalExpectedVal = null;
         if (!empty($pi) && $pi->expected_value !== null) {
             $finalExpectedVal = (float) $pi->expected_value;
+        } elseif (!empty($lp) && $lp->expected_value !== null) {
+            $finalExpectedVal = (float) $lp->expected_value;
         } elseif (!empty($lps) && $lps->isNotEmpty()) {
             $finalExpectedVal = (float) ($lps->first()->expected_value ?? 0);
         }
@@ -3921,6 +3946,9 @@ class SuperAdminDashboardController extends ApiController
             'closure_date_raw'         => $formattedNewDateRaw,
             'expected_value'           => $finalExpectedVal,
             'expected_value_formatted' => $finalExpectedVal !== null && $finalExpectedVal > 0 ? '₹' . number_format($finalExpectedVal, 2) : null,
+            'lead_id'                  => $leadId,
+            'pi_id'                    => $piId,
+            'lead_product_id'          => $leadProductId,
         ]);
     }
 

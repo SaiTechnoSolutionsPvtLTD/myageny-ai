@@ -485,6 +485,8 @@ Route::middleware('auth:sanctum')->prefix('mobile')->name('mobile.')->group(func
             ->name('dashboard');
         Route::get('dashboard/section', [ProjectApiController::class, 'dashboardSection'])
             ->name('dashboard.section');
+        Route::get('notifications/summary', [ProjectApiController::class, 'notificationsSummary'])
+            ->name('notifications.summary');
 
         Route::get('timesheets',  [ProjectApiController::class, 'timesheets'])
             ->name('timesheets.index');
@@ -907,7 +909,9 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::get('/reports/expense-category-wise', [AccountsApiController::class, 'reportExpenseCategoryWise'])->name('reports.expense-category-wise');
     Route::get('/reports/expense-subcategory-wise', [AccountsApiController::class, 'reportExpenseSubcategoryWise'])->name('reports.expense-subcategory-wise');
     Route::get('/reports/customer-balance-sheet', [AccountsApiController::class, 'reportCustomerBalanceSheet'])->name('reports.customer-balance-sheet');
+    Route::get('/reports/customer-balance-sheet/pdf', [AccountsApiController::class, 'reportCustomerBalanceSheetPdf'])->name('reports.customer-balance-sheet.pdf');
     Route::get('/reports/profit-and-loss', [AccountsApiController::class, 'reportProfitAndLoss'])->name('reports.profit-and-loss');
+    Route::get('/reports/profit-and-loss/pdf', [AccountsApiController::class, 'reportProfitAndLossPdf'])->name('reports.profit-and-loss.pdf');
 
     // Accounts Purchase Orders (PO Orders)
     Route::get('/purchase-orders', [AccountsApiController::class, 'purchaseOrders'])->name('purchase-orders.index');
