@@ -185,12 +185,16 @@
             </div>
         </div>
         <div class="inv-actions">
+            @can('accounts_master.view')
             <a href="{{ route('accounts.master.invoice-settings.index') }}" class="acm-btn acm-btn-outline" title="Configure Invoice Format & Company Details">
                 <i class="bi bi-gear"></i> Invoice Settings
             </a>
+            @endcan
+            @can('accounts_invoices.create')
             <a href="{{ route('accounts.sales.invoices.create') }}" class="acm-btn acm-btn-primary">
                 <i class="bi bi-plus-lg"></i> New Invoice
             </a>
+            @endcan
         </div>
     </div>
 
@@ -387,11 +391,23 @@
                                 @endif
                             </td>
                             <td>
-                                <div style="font-size:12px; font-weight:600; color:#0f172a; line-height:1.3;">{{ $inv->customer_name }}</div>
-                                @if($inv->company_name)
+                                @php
+                                    $displayCustName = $inv->customer_name ?: ($inv->customer?->customer_name ?: ($inv->customer?->company_name ?: ($inv->company_name ?: '—')));
+                                    $displayCompName = ($inv->company_name && $inv->company_name !== $displayCustName) ? $inv->company_name : ($inv->customer?->company_name && $inv->customer?->company_name !== $displayCustName ? $inv->customer?->company_name : null);
+                                @endphp
+                                <div style="font-size:12px; font-weight:600; color:#0f172a; line-height:1.3;">{{ $displayCustName }}</div>
+                                @if($displayCompName)
                                     <div style="font-size:10.5px; color:#64748b; margin-top:2px; display:flex; align-items:center; gap:4px;">
                                         <i class="bi bi-building" style="font-size:9.5px; color:#94a3b8;"></i>
-                                        <span>{{ $inv->company_name }}</span>
+                                        <span>{{ $displayCompName }}</span>
+                                    </div>
+                                @endif
+                                @if($inv->lead)
+                                    <div style="margin-top:2px;">
+                                        <a href="{{ route('leads.show', $inv->lead_id) }}" target="_blank" style="display:inline-flex; align-items:center; gap:3px; font-size:10.5px; font-weight:700; color:#2563eb; text-decoration:none;" title="Linked Lead: {{ $inv->lead->contact_name ?: $inv->lead->company_name }}">
+                                            <i class="bi bi-person-check-fill" style="font-size:10px;"></i>
+                                            <span>Lead #{{ $inv->lead->id }}</span>
+                                        </a>
                                     </div>
                                 @endif
                             </td>

@@ -38,6 +38,7 @@
             'description' => 'Payments, receipts & collections.',
             'icon' => 'bi-wallet2',
             'permission' => 'modules_menu.accounts',
+            'accessor' => 'canAccessAccountsModule',
             'url' => route('accounts.dashboard'),
         ],
     ];

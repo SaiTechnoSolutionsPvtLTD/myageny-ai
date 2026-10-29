@@ -94,6 +94,7 @@
 .sub-table th { background:#f1f5f9; color:#475569; font-weight:700; padding:9px 12px; font-size:10.5px; text-transform:uppercase; border-bottom:1px solid #e2e8f0; }
 .sub-table td { padding:8px 12px; border-bottom:1px solid #f1f5f9; color:#334155; }
 .sub-table tbody tr:hover td { background:#f0f7ff; }
+.sub-table tfoot td { background:#f8fafc; font-weight:700; padding:10px 12px; border-top:2px solid #cbd5e1; color:#0f172a; }
 
 .btn-toggle-row { background:#fff; border:1px solid #cbd5e1; color:#475569; width:28px; height:28px; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s; }
 .btn-toggle-row:hover { border-color:#2563eb; color:#2563eb; }
@@ -380,13 +381,21 @@
                                 <tr class="drilldown-row" id="drilldown-row-{{ $index }}">
                                     <td colspan="10" style="padding:0;">
                                         <div class="drilldown-container">
-                                            <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                                            <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                                                 <span style="font-size:12px; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:0.04em;">
-                                                    <i class="bi bi-list-task" style="color:#2563eb;"></i> Transactions under: {{ $row['category_name'] }} &rarr; {{ $row['subcategory_name'] }} ({{ $row['count'] }} entries)
+                                                    <i class="bi bi-list-task" style="color:#2563eb;"></i> Transactions under: {{ $row['category_name'] }} &rarr; {{ $row['subcategory_name'] }} ({{ $row['count'] }} {{ \Illuminate\Support\Str::plural('entry', $row['count']) }})
                                                 </span>
-                                                <span style="font-size:12px; font-weight:800; color:#0f172a;">
-                                                    Subtotal: ₹{{ number_format((float) $row['total'], 2) }}
-                                                </span>
+                                                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                                                    <span style="font-size:12px; font-weight:700; color:#0369a1; background:#e0f2fe; padding:3px 10px; border-radius:6px;">
+                                                        Fixed: ₹{{ number_format((float) $row['fixed'], 2) }}
+                                                    </span>
+                                                    <span style="font-size:12px; font-weight:700; color:#b45309; background:#fef3c7; padding:3px 10px; border-radius:6px;">
+                                                        Variable: ₹{{ number_format((float) $row['variable'], 2) }}
+                                                    </span>
+                                                    <span style="font-size:12.5px; font-weight:800; color:#2563eb; background:#eff6ff; padding:3px 12px; border-radius:6px; border:1px solid #bfdbfe;">
+                                                        Subtotal: ₹{{ number_format((float) $row['total'], 2) }}
+                                                    </span>
+                                                </div>
                                             </div>
                                             <table class="sub-table">
                                                 <thead>
@@ -397,7 +406,7 @@
                                                         <th style="width:130px;">Invoice / Bill No</th>
                                                         <th>Vendor</th>
                                                         <th style="width:100px;">Type</th>
-                                                        <th class="text-right" style="width:130px;">Amount (₹)</th>
+                                                        <th class="text-right" style="width:140px;">Amount (₹)</th>
                                                         <th>Remarks</th>
                                                     </tr>
                                                 </thead>
@@ -431,6 +440,26 @@
                                                         </tr>
                                                     @endforeach
                                                 </tbody>
+                                                <tfoot>
+                                                    <tr>
+                                                        <td colspan="4" class="text-right" style="text-transform:uppercase; font-size:11px; letter-spacing:0.04em; color:#475569; font-weight:700;">
+                                                            Total for {{ $row['subcategory_name'] }}:
+                                                        </td>
+                                                        <td style="font-size:11.5px; color:#64748b; font-weight:600;">
+                                                            <span style="color:#0369a1;">Fixed: ₹{{ number_format((float) $row['fixed'], 2) }}</span> &bull; 
+                                                            <span style="color:#b45309;">Variable: ₹{{ number_format((float) $row['variable'], 2) }}</span>
+                                                        </td>
+                                                        <td class="text-right" style="font-size:11px; text-transform:uppercase; color:#475569; font-weight:700;">
+                                                            Total:
+                                                        </td>
+                                                        <td class="text-right" style="font-size:13.5px; font-weight:800; color:#2563eb;">
+                                                            ₹{{ number_format((float) $row['total'], 2) }}
+                                                        </td>
+                                                        <td style="font-size:11px; color:#64748b;">
+                                                            ({{ $row['count'] }} {{ \Illuminate\Support\Str::plural('entry', $row['count']) }})
+                                                        </td>
+                                                    </tr>
+                                                </tfoot>
                                             </table>
                                         </div>
                                     </td>

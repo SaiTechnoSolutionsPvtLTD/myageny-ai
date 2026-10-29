@@ -211,18 +211,26 @@ class AccountExpenseReportController extends Controller
             // Silently continue
         }
 
-        // Default Date Range: Start of current month to today
+        // Default Date Range: If not explicitly supplied, default to the earliest expense date so all migrated/historic records show up
         $now = Carbon::now();
-        $defaultFrom = $now->copy()->startOfMonth()->toDateString();
-        $defaultTo = $now->toDateString();
+        $earliestDate = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->min('expense_date');
+        $latestDate   = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->max('expense_date');
 
-        $dateFrom = $request->input('date_from', $defaultFrom);
-        $dateTo = $request->input('date_to', $defaultTo);
+        $defaultFrom = $earliestDate ? Carbon::parse($earliestDate)->toDateString() : $now->copy()->startOfMonth()->toDateString();
+        $defaultTo   = $latestDate ? (Carbon::parse($latestDate)->gt($now) ? Carbon::parse($latestDate)->toDateString() : $now->toDateString()) : $now->toDateString();
+
+        $dateFrom = $request->filled('date_from') ? Carbon::parse($request->input('date_from'))->toDateString() : $defaultFrom;
+        $dateTo = $request->filled('date_to') ? Carbon::parse($request->input('date_to'))->toDateString() : $defaultTo;
         $categoryId = $request->input('category_id');
         $expenseType = $request->input('expense_type', 'all');
 
-        // Fetch all categories for filter dropdown
-        $categories = AccountExpenseCategory::active()
+        // Fetch all categories for filter dropdown (including active, unflagged, or those with existing expenses)
+        $categories = AccountExpenseCategory::query()
+            ->where(function ($q) {
+                $q->where('status', 'active')
+                  ->orWhereNull('status')
+                  ->orWhereHas('expenses');
+            })
             ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
             ->orderBy('name')
             ->get();
@@ -250,10 +258,13 @@ class AccountExpenseReportController extends Controller
 
         $expenses = $query->orderBy('expense_date', 'desc')->get();
 
-        // Calculate Grand Totals
+        // Calculate Grand Totals accurately
         $grandTotalAmount = (float) $expenses->sum('amount');
-        $grandTotalFixed = (float) $expenses->where('expense_type', 'Fixed')->sum('amount');
-        $grandTotalVariable = (float) $expenses->where('expense_type', 'Variable')->sum('amount');
+        $grandTotalFixed = (float) $expenses->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Fixed') === 0)->sum('amount');
+        $grandTotalVariable = (float) $expenses->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Variable') === 0)->sum('amount');
+        if ($grandTotalAmount > ($grandTotalFixed + $grandTotalVariable)) {
+            $grandTotalVariable = $grandTotalAmount - $grandTotalFixed;
+        }
         $grandTotalCount = $expenses->count();
 
         // Group by Category
@@ -267,9 +278,12 @@ class AccountExpenseReportController extends Controller
         foreach ($categoriesToIterate as $cat) {
             $catExpenses = $grouped->get($cat->id, collect());
             $count = $catExpenses->count();
-            $fixed = (float) $catExpenses->where('expense_type', 'Fixed')->sum('amount');
-            $variable = (float) $catExpenses->where('expense_type', 'Variable')->sum('amount');
-            $total = $fixed + $variable;
+            $total = (float) $catExpenses->sum('amount');
+            $fixed = (float) $catExpenses->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Fixed') === 0)->sum('amount');
+            $variable = (float) $catExpenses->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Variable') === 0)->sum('amount');
+            if ($total > ($fixed + $variable)) {
+                $variable = $total - $fixed;
+            }
             $percentage = $grandTotalAmount > 0 ? round(($total / $grandTotalAmount) * 100, 2) : 0;
 
             // Only include if has expenses or if a specific category was explicitly selected
@@ -292,9 +306,12 @@ class AccountExpenseReportController extends Controller
         $uncategorized = $expenses->filter(fn ($e) => empty($e->account_expense_category_id) || !$categories->contains('id', $e->account_expense_category_id));
         if ($uncategorized->isNotEmpty() && !$selectedCategory) {
             $count = $uncategorized->count();
-            $fixed = (float) $uncategorized->where('expense_type', 'Fixed')->sum('amount');
-            $variable = (float) $uncategorized->where('expense_type', 'Variable')->sum('amount');
-            $total = $fixed + $variable;
+            $total = (float) $uncategorized->sum('amount');
+            $fixed = (float) $uncategorized->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Fixed') === 0)->sum('amount');
+            $variable = (float) $uncategorized->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Variable') === 0)->sum('amount');
+            if ($total > ($fixed + $variable)) {
+                $variable = $total - $fixed;
+            }
             $percentage = $grandTotalAmount > 0 ? round(($total / $grandTotalAmount) * 100, 2) : 0;
 
             $categoryRows[] = [
@@ -352,24 +369,37 @@ class AccountExpenseReportController extends Controller
             // Silently continue
         }
 
-        // Default Date Range: Start of current month to today
+        // Default Date Range: If not explicitly supplied, default to the earliest expense date so all migrated/historic records show up
         $now = Carbon::now();
-        $defaultFrom = $now->copy()->startOfMonth()->toDateString();
-        $defaultTo = $now->toDateString();
+        $earliestDate = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->min('expense_date');
+        $latestDate   = AccountExpense::when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))->max('expense_date');
 
-        $dateFrom = $request->input('date_from', $defaultFrom);
-        $dateTo = $request->input('date_to', $defaultTo);
+        $defaultFrom = $earliestDate ? Carbon::parse($earliestDate)->toDateString() : $now->copy()->startOfMonth()->toDateString();
+        $defaultTo   = $latestDate ? (Carbon::parse($latestDate)->gt($now) ? Carbon::parse($latestDate)->toDateString() : $now->toDateString()) : $now->toDateString();
+
+        $dateFrom = $request->filled('date_from') ? Carbon::parse($request->input('date_from'))->toDateString() : $defaultFrom;
+        $dateTo = $request->filled('date_to') ? Carbon::parse($request->input('date_to'))->toDateString() : $defaultTo;
         $categoryId = $request->input('category_id');
         $subcategoryId = $request->input('subcategory_id');
         $expenseType = $request->input('expense_type', 'all');
 
-        // Fetch all categories and subcategories
-        $categories = AccountExpenseCategory::active()
+        // Fetch all categories and subcategories (including active, unflagged, or those with existing expenses)
+        $categories = AccountExpenseCategory::query()
+            ->where(function ($q) {
+                $q->where('status', 'active')
+                  ->orWhereNull('status')
+                  ->orWhereHas('expenses');
+            })
             ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
             ->orderBy('name')
             ->get();
 
-        $subcategoriesQuery = AccountExpenseSubcategory::active()
+        $subcategoriesQuery = AccountExpenseSubcategory::query()
+            ->where(function ($q) {
+                $q->where('status', 'active')
+                  ->orWhereNull('status')
+                  ->orWhereHas('expenses');
+            })
             ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')));
 
         if (!empty($categoryId) && $categoryId !== 'all') {
@@ -413,17 +443,24 @@ class AccountExpenseReportController extends Controller
 
         $expenses = $query->orderBy('expense_date', 'desc')->get();
 
-        // Calculate Grand Totals
+        // Calculate Grand Totals accurately
         $grandTotalAmount = (float) $expenses->sum('amount');
-        $grandTotalFixed = (float) $expenses->where('expense_type', 'Fixed')->sum('amount');
-        $grandTotalVariable = (float) $expenses->where('expense_type', 'Variable')->sum('amount');
+        $grandTotalFixed = (float) $expenses->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Fixed') === 0)->sum('amount');
+        $grandTotalVariable = (float) $expenses->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Variable') === 0)->sum('amount');
+        if ($grandTotalAmount > ($grandTotalFixed + $grandTotalVariable)) {
+            $grandTotalVariable = $grandTotalAmount - $grandTotalFixed;
+        }
         $grandTotalCount = $expenses->count();
 
-        // Group by Subcategory (null subcategory grouped as 0 or 'unassigned')
+        // Group by Category ID and Subcategory ID so unassigned records under different categories remain cleanly separated
         $subcategoryRows = [];
-        $grouped = $expenses->groupBy(fn ($item) => (string) ($item->account_expense_subcategory_id ?? 'none'));
+        $grouped = $expenses->groupBy(function ($item) {
+            $catId = $item->account_expense_category_id ?: 0;
+            $subId = $item->account_expense_subcategory_id ?: 'none';
+            return $catId . '_' . $subId;
+        });
 
-        foreach ($grouped as $subIdKey => $subExpenses) {
+        foreach ($grouped as $groupKey => $subExpenses) {
             $first = $subExpenses->first();
             $subModel = $first?->subcategory;
             $catModel = $first?->category;
@@ -434,9 +471,12 @@ class AccountExpenseReportController extends Controller
             $catCode = $catModel ? $catModel->code : '—';
 
             $count = $subExpenses->count();
-            $fixed = (float) $subExpenses->where('expense_type', 'Fixed')->sum('amount');
-            $variable = (float) $subExpenses->where('expense_type', 'Variable')->sum('amount');
-            $total = $fixed + $variable;
+            $total = (float) $subExpenses->sum('amount');
+            $fixed = (float) $subExpenses->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Fixed') === 0)->sum('amount');
+            $variable = (float) $subExpenses->filter(fn ($e) => strcasecmp(trim($e->expense_type ?? ''), 'Variable') === 0)->sum('amount');
+            if ($total > ($fixed + $variable)) {
+                $variable = $total - $fixed;
+            }
             $percentage = $grandTotalAmount > 0 ? round(($total / $grandTotalAmount) * 100, 2) : 0;
 
             $subcategoryRows[] = [
@@ -464,7 +504,12 @@ class AccountExpenseReportController extends Controller
         $avgExpenseAmount = $grandTotalCount > 0 ? round($grandTotalAmount / $grandTotalCount, 2) : 0;
 
         // Subcategories JSON map by Category ID for dynamic client-side filtering
-        $allSubcategories = AccountExpenseSubcategory::active()
+        $allSubcategories = AccountExpenseSubcategory::query()
+            ->where(function ($q) {
+                $q->where('status', 'active')
+                  ->orWhereNull('status')
+                  ->orWhereHas('expenses');
+            })
             ->when($companyId, fn ($q) => $q->where(fn ($cq) => $cq->where('company_id', $companyId)->orWhereNull('company_id')))
             ->orderBy('name')
             ->get(['id', 'name', 'code', 'account_expense_category_id']);

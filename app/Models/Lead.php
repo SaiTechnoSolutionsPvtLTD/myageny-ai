@@ -156,6 +156,11 @@ class Lead extends Model
         return $this->hasMany(CustomerCampaign::class)->where('status', 'active');
     }
 
+    public function invoices(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Invoice::class, 'lead_id');
+    }
+
     /**
      * Returns [id => name] map for all lead sources.
      */
@@ -385,6 +390,11 @@ class Lead extends Model
         return $this->hasMany(\App\Models\CustomerMaster::class, 'lead_id');
     }
 
+    public function invoices()
+    {
+        return $this->hasMany(\App\Models\Invoice::class, 'lead_id')->latest('invoice_date')->latest('id');
+    }
+
     public function getInvoicesAttribute()
     {
         if ($this->relationLoaded('invoices')) {
@@ -401,12 +411,13 @@ class Lead extends Model
             ->unique()
             ->toArray();
 
-        if (empty($customerIds)) {
-            return collect();
-        }
-
         return \App\Models\Invoice::with(['customer', 'payments'])
-            ->whereIn('customer_id', $customerIds)
+            ->where(function ($q) use ($customerIds) {
+                $q->where('lead_id', $this->id);
+                if (! empty($customerIds)) {
+                    $q->orWhereIn('customer_id', $customerIds);
+                }
+            })
             ->latest('invoice_date')
             ->latest('id')
             ->get();

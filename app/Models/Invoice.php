@@ -17,6 +17,7 @@ class Invoice extends Model
         'company_id',
         'branch_id',
         'customer_id',
+        'lead_id',
         'sales_person_id',
         'invoice_number',
         'invoice_date',
@@ -82,6 +83,32 @@ class Invoice extends Model
         return $this->hasMany(InvoiceItem::class, 'invoice_id')->orderBy('sort_order', 'asc');
     }
 
+    /**
+     * Ensure subtotal is always resolved even if raw database column was 0 or uncalculated during migration.
+     */
+    public function getSubtotalAttribute($value): float
+    {
+        $val = (float) $value;
+        if ($val > 0) {
+            return $val;
+        }
+
+        if ($this->relationLoaded('items') && $this->items->isNotEmpty()) {
+            $sum = (float) $this->items->sum('amount');
+            if ($sum > 0) {
+                return $sum;
+            }
+        }
+
+        $total = (float) ($this->attributes['total_amount'] ?? 0);
+        $tax   = (float) ($this->attributes['total_tax'] ?? 0);
+        if ($total > 0) {
+            return $tax > 0 ? max(0.0, round($total - $tax, 2)) : $total;
+        }
+
+        return 0.0;
+    }
+
     public function payments()
     {
         return $this->hasMany(InvoicePayment::class, 'invoice_id')->orderBy('payment_date', 'desc')->orderBy('id', 'desc');
@@ -131,6 +158,11 @@ class Invoice extends Model
     public function customer()
     {
         return $this->belongsTo(CustomerMaster::class, 'customer_id');
+    }
+
+    public function lead()
+    {
+        return $this->belongsTo(Lead::class, 'lead_id');
     }
 
     public function salesPerson()

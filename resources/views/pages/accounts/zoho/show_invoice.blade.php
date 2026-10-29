@@ -51,9 +51,18 @@
                 &larr; Back to Invoices
             </a>
             @if($invoice->is_migrated_to_native && $invoice->migratedInvoice)
-                <a href="{{ route('accounts.sales.invoices.show', $invoice->migrated_native_invoice_id) }}" target="_blank" class="acm-btn acm-btn-outline" style="color:#15803d; border-color:#86efac; background:#f0fdf4;">
+                <a href="{{ route('accounts.sales.invoices.show', $invoice->migrated_native_invoice_id) }}" target="_blank" class="acm-btn acm-btn-outline" style="color:#15803d; border-color:#86efac; background:#f0f9ff;">
                     ✓ View in CRM (#{{ $invoice->migratedInvoice->invoice_number }})
                 </a>
+                @if($invoice->migratedInvoice->lead)
+                    <a href="{{ route('leads.show', $invoice->migratedInvoice->lead->id) }}" target="_blank" class="acm-btn acm-btn-outline" style="color:#0284c7; border-color:#bae6fd; background:#f0f9ff;">
+                        <i class="bi bi-person-check-fill"></i> View Mapped Lead ({{ $invoice->migratedInvoice->lead->contact_name ?: $invoice->migratedInvoice->lead->company_name }})
+                    </a>
+                @else
+                    <button type="button" onclick="openMapLeadModal()" class="acm-btn acm-btn-outline" style="color:#d97706; border-color:#fde68a; background:#fefce8;" title="Map this invoice to a Lead">
+                        <i class="bi bi-link-45deg"></i> Map to Lead
+                    </button>
+                @endif
             @else
                 <form action="{{ route('accounts.zoho.invoices.migrate', $invoice->id) }}" method="POST" style="margin:0;">
                     @csrf
@@ -253,4 +262,73 @@
         </div>
     </div>
 </div>
+
+@if($invoice->is_migrated_to_native && $invoice->migratedInvoice)
+{{-- MODAL: Map Invoice to Lead --}}
+<div id="mapLeadModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(4px); z-index:99999; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:16px; width:94%; max-width:520px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.25);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+            <div style="font-size:15px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                <i class="bi bi-person-check-fill" style="color:#2563eb;"></i>
+                Map Invoice #{{ $invoice->migratedInvoice->invoice_number }} to CRM Lead
+            </div>
+            <button type="button" onclick="closeMapLeadModal()" style="border:none; background:none; font-size:22px; color:#94a3b8; cursor:pointer;">&times;</button>
+        </div>
+        <form method="POST" action="{{ route('accounts.sales.invoices.map-lead', $invoice->migrated_native_invoice_id) }}" style="margin:0;">
+            @csrf
+            @method('PATCH')
+            <div style="padding:20px; display:flex; flex-direction:column; gap:14px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Search Lead by Name, Company, Phone, or ID:</label>
+                    <input type="text" id="invLeadSearchBox" placeholder="Type name, company, or phone..." onkeyup="searchLeadsForInvModal(this.value)" autocomplete="off" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Select Matching Lead: <span style="color:#ef4444;">*</span></label>
+                    <select name="lead_id" id="modalInvLeadSelect" required size="5" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box; min-height:120px;">
+                        <option value="" disabled selected>— Type in the search box above to find leads —</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:14px 20px; background:#f8fafc; border-top:1px solid #e2e8f0;">
+                <button type="button" onclick="closeMapLeadModal()" class="acm-btn acm-btn-secondary" style="padding:8px 16px; font-size:13px;">Cancel</button>
+                <button type="submit" class="acm-btn acm-btn-primary" style="padding:8px 18px; font-size:13px; font-weight:700;">Save Mapping</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openMapLeadModal() {
+    document.getElementById('mapLeadModal').style.display = 'flex';
+    document.getElementById('invLeadSearchBox').focus();
+}
+function closeMapLeadModal() {
+    document.getElementById('mapLeadModal').style.display = 'none';
+}
+let invLeadSearchTimeout = null;
+function searchLeadsForInvModal(q) {
+    clearTimeout(invLeadSearchTimeout);
+    invLeadSearchTimeout = setTimeout(() => {
+        if (!q || q.length < 2) return;
+        fetch('{{ route('api.leads.search') }}?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                const sel = document.getElementById('modalInvLeadSelect');
+                sel.innerHTML = '';
+                if (!data.results || !data.results.length) {
+                    sel.innerHTML = '<option value="" disabled>No leads found matching "' + q + '"</option>';
+                    return;
+                }
+                data.results.forEach((item, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = item.id;
+                    opt.text = item.text;
+                    if (idx === 0) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+            });
+    }, 250);
+}
+</script>
+@endif
 @endsection

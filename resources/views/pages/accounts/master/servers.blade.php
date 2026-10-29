@@ -216,6 +216,7 @@
                             <th>IP Address</th>
                             <th>CPU & Disk Specs</th>
                             <th>Plan Type</th>
+                            <th class="text-center">Mapped Domains</th>
                             <th>Status</th>
                             <th>Remarks</th>
                             <th style="text-align:right;">Actions</th>
@@ -227,9 +228,9 @@
                             <td style="color:#94a3b8; font-weight:700;">{{ $servers->firstItem() + $loop->index }}</td>
                             <td>
                                 <div style="display:flex; align-items:center; gap:6px;">
-                                    <div style="font-weight:800; color:#0f172a; font-size:14px;">
+                                    <a href="{{ route('accounts.master.servers.show', $server->id) }}" style="font-weight:800; color:#0f172a; font-size:14px; text-decoration:none;" onmouseover="this.style.color='#7c3aed'" onmouseout="this.style.color='#0f172a'" title="Click to view server details & mapped domains">
                                         {{ $server->server_name }}
-                                    </div>
+                                    </a>
                                     @if($server->provider_name)
                                         <span class="provider-badge">
                                             <i class="bi bi-cloud"></i> {{ $server->provider_name }}
@@ -283,6 +284,11 @@
                                     <span style="color:#94a3b8; font-size:12px;">—</span>
                                 @endif
                             </td>
+                            <td class="text-center">
+                                <a href="{{ route('accounts.master.servers.show', $server->id) }}" class="code-chip" style="text-decoration:none; background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; font-size:12px; font-weight:700;" title="View all mapped domains for {{ $server->server_name }}">
+                                    <i class="bi bi-globe2"></i> {{ $server->domains_count }} {{ \Illuminate\Support\Str::plural('domain', $server->domains_count) }}
+                                </a>
+                            </td>
                             <td>
                                 <span class="acm-badge status-{{ $server->status }}">
                                     @if($server->status === 'active')
@@ -305,12 +311,10 @@
                             </td>
                             <td style="text-align:right;">
                                 <div style="display:inline-flex; align-items:center; gap:6px;">
-                                    {{-- View Details --}}
-                                    <button type="button" class="acm-btn acm-btn-secondary" style="padding:4px 8px; font-size:11px;"
-                                            onclick='openViewServerModal(@json($server))'
-                                            title="View Server Details">
+                                    {{-- View Details Page --}}
+                                    <a href="{{ route('accounts.master.servers.show', $server->id) }}" class="acm-btn acm-btn-secondary" style="padding:4px 8px; font-size:11px;" title="View Server Details & Mapped Domains">
                                         <i class="bi bi-eye"></i> View
-                                    </button>
+                                    </a>
 
                                     {{-- Edit --}}
                                     <button type="button" class="acm-btn acm-btn-secondary" style="padding:4px 8px; font-size:11px;"
@@ -341,7 +345,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" style="text-align:center; padding:48px 20px; color:#64748b;">
+                            <td colspan="9" style="text-align:center; padding:48px 20px; color:#64748b;">
                                 <i class="bi bi-hdd-network" style="font-size:42px; color:#cbd5e1; display:block; margin-bottom:10px;"></i>
                                 <div style="font-size:15px; font-weight:700; color:#0f172a;">No servers registered yet</div>
                                 <div style="font-size:13px; color:#94a3b8; margin-top:4px;">Manage cloud servers, VPS, hosting providers and server specs in one place.</div>
@@ -602,8 +606,28 @@
                     <div class="detail-val" id="view_remarks" style="font-weight:500; color:#475569;"></div>
                 </div>
             </div>
+
+            {{-- Mapped Domains in Modal --}}
+            <div style="border-top:1px solid #e2e8f0; padding-top:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                    <div style="font-size:13px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:6px;">
+                        <i class="bi bi-globe2" style="color:#2563eb;"></i>
+                        <span>Mapped Domains</span>
+                        <span id="view_domains_count_badge" class="code-chip" style="background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; font-size:11px;">0</span>
+                    </div>
+                    <a id="view_full_page_link" href="#" class="acm-btn acm-btn-outline" style="padding:4px 10px; font-size:11px;">
+                        <i class="bi bi-box-arrow-up-right"></i> Open Full Server Page
+                    </a>
+                </div>
+                <div id="view_domains_container" style="max-height:220px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; background:#fff;">
+                    <!-- Dynamically populated via JS -->
+                </div>
+            </div>
         </div>
-        <div style="display:flex; justify-content:flex-end; padding:16px 24px; border-top:1px solid #e2e8f0; background:#f8fafc;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px; border-top:1px solid #e2e8f0; background:#f8fafc;">
+            <a id="view_full_page_btn" href="#" class="acm-btn acm-btn-primary" style="padding:6px 14px; font-size:12px;">
+                <i class="bi bi-eye"></i> View Full Server Page
+            </a>
             <button type="button" class="acm-btn acm-btn-secondary" onclick="closeViewServerModal()">Close</button>
         </div>
     </div>
@@ -676,6 +700,79 @@ function openViewServerModal(server) {
         copyBtn.onclick = function() { copyText(server.ip_address, this); };
     } else {
         copyBtn.style.display = 'none';
+    }
+
+    // Full page link
+    const fullPageUrl = `/accounts/master/servers/${server.id}`;
+    const linkEl = document.getElementById('view_full_page_link');
+    const btnEl = document.getElementById('view_full_page_btn');
+    if (linkEl) linkEl.href = fullPageUrl;
+    if (btnEl) btnEl.href = fullPageUrl;
+
+    // Render Mapped Domains
+    const domainsContainer = document.getElementById('view_domains_container');
+    const badgeEl = document.getElementById('view_domains_count_badge');
+    const hostings = server.hostings || [];
+    let domains = [];
+    hostings.forEach(h => {
+        (h.domains || []).forEach(d => {
+            domains.push({
+                ...d,
+                hosting_name: h.hosting_name
+            });
+        });
+    });
+
+    if (badgeEl) badgeEl.innerText = domains.length;
+
+    if (domainsContainer) {
+        if (domains.length === 0) {
+            domainsContainer.innerHTML = `
+                <div style="padding:22px 16px; text-align:center; color:#94a3b8; font-size:12px;">
+                    <i class="bi bi-globe" style="font-size:24px; display:block; margin-bottom:6px; color:#cbd5e1;"></i>
+                    No domains currently mapped to hostings on this server.
+                </div>
+            `;
+        } else {
+            let html = `
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <thead>
+                        <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; color:#64748b; text-transform:uppercase; font-size:10.5px;">
+                            <th style="padding:8px 12px; text-align:left;">Domain Name</th>
+                            <th style="padding:8px 12px; text-align:left;">Hosting</th>
+                            <th style="padding:8px 12px; text-align:left;">Status</th>
+                            <th style="padding:8px 12px; text-align:right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            domains.forEach(d => {
+                const statusBadge = (d.status && d.status.toUpperCase() === 'ACTIVE') 
+                    ? '<span class="acm-badge status-active" style="font-size:10px; padding:1px 6px;">Active</span>' 
+                    : `<span class="acm-badge" style="background:#f1f5f9; color:#475569; font-size:10px; padding:1px 6px;">${d.status || 'Active'}</span>`;
+
+                html += `
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:8px 12px; font-weight:700; color:#0f172a;">
+                            ${d.domain_name}
+                        </td>
+                        <td style="padding:8px 12px; color:#6d28d9; font-weight:600;">
+                            ${d.hosting_name || '—'}
+                        </td>
+                        <td style="padding:8px 12px;">
+                            ${statusBadge}
+                        </td>
+                        <td style="padding:8px 12px; text-align:right;">
+                            <a href="/accounts/domains-hosting/domains/${d.id}" class="acm-btn acm-btn-secondary" style="padding:3px 8px; font-size:10.5px; text-decoration:none;" title="View Domain Details">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            });
+            html += `</tbody></table>`;
+            domainsContainer.innerHTML = html;
+        }
     }
 
     document.getElementById('viewServerModal').classList.add('active');

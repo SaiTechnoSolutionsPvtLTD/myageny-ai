@@ -810,6 +810,19 @@
                         <i class="bi bi-clock-fill"></i> Pending Approval
                     </span>
                 @endif
+
+                @if($quotation->lead)
+                    <a href="{{ route('leads.show', $quotation->lead_id) }}" target="_blank" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="View Linked Lead in CRM">
+                        <i class="bi bi-person-check-fill"></i> Lead: {{ $quotation->lead->contact_name ?: $quotation->lead->company_name }}
+                    </a>
+                    <button type="button" onclick="openMapLeadModal()" style="border:none; background:none; color:#64748b; cursor:pointer; font-size:11px; text-decoration:underline;" title="Change Linked Lead">
+                        Change
+                    </button>
+                @else
+                    <button type="button" onclick="openMapLeadModal()" style="display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:999px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; font-size:11px; font-weight:800; cursor:pointer;" title="Link this quotation to a CRM Lead">
+                        <i class="bi bi-link-45deg"></i> Map to Lead
+                    </button>
+                @endif
             </div>
 
             <div class="inv-header-actions">
@@ -1285,9 +1298,42 @@ function closeConvertModal() {
     if (modal) modal.style.display = 'none';
 }
 
+function openMapLeadModal() {
+    document.getElementById('mapLeadModal').style.display = 'flex';
+    document.getElementById('quoteLeadSearchBox').focus();
+}
+function closeMapLeadModal() {
+    document.getElementById('mapLeadModal').style.display = 'none';
+}
+let quoteLeadSearchTimeout = null;
+function searchLeadsForQuoteModal(q) {
+    clearTimeout(quoteLeadSearchTimeout);
+    quoteLeadSearchTimeout = setTimeout(() => {
+        if (!q || q.length < 2) return;
+        fetch('{{ route('api.leads.search') }}?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                const sel = document.getElementById('modalQuoteLeadSelect');
+                sel.innerHTML = '';
+                if (!data.results || !data.results.length) {
+                    sel.innerHTML = '<option value="" disabled>No leads found matching "' + q + '"</option>';
+                    return;
+                }
+                data.results.forEach((item, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = item.id;
+                    opt.text = item.text;
+                    if (idx === 0) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+            });
+    }, 250);
+}
+
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeConvertModal();
+        closeMapLeadModal();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
         e.preventDefault();
@@ -1295,4 +1341,37 @@ document.addEventListener('keydown', function(e) {
     }
 });
 </script>
+
+{{-- MODAL: Map Quotation to Lead --}}
+<div id="mapLeadModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.5); backdrop-filter:blur(4px); z-index:99999; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:16px; width:94%; max-width:520px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.25);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+            <div style="font-size:15px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                <i class="bi bi-person-check-fill" style="color:#2563eb;"></i>
+                Map Quotation #{{ $quotation->quotation_no }} to CRM Lead
+            </div>
+            <button type="button" onclick="closeMapLeadModal()" style="border:none; background:none; font-size:22px; color:#94a3b8; cursor:pointer;">&times;</button>
+        </div>
+        <form method="POST" action="{{ route('quotations.map-lead', $quotation->id) }}" style="margin:0;">
+            @csrf
+            @method('PATCH')
+            <div style="padding:20px; display:flex; flex-direction:column; gap:14px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Search Lead by Name, Company, Phone, or ID:</label>
+                    <input type="text" id="quoteLeadSearchBox" placeholder="Type name, company, or phone (e.g. 9840012345)..." onkeyup="searchLeadsForQuoteModal(this.value)" autocomplete="off" style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box;">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">Select Matching Lead: <span style="color:#ef4444;">*</span></label>
+                    <select name="lead_id" id="modalQuoteLeadSelect" required size="5" style="width:100%; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box; min-height:120px;">
+                        <option value="" disabled selected>— Type in the search box above to find leads —</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:14px 20px; background:#f8fafc; border-top:1px solid #e2e8f0;">
+                <button type="button" onclick="closeMapLeadModal()" class="inv-btn-secondary" style="padding:8px 16px; border-radius:8px; font-size:13px;">Cancel</button>
+                <button type="submit" class="inv-btn-primary" style="padding:8px 18px; border-radius:8px; font-size:13px; font-weight:700;">Save Mapping</button>
+            </div>
+        </form>
+    </div>
+</div>
 @endsection

@@ -283,9 +283,9 @@ class AccountExpenseController extends Controller
             // 1. Master active subcategories
             foreach ($cat->activeSubcategories as $subcat) {
                 $items = $subcatExpensesGrouped->get($subcat->id, collect());
-                $fixed = (float) $items->where('expense_type', 'Fixed')->sum('amount');
-                $variable = (float) $items->where('expense_type', 'Variable')->sum('amount');
-                $total = $fixed + $variable;
+                $fixed = (float) $items->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') === 0)->sum('amount');
+                $variable = (float) $items->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') !== 0)->sum('amount');
+                $total = (float) $items->sum('amount');
                 $count = $items->count();
 
                 if ($count > 0 || $request->has('show_all')) {
@@ -308,9 +308,9 @@ class AccountExpenseController extends Controller
             // 2. Direct under category (no subcategory)
             $directItems = $subcatExpensesGrouped->get(0, collect());
             if ($directItems->isNotEmpty()) {
-                $fixed = (float) $directItems->where('expense_type', 'Fixed')->sum('amount');
-                $variable = (float) $directItems->where('expense_type', 'Variable')->sum('amount');
-                $total = $fixed + $variable;
+                $fixed = (float) $directItems->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') === 0)->sum('amount');
+                $variable = (float) $directItems->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') !== 0)->sum('amount');
+                $total = (float) $directItems->sum('amount');
                 $count = $directItems->count();
 
                 $subcatRows[] = [
@@ -334,9 +334,9 @@ class AccountExpenseController extends Controller
                 if ($subId != 0 && !in_array($subId, $masterSubcatIds)) {
                     $firstItem = $items->first();
                     $subName = $firstItem?->subcategory?->name ?: "Subcategory #{$subId}";
-                    $fixed = (float) $items->where('expense_type', 'Fixed')->sum('amount');
-                    $variable = (float) $items->where('expense_type', 'Variable')->sum('amount');
-                    $total = $fixed + $variable;
+                    $fixed = (float) $items->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') === 0)->sum('amount');
+                    $variable = (float) $items->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') !== 0)->sum('amount');
+                    $total = (float) $items->sum('amount');
                     $count = $items->count();
 
                     $subcatRows[] = [
@@ -381,9 +381,9 @@ class AccountExpenseController extends Controller
         // Unlinked/uncategorized expenses
         $unlinked = $expenses->filter(fn ($e) => empty($e->account_expense_category_id) || !$allCategories->contains('id', $e->account_expense_category_id));
         if ($unlinked->isNotEmpty()) {
-            $fixed = (float) $unlinked->where('expense_type', 'Fixed')->sum('amount');
-            $variable = (float) $unlinked->where('expense_type', 'Variable')->sum('amount');
-            $total = $fixed + $variable;
+            $fixed = (float) $unlinked->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') === 0)->sum('amount');
+            $variable = (float) $unlinked->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') !== 0)->sum('amount');
+            $total = (float) $unlinked->sum('amount');
             $count = $unlinked->count();
 
             $pivotRows[] = [

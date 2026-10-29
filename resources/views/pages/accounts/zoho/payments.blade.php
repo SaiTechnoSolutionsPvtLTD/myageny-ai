@@ -66,6 +66,18 @@
             </div>
         @endif
 
+        @if(session('warning'))
+            <div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:14px 18px; border-radius:10px; font-size:13.5px; font-weight:600;">
+                {{ session('warning') }}
+            </div>
+        @endif
+
+        @if(session('info'))
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; padding:14px 18px; border-radius:10px; font-size:13.5px; font-weight:600;">
+                {{ session('info') }}
+            </div>
+        @endif
+
         @if(session('error'))
             <div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:14px 18px; border-radius:10px; font-size:13.5px; font-weight:600;">
                 {{ session('error') }}
@@ -112,9 +124,13 @@
                     <div style="font-size:13.5px; font-weight:700; color:#0f172a;">
                         Showing {{ $payments->firstItem() ?? 0 }} to {{ $payments->lastItem() ?? 0 }} of {{ $payments->total() }} Payments
                     </div>
-                    <div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <button type="button" class="acm-btn" style="background:#0284c7; color:#fff; font-size:12px;" onclick="openBatchPmtModal()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            Batch Migrate All (Auto Runner)
+                        </button>
                         <button type="submit" class="acm-btn acm-btn-primary" style="background:#16a34a;" onclick="return confirm('Migrate selected unmigrated payments into CRM Invoice Payments and update balances?')" style="font-size:12px;">
-                            Bulk Migrate to CRM Payments
+                            Bulk Migrate Selected
                         </button>
                     </div>
                 </div>
@@ -198,7 +214,7 @@
                                     </td>
                                     <td style="text-align:right;">
                                         @if(!$pmt->is_migrated_to_native)
-                                            <button type="submit" formaction="{{ route('accounts.zoho.payments.migrate', $pmt->id) }}" class="acm-btn acm-btn-primary" style="padding:4px 8px; font-size:11.5px; background:#16a34a;">Migrate</button>
+                                            <button type="button" onclick="migrateSinglePayment('{{ route('accounts.zoho.payments.migrate', $pmt->id) }}', this)" class="acm-btn acm-btn-primary" style="padding:4px 8px; font-size:11.5px; background:#16a34a;">Migrate</button>
                                         @endif
                                     </td>
                                 </tr>
@@ -213,6 +229,180 @@
                 @endif
             </div>
         </form>
+
+        <!-- Hidden form for reliable single-row migration -->
+        <form id="singlePaymentMigrateForm" method="POST" style="display:none;">
+            @csrf
+        </form>
     </div>
 </div>
+
+<!-- Batch Migration Modal for Safe 2000+ Records Migration -->
+<div id="batchPmtModal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(15,23,42,0.65); backdrop-filter:blur(3px); align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; border-radius:16px; width:100%; max-width:540px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); overflow:hidden; border:1px solid #e2e8f0;">
+        <div style="padding:20px 24px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:36px; height:36px; border-radius:10px; background:#e0f2fe; display:flex; align-items:center; justify-content:center; color:#0284c7;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                </div>
+                <div>
+                    <h3 style="margin:0; font-size:16px; font-weight:800; color:#0f172a;">Batch Payment Migration</h3>
+                    <div style="font-size:12px; color:#64748b;">Processes in safe chunks of 50 records to prevent 504 timeouts.</div>
+                </div>
+            </div>
+            <button type="button" onclick="closeBatchPmtModal()" style="border:none; background:none; cursor:pointer; color:#94a3b8; font-size:20px;">&times;</button>
+        </div>
+
+        <div style="padding:24px;">
+            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:#334155; margin-bottom:8px;">
+                <span id="batchPmtStatusText">Ready to start migration...</span>
+                <span id="batchPmtPercentText" style="color:#0284c7;">0%</span>
+            </div>
+
+            <!-- Progress Bar -->
+            <div style="background:#f1f5f9; border-radius:10px; height:18px; overflow:hidden; border:1px solid #e2e8f0; position:relative;">
+                <div id="batchPmtProgressBar" style="width:0%; background:linear-gradient(90deg, #0284c7, #38bdf8); height:100%; transition:width 0.3s ease; border-radius:9px;"></div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:#64748b; margin-top:8px;">
+                <span id="batchPmtDetailsText">Pending records: Calculating...</span>
+                <span>Chunk size: 50 records / batch</span>
+            </div>
+
+            <div id="batchPmtLogBox" style="margin-top:16px; max-height:120px; overflow-y:auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:11.5px; color:#475569; font-family:monospace; display:none;">
+            </div>
+        </div>
+
+        <div style="padding:16px 24px; background:#f8fafc; border-top:1px solid #f1f5f9; display:flex; justify-content:flex-end; gap:10px;">
+            <button type="button" id="btnBatchPmtCancel" onclick="closeBatchPmtModal()" class="acm-btn acm-btn-outline" style="font-size:13px;">Cancel</button>
+            <button type="button" id="btnBatchPmtStart" onclick="runBatchPmtMigration()" class="acm-btn acm-btn-primary" style="background:#0284c7; font-size:13px;">
+                Start Batch Migration
+            </button>
+            <button type="button" id="btnBatchPmtFinish" onclick="window.location.reload()" class="acm-btn acm-btn-primary" style="background:#16a34a; font-size:13px; display:none;">
+                Done & Reload Page
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function migrateSinglePayment(actionUrl, buttonElement) {
+    if (buttonElement) {
+        buttonElement.disabled = true;
+        buttonElement.innerText = 'Migrating...';
+    }
+    const form = document.getElementById('singlePaymentMigrateForm');
+    form.action = actionUrl;
+    form.submit();
+}
+
+let isBatchPmtRunning = false;
+let batchPmtShouldStop = false;
+
+function openBatchPmtModal() {
+    document.getElementById('batchPmtModal').style.display = 'flex';
+}
+
+function closeBatchPmtModal() {
+    if (isBatchPmtRunning) {
+        if (!confirm('Migration is in progress. Are you sure you want to pause/cancel?')) {
+            return;
+        }
+        batchPmtShouldStop = true;
+    }
+    document.getElementById('batchPmtModal').style.display = 'none';
+}
+
+function appendBatchPmtLog(msg) {
+    const box = document.getElementById('batchPmtLogBox');
+    box.style.display = 'block';
+    const line = document.createElement('div');
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+}
+
+async function runBatchPmtMigration() {
+    isBatchPmtRunning = true;
+    batchPmtShouldStop = false;
+
+    document.getElementById('btnBatchPmtStart').disabled = true;
+    document.getElementById('btnBatchPmtStart').style.display = 'none';
+    document.getElementById('btnBatchPmtCancel').textContent = 'Pause / Stop';
+
+    const progressBar = document.getElementById('batchPmtProgressBar');
+    const percentText = document.getElementById('batchPmtPercentText');
+    const statusText = document.getElementById('batchPmtStatusText');
+    const detailsText = document.getElementById('batchPmtDetailsText');
+
+    statusText.textContent = 'Migrating customer payments in chunks of 50...';
+    appendBatchPmtLog('Started batch payment migration session...');
+
+    while (!batchPmtShouldStop) {
+        try {
+            const response = await fetch('{{ route("accounts.zoho.payments.migrate-batch") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ limit: 50 })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.message || `Server returned HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            const pct = data.progress_pct || 0;
+            progressBar.style.width = pct + '%';
+            percentText.textContent = pct + '%';
+            detailsText.textContent = `Remaining: ${data.remaining} unmigrated (Total: ${data.total_all})`;
+            statusText.textContent = `Processing... Migrated ${data.total_migrated} of ${data.total_all}`;
+
+            appendBatchPmtLog(`Batch completed: +${data.batch_migrated} payments. Remaining: ${data.remaining}`);
+
+            if (data.errors && data.errors.length > 0) {
+                data.errors.forEach(err => appendBatchPmtLog(`⚠ Warning: ${err}`));
+            }
+
+            if (data.completed || data.remaining === 0) {
+                progressBar.style.width = '100%';
+                percentText.textContent = '100%';
+                statusText.textContent = '✓ All Payments Migrated Successfully!';
+                detailsText.textContent = `All ${data.total_all} payments are now inside CRM!`;
+                appendBatchPmtLog('Completed! All records safely migrated.');
+
+                document.getElementById('btnBatchPmtCancel').style.display = 'none';
+                document.getElementById('btnBatchPmtFinish').style.display = 'inline-flex';
+                isBatchPmtRunning = false;
+                break;
+            }
+
+            await new Promise(r => setTimeout(r, 300));
+
+        } catch (err) {
+            appendBatchPmtLog(`❌ Batch Error: ${err.message}`);
+            statusText.textContent = 'Encountered error during batch';
+            alert('Batch migration paused due to error: ' + err.message);
+            document.getElementById('btnBatchPmtStart').disabled = false;
+            document.getElementById('btnBatchPmtStart').style.display = 'inline-flex';
+            document.getElementById('btnBatchPmtStart').textContent = 'Resume Migration';
+            isBatchPmtRunning = false;
+            break;
+        }
+    }
+
+    if (batchPmtShouldStop) {
+        appendBatchPmtLog('Migration paused by user.');
+        document.getElementById('btnBatchPmtStart').disabled = false;
+        document.getElementById('btnBatchPmtStart').style.display = 'inline-flex';
+        document.getElementById('btnBatchPmtStart').textContent = 'Resume Migration';
+        isBatchPmtRunning = false;
+    }
+}
+</script>
 @endsection

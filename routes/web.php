@@ -258,167 +258,175 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/reports/crm/revenue-comparison/export', [CrmReportController::class, 'exportRevenueComparison'])
         ->name('reports.crm.revenue-comparison.export');
     // Accounts Module
-    Route::get('/accounts', [App\Http\Controllers\AccountsDashboardController::class, 'index']);
+    Route::get('/accounts', [App\Http\Controllers\AccountsDashboardController::class, 'index'])->middleware('can:accounts_dashboard.view');
     Route::prefix('accounts')->name('accounts.')->group(function () {
-        Route::get('/dashboard', [App\Http\Controllers\AccountsDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/dashboard', [App\Http\Controllers\AccountsDashboardController::class, 'index'])->middleware('can:accounts_dashboard.view')->name('dashboard');
 
         // Ad Budget routes
         Route::prefix('ad-budget')->name('ad-budget.')->group(function () {
-            Route::get('/clients', [App\Http\Controllers\AdBudgetController::class, 'clients'])->name('clients');
-            Route::post('/clients/raise-request', [App\Http\Controllers\AdBudgetController::class, 'storeClientRequest'])->name('clients.raise-request');
-            Route::get('/partners', [App\Http\Controllers\AdBudgetController::class, 'partners'])->name('partners');
-            Route::post('/partners/raise-request', [App\Http\Controllers\AdBudgetController::class, 'storePartnerRequest'])->name('partners.raise-request');
-            Route::post('/{adBudgetRequest}/tl-approve', [App\Http\Controllers\AdBudgetController::class, 'tlApprove'])->name('tl-approve');
-            Route::post('/{adBudgetRequest}/accounts-approve', [App\Http\Controllers\AdBudgetController::class, 'accountsApprove'])->name('accounts-approve');
+            Route::get('/clients', [App\Http\Controllers\AdBudgetController::class, 'clients'])->middleware('can:accounts_ad_budget.view')->name('clients');
+            Route::post('/clients/raise-request', [App\Http\Controllers\AdBudgetController::class, 'storeClientRequest'])->middleware('can:accounts_ad_budget.create')->name('clients.raise-request');
+            Route::get('/partners', [App\Http\Controllers\AdBudgetController::class, 'partners'])->middleware('can:accounts_ad_budget.view')->name('partners');
+            Route::post('/partners/raise-request', [App\Http\Controllers\AdBudgetController::class, 'storePartnerRequest'])->middleware('can:accounts_ad_budget.create')->name('partners.raise-request');
+            Route::post('/{adBudgetRequest}/tl-approve', [App\Http\Controllers\AdBudgetController::class, 'tlApprove'])->middleware('can:accounts_ad_budget.edit')->name('tl-approve');
+            Route::post('/{adBudgetRequest}/accounts-approve', [App\Http\Controllers\AdBudgetController::class, 'accountsApprove'])->middleware('can:accounts_ad_budget.edit')->name('accounts-approve');
 
             // Ad Spend routes
-            Route::get('/spend', [App\Http\Controllers\AdSpendController::class, 'index'])->name('spend');
-            Route::post('/spend', [App\Http\Controllers\AdSpendController::class, 'store'])->name('spend.store');
-            Route::put('/spend/{adSpend}', [App\Http\Controllers\AdSpendController::class, 'update'])->name('spend.update');
-            Route::delete('/spend/{adSpend}', [App\Http\Controllers\AdSpendController::class, 'destroy'])->name('spend.destroy');
+            Route::get('/spend', [App\Http\Controllers\AdSpendController::class, 'index'])->middleware('can:accounts_ad_budget.view')->name('spend');
+            Route::post('/spend', [App\Http\Controllers\AdSpendController::class, 'store'])->middleware('can:accounts_ad_budget.create')->name('spend.store');
+            Route::put('/spend/{adSpend}', [App\Http\Controllers\AdSpendController::class, 'update'])->middleware('can:accounts_ad_budget.edit')->name('spend.update');
+            Route::delete('/spend/{adSpend}', [App\Http\Controllers\AdSpendController::class, 'destroy'])->middleware('can:accounts_ad_budget.delete')->name('spend.destroy');
 
             // Ad Budget Allocation Vs Spent Report route
-            Route::get('/allocation-vs-spent', [App\Http\Controllers\AdSpendController::class, 'allocationVsSpent'])->name('allocation-vs-spent');
-            Route::get('/allocation-vs-spent/pdf', [App\Http\Controllers\AdSpendController::class, 'exportPdf'])->name('allocation-vs-spent.pdf');
+            Route::get('/allocation-vs-spent', [App\Http\Controllers\AdSpendController::class, 'allocationVsSpent'])->middleware('can:accounts_ad_budget.view')->name('allocation-vs-spent');
+            Route::get('/allocation-vs-spent/pdf', [App\Http\Controllers\AdSpendController::class, 'exportPdf'])->middleware('can:accounts_ad_budget.view')->name('allocation-vs-spent.pdf');
         });
 
         // Domains & Hosting routes
         Route::prefix('domains-hosting')->name('domains-hosting.')->group(function () {
-            Route::get('/', [App\Http\Controllers\DomainsHostingController::class, 'index'])->name('index');
-            Route::post('/domains', [App\Http\Controllers\DomainsHostingController::class, 'storeDomain'])->name('domains.store');
-            Route::get('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'showDomain'])->name('domains.show');
-            Route::put('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'updateDomain'])->name('domains.update');
-            Route::delete('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'destroyDomain'])->name('domains.destroy');
-            Route::post('/domains/sync-godaddy', [App\Http\Controllers\DomainsHostingController::class, 'syncGodaddy'])->name('domains.sync-godaddy');
+            Route::get('/', [App\Http\Controllers\DomainsHostingController::class, 'index'])->middleware('can:accounts_domains_hosting.view')->name('index');
+            Route::post('/domains', [App\Http\Controllers\DomainsHostingController::class, 'storeDomain'])->middleware('can:accounts_domains_hosting.create')->name('domains.store');
+            Route::get('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'showDomain'])->middleware('can:accounts_domains_hosting.view')->name('domains.show');
+            Route::put('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'updateDomain'])->middleware('can:accounts_domains_hosting.edit')->name('domains.update');
+            Route::delete('/domains/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'destroyDomain'])->middleware('can:accounts_domains_hosting.delete')->name('domains.destroy');
+            Route::post('/domains/sync-godaddy', [App\Http\Controllers\DomainsHostingController::class, 'syncGodaddy'])->middleware('can:accounts_domains_hosting.edit')->name('domains.sync-godaddy');
 
             // Domain Lead Migration & Renewals
-            Route::post('/domains/{domain}/migrate-lead', [App\Http\Controllers\DomainsHostingController::class, 'migrateLead'])->name('domains.migrate-lead');
-            Route::post('/domains/{domain}/unlink-lead', [App\Http\Controllers\DomainsHostingController::class, 'unlinkLead'])->name('domains.unlink-lead');
-            Route::post('/domains/{domain}/renewals', [App\Http\Controllers\DomainsHostingController::class, 'storeRenewal'])->name('domains.renewals.store');
-            Route::delete('/domains/{domain}/renewals/{renewal}', [App\Http\Controllers\DomainsHostingController::class, 'destroyRenewal'])->name('domains.renewals.destroy');
-            Route::get('/leads/search', [App\Http\Controllers\DomainsHostingController::class, 'searchLeads'])->name('leads.search');
+            Route::post('/domains/{domain}/migrate-lead', [App\Http\Controllers\DomainsHostingController::class, 'migrateLead'])->middleware('can:accounts_domains_hosting.edit')->name('domains.migrate-lead');
+            Route::post('/domains/{domain}/unlink-lead', [App\Http\Controllers\DomainsHostingController::class, 'unlinkLead'])->middleware('can:accounts_domains_hosting.edit')->name('domains.unlink-lead');
+            Route::post('/domains/{domain}/renewals', [App\Http\Controllers\DomainsHostingController::class, 'storeRenewal'])->middleware('can:accounts_domains_hosting.create')->name('domains.renewals.store');
+            Route::delete('/domains/{domain}/renewals/{renewal}', [App\Http\Controllers\DomainsHostingController::class, 'destroyRenewal'])->middleware('can:accounts_domains_hosting.delete')->name('domains.renewals.destroy');
+            Route::get('/leads/search', [App\Http\Controllers\DomainsHostingController::class, 'searchLeads'])->middleware('can:accounts_domains_hosting.view')->name('leads.search');
 
-            Route::post('/hostings', [App\Http\Controllers\DomainsHostingController::class, 'storeHosting'])->name('hostings.store');
-            Route::get('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'showHosting'])->name('hostings.show');
-            Route::put('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'updateHosting'])->name('hostings.update');
-            Route::delete('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'destroyHosting'])->name('hostings.destroy');
+            // Domain Hosting Mapping & Bulk Actions
+            Route::post('/domains/{domain}/map-hosting', [App\Http\Controllers\DomainsHostingController::class, 'mapDomainHosting'])->middleware('can:accounts_domains_hosting.edit')->name('domains.map-hosting');
+            Route::post('/domains/{domain}/unlink-hosting', [App\Http\Controllers\DomainsHostingController::class, 'unlinkDomainHosting'])->middleware('can:accounts_domains_hosting.edit')->name('domains.unlink-hosting');
+            Route::post('/domains/bulk-map-hosting', [App\Http\Controllers\DomainsHostingController::class, 'bulkMapHosting'])->middleware('can:accounts_domains_hosting.edit')->name('domains.bulk-map-hosting');
 
-            // Hosting Lead Migration & Renewals
-            Route::post('/hostings/{hosting}/migrate-lead', [App\Http\Controllers\DomainsHostingController::class, 'migrateHostingLead'])->name('hostings.migrate-lead');
-            Route::post('/hostings/{hosting}/unlink-lead', [App\Http\Controllers\DomainsHostingController::class, 'unlinkHostingLead'])->name('hostings.unlink-lead');
-            Route::post('/hostings/{hosting}/renewals', [App\Http\Controllers\DomainsHostingController::class, 'storeHostingRenewal'])->name('hostings.renewals.store');
-            Route::delete('/hostings/{hosting}/renewals/{renewal}', [App\Http\Controllers\DomainsHostingController::class, 'destroyHostingRenewal'])->name('hostings.renewals.destroy');
+            Route::post('/hostings', [App\Http\Controllers\DomainsHostingController::class, 'storeHosting'])->middleware('can:accounts_domains_hosting.create')->name('hostings.store');
+            Route::get('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'showHosting'])->middleware('can:accounts_domains_hosting.view')->name('hostings.show');
+            Route::put('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'updateHosting'])->middleware('can:accounts_domains_hosting.edit')->name('hostings.update');
+            Route::delete('/hostings/{hosting}', [App\Http\Controllers\DomainsHostingController::class, 'destroyHosting'])->middleware('can:accounts_domains_hosting.delete')->name('hostings.destroy');
+
+            // Hosting Lead Migration & Renewals & Domain Mapping
+            Route::post('/hostings/{hosting}/migrate-lead', [App\Http\Controllers\DomainsHostingController::class, 'migrateHostingLead'])->middleware('can:accounts_domains_hosting.edit')->name('hostings.migrate-lead');
+            Route::post('/hostings/{hosting}/unlink-lead', [App\Http\Controllers\DomainsHostingController::class, 'unlinkHostingLead'])->middleware('can:accounts_domains_hosting.edit')->name('hostings.unlink-lead');
+            Route::post('/hostings/{hosting}/renewals', [App\Http\Controllers\DomainsHostingController::class, 'storeHostingRenewal'])->middleware('can:accounts_domains_hosting.create')->name('hostings.renewals.store');
+            Route::delete('/hostings/{hosting}/renewals/{renewal}', [App\Http\Controllers\DomainsHostingController::class, 'destroyHostingRenewal'])->middleware('can:accounts_domains_hosting.delete')->name('hostings.renewals.destroy');
+            Route::post('/hostings/{hosting}/map-domains', [App\Http\Controllers\DomainsHostingController::class, 'mapHostingDomains'])->middleware('can:accounts_domains_hosting.edit')->name('hostings.map-domains');
+            Route::post('/hostings/{hosting}/unlink-domain/{domain}', [App\Http\Controllers\DomainsHostingController::class, 'unlinkHostingDomain'])->middleware('can:accounts_domains_hosting.edit')->name('hostings.unlink-domain');
         });
 
         // Ad Accounts Master CRUD
         Route::prefix('ad-accounts-master')->name('ad-accounts-master.')->group(function () {
-            Route::get('/', [App\Http\Controllers\AdAccountMasterController::class, 'index'])->name('index');
-            Route::post('/', [App\Http\Controllers\AdAccountMasterController::class, 'store'])->name('store');
-            Route::put('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'update'])->name('update');
-            Route::patch('/{adAccount}/toggle-status', [App\Http\Controllers\AdAccountMasterController::class, 'toggleStatus'])->name('toggle-status');
-            Route::delete('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'destroy'])->name('destroy');
+            Route::get('/', [App\Http\Controllers\AdAccountMasterController::class, 'index'])->middleware('can:accounts_master.view')->name('index');
+            Route::post('/', [App\Http\Controllers\AdAccountMasterController::class, 'store'])->middleware('can:accounts_master.create')->name('store');
+            Route::put('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'update'])->middleware('can:accounts_master.edit')->name('update');
+            Route::patch('/{adAccount}/toggle-status', [App\Http\Controllers\AdAccountMasterController::class, 'toggleStatus'])->middleware('can:accounts_master.edit')->name('toggle-status');
+            Route::delete('/{adAccount}', [App\Http\Controllers\AdAccountMasterController::class, 'destroy'])->middleware('can:accounts_master.delete')->name('destroy');
         });
 
         // Accounts Master CRUD (Expense Categories & Subcategories)
         Route::prefix('master')->name('master.')->group(function () {
-            Route::get('/', [App\Http\Controllers\AccountExpenseMasterController::class, 'index'])->name('index');
+            Route::get('/', [App\Http\Controllers\AccountExpenseMasterController::class, 'index'])->middleware('can:accounts_master.view')->name('index');
 
             // Expense Categories
-            Route::get('/expense-categories', [App\Http\Controllers\AccountExpenseMasterController::class, 'categories'])->name('expense-categories.index');
-            Route::post('/expense-categories', [App\Http\Controllers\AccountExpenseMasterController::class, 'storeCategory'])->name('expense-categories.store');
-            Route::put('/expense-categories/{category}', [App\Http\Controllers\AccountExpenseMasterController::class, 'updateCategory'])->name('expense-categories.update');
-            Route::patch('/expense-categories/{category}/toggle-status', [App\Http\Controllers\AccountExpenseMasterController::class, 'toggleCategoryStatus'])->name('expense-categories.toggle-status');
-            Route::delete('/expense-categories/{category}', [App\Http\Controllers\AccountExpenseMasterController::class, 'destroyCategory'])->name('expense-categories.destroy');
+            Route::get('/expense-categories', [App\Http\Controllers\AccountExpenseMasterController::class, 'categories'])->middleware('can:accounts_master.view')->name('expense-categories.index');
+            Route::post('/expense-categories', [App\Http\Controllers\AccountExpenseMasterController::class, 'storeCategory'])->middleware('can:accounts_master.create')->name('expense-categories.store');
+            Route::put('/expense-categories/{category}', [App\Http\Controllers\AccountExpenseMasterController::class, 'updateCategory'])->middleware('can:accounts_master.edit')->name('expense-categories.update');
+            Route::patch('/expense-categories/{category}/toggle-status', [App\Http\Controllers\AccountExpenseMasterController::class, 'toggleCategoryStatus'])->middleware('can:accounts_master.edit')->name('expense-categories.toggle-status');
+            Route::delete('/expense-categories/{category}', [App\Http\Controllers\AccountExpenseMasterController::class, 'destroyCategory'])->middleware('can:accounts_master.delete')->name('expense-categories.destroy');
 
             // Expense Subcategories
-            Route::get('/expense-subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'subcategories'])->name('expense-subcategories.index');
-            Route::post('/expense-subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'storeSubcategory'])->name('expense-subcategories.store');
-            Route::put('/expense-subcategories/{subcategory}', [App\Http\Controllers\AccountExpenseMasterController::class, 'updateSubcategory'])->name('expense-subcategories.update');
-            Route::patch('/expense-subcategories/{subcategory}/toggle-status', [App\Http\Controllers\AccountExpenseMasterController::class, 'toggleSubcategoryStatus'])->name('expense-subcategories.toggle-status');
-            Route::delete('/expense-subcategories/{subcategory}', [App\Http\Controllers\AccountExpenseMasterController::class, 'destroySubcategory'])->name('expense-subcategories.destroy');
-            Route::get('/expense-categories/{category}/subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'getSubcategoriesByCategory'])->name('expense-categories.subcategories');
+            Route::get('/expense-subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'subcategories'])->middleware('can:accounts_master.view')->name('expense-subcategories.index');
+            Route::post('/expense-subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'storeSubcategory'])->middleware('can:accounts_master.create')->name('expense-subcategories.store');
+            Route::put('/expense-subcategories/{subcategory}', [App\Http\Controllers\AccountExpenseMasterController::class, 'updateSubcategory'])->middleware('can:accounts_master.edit')->name('expense-subcategories.update');
+            Route::patch('/expense-subcategories/{subcategory}/toggle-status', [App\Http\Controllers\AccountExpenseMasterController::class, 'toggleSubcategoryStatus'])->middleware('can:accounts_master.edit')->name('expense-subcategories.toggle-status');
+            Route::delete('/expense-subcategories/{subcategory}', [App\Http\Controllers\AccountExpenseMasterController::class, 'destroySubcategory'])->middleware('can:accounts_master.delete')->name('expense-subcategories.destroy');
+            Route::get('/expense-categories/{category}/subcategories', [App\Http\Controllers\AccountExpenseMasterController::class, 'getSubcategoriesByCategory'])->middleware('can:accounts_master.view')->name('expense-categories.subcategories');
 
             // Support Categories CRUD
-            Route::get('/support-categories', [App\Http\Controllers\AccountSupportMasterController::class, 'categories'])->name('support-categories.index');
-            Route::post('/support-categories', [App\Http\Controllers\AccountSupportMasterController::class, 'storeCategory'])->name('support-categories.store');
-            Route::put('/support-categories/{category}', [App\Http\Controllers\AccountSupportMasterController::class, 'updateCategory'])->name('support-categories.update');
-            Route::patch('/support-categories/{category}/toggle-status', [App\Http\Controllers\AccountSupportMasterController::class, 'toggleCategoryStatus'])->name('support-categories.toggle-status');
-            Route::delete('/support-categories/{category}', [App\Http\Controllers\AccountSupportMasterController::class, 'destroyCategory'])->name('support-categories.destroy');
+            Route::get('/support-categories', [App\Http\Controllers\AccountSupportMasterController::class, 'categories'])->middleware('can:accounts_master.view')->name('support-categories.index');
+            Route::post('/support-categories', [App\Http\Controllers\AccountSupportMasterController::class, 'storeCategory'])->middleware('can:accounts_master.create')->name('support-categories.store');
+            Route::put('/support-categories/{category}', [App\Http\Controllers\AccountSupportMasterController::class, 'updateCategory'])->middleware('can:accounts_master.edit')->name('support-categories.update');
+            Route::patch('/support-categories/{category}/toggle-status', [App\Http\Controllers\AccountSupportMasterController::class, 'toggleCategoryStatus'])->middleware('can:accounts_master.edit')->name('support-categories.toggle-status');
+            Route::delete('/support-categories/{category}', [App\Http\Controllers\AccountSupportMasterController::class, 'destroyCategory'])->middleware('can:accounts_master.delete')->name('support-categories.destroy');
 
             // Support Subcategories CRUD (with User-wise Multiple Hierarchy)
-            Route::get('/support-subcategories', [App\Http\Controllers\AccountSupportMasterController::class, 'subcategories'])->name('support-subcategories.index');
-            Route::post('/support-subcategories', [App\Http\Controllers\AccountSupportMasterController::class, 'storeSubcategory'])->name('support-subcategories.store');
-            Route::put('/support-subcategories/{subcategory}', [App\Http\Controllers\AccountSupportMasterController::class, 'updateSubcategory'])->name('support-subcategories.update');
-            Route::patch('/support-subcategories/{subcategory}/toggle-status', [App\Http\Controllers\AccountSupportMasterController::class, 'toggleSubcategoryStatus'])->name('support-subcategories.toggle-status');
-            Route::delete('/support-subcategories/{subcategory}', [App\Http\Controllers\AccountSupportMasterController::class, 'destroySubcategory'])->name('support-subcategories.destroy');
-            Route::get('/support-categories/{category}/subcategories', [App\Http\Controllers\AccountSupportMasterController::class, 'getSubcategoriesByCategory'])->name('support-categories.subcategories');
+            Route::get('/support-subcategories', [App\Http\Controllers\AccountSupportMasterController::class, 'subcategories'])->middleware('can:accounts_master.view')->name('support-subcategories.index');
+            Route::post('/support-subcategories', [App\Http\Controllers\AccountSupportMasterController::class, 'storeSubcategory'])->middleware('can:accounts_master.create')->name('support-subcategories.store');
+            Route::put('/support-subcategories/{subcategory}', [App\Http\Controllers\AccountSupportMasterController::class, 'updateSubcategory'])->middleware('can:accounts_master.edit')->name('support-subcategories.update');
+            Route::patch('/support-subcategories/{subcategory}/toggle-status', [App\Http\Controllers\AccountSupportMasterController::class, 'toggleSubcategoryStatus'])->middleware('can:accounts_master.edit')->name('support-subcategories.toggle-status');
+            Route::delete('/support-subcategories/{subcategory}', [App\Http\Controllers\AccountSupportMasterController::class, 'destroySubcategory'])->middleware('can:accounts_master.delete')->name('support-subcategories.destroy');
+            Route::get('/support-categories/{category}/subcategories', [App\Http\Controllers\AccountSupportMasterController::class, 'getSubcategoriesByCategory'])->middleware('can:accounts_master.view')->name('support-categories.subcategories');
 
             // Ad Accounts Master alias
-            Route::get('/ad-accounts', fn () => redirect()->route('accounts.ad-accounts-master.index'))->name('ad-accounts.index');
+            Route::get('/ad-accounts', fn () => redirect()->route('accounts.ad-accounts-master.index'))->middleware('can:accounts_master.view')->name('ad-accounts.index');
 
             // Vendor Master CRUD
             Route::prefix('vendors')->name('vendors.')->group(function () {
-                Route::get('/', [App\Http\Controllers\VendorMasterController::class, 'index'])->name('index');
-                Route::post('/', [App\Http\Controllers\VendorMasterController::class, 'store'])->name('store');
-                Route::put('/{vendor}', [App\Http\Controllers\VendorMasterController::class, 'update'])->name('update');
-                Route::patch('/{vendor}/toggle-status', [App\Http\Controllers\VendorMasterController::class, 'toggleStatus'])->name('toggle-status');
-                Route::delete('/{vendor}', [App\Http\Controllers\VendorMasterController::class, 'destroy'])->name('destroy');
+                Route::get('/', [App\Http\Controllers\VendorMasterController::class, 'index'])->middleware('can:accounts_master.view')->name('index');
+                Route::post('/', [App\Http\Controllers\VendorMasterController::class, 'store'])->middleware('can:accounts_master.create')->name('store');
+                Route::put('/{vendor}', [App\Http\Controllers\VendorMasterController::class, 'update'])->middleware('can:accounts_master.edit')->name('update');
+                Route::patch('/{vendor}/toggle-status', [App\Http\Controllers\VendorMasterController::class, 'toggleStatus'])->middleware('can:accounts_master.edit')->name('toggle-status');
+                Route::delete('/{vendor}', [App\Http\Controllers\VendorMasterController::class, 'destroy'])->middleware('can:accounts_master.delete')->name('destroy');
             });
 
             // Items Master CRUD
             Route::prefix('items')->name('items.')->group(function () {
-                Route::get('/', [App\Http\Controllers\ItemMasterController::class, 'index'])->name('index');
-                Route::post('/', [App\Http\Controllers\ItemMasterController::class, 'store'])->name('store');
-                Route::put('/{item}', [App\Http\Controllers\ItemMasterController::class, 'update'])->name('update');
-                Route::patch('/{item}/toggle-status', [App\Http\Controllers\ItemMasterController::class, 'toggleStatus'])->name('toggle-status');
-                Route::delete('/{item}', [App\Http\Controllers\ItemMasterController::class, 'destroy'])->name('destroy');
+                Route::get('/', [App\Http\Controllers\ItemMasterController::class, 'index'])->middleware('can:accounts_master.view')->name('index');
+                Route::post('/', [App\Http\Controllers\ItemMasterController::class, 'store'])->middleware('can:accounts_master.create')->name('store');
+                Route::put('/{item}', [App\Http\Controllers\ItemMasterController::class, 'update'])->middleware('can:accounts_master.edit')->name('update');
+                Route::patch('/{item}/toggle-status', [App\Http\Controllers\ItemMasterController::class, 'toggleStatus'])->middleware('can:accounts_master.edit')->name('toggle-status');
+                Route::delete('/{item}', [App\Http\Controllers\ItemMasterController::class, 'destroy'])->middleware('can:accounts_master.delete')->name('destroy');
             });
 
             // Customers Master CRUD
             Route::prefix('customers')->name('customers.')->group(function () {
-                Route::get('/', [App\Http\Controllers\CustomerMasterController::class, 'index'])->name('index');
-                Route::get('/search-converted-leads', [App\Http\Controllers\CustomerMasterController::class, 'searchConvertedLeads'])->name('search-converted-leads');
-                Route::get('/lead-details/{lead}', [App\Http\Controllers\CustomerMasterController::class, 'getLeadDetails'])->name('lead-details');
-                Route::post('/', [App\Http\Controllers\CustomerMasterController::class, 'store'])->name('store');
-                Route::get('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'show'])->name('show');
-                Route::put('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'update'])->name('update');
-                Route::patch('/{customer}/toggle-status', [App\Http\Controllers\CustomerMasterController::class, 'toggleStatus'])->name('toggle-status');
-                Route::delete('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'destroy'])->name('destroy');
+                Route::get('/', [App\Http\Controllers\CustomerMasterController::class, 'index'])->middleware('can:accounts_master.view')->name('index');
+                Route::get('/search-converted-leads', [App\Http\Controllers\CustomerMasterController::class, 'searchConvertedLeads'])->middleware('can:accounts_master.view')->name('search-converted-leads');
+                Route::get('/lead-details/{lead}', [App\Http\Controllers\CustomerMasterController::class, 'getLeadDetails'])->middleware('can:accounts_master.view')->name('lead-details');
+                Route::post('/', [App\Http\Controllers\CustomerMasterController::class, 'store'])->middleware('can:accounts_master.create')->name('store');
+                Route::get('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'show'])->middleware('can:accounts_master.view')->name('show');
+                Route::put('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'update'])->middleware('can:accounts_master.edit')->name('update');
+                Route::patch('/{customer}/toggle-status', [App\Http\Controllers\CustomerMasterController::class, 'toggleStatus'])->middleware('can:accounts_master.edit')->name('toggle-status');
+                Route::delete('/{customer}', [App\Http\Controllers\CustomerMasterController::class, 'destroy'])->middleware('can:accounts_master.delete')->name('destroy');
             });
 
             // Bank Master CRUD
             Route::prefix('banks')->name('banks.')->group(function () {
-                Route::get('/', [App\Http\Controllers\BankMasterController::class, 'index'])->name('index');
-                Route::post('/', [App\Http\Controllers\BankMasterController::class, 'store'])->name('store');
-                Route::put('/{bank}', [App\Http\Controllers\BankMasterController::class, 'update'])->name('update');
-                Route::patch('/{bank}/set-primary', [App\Http\Controllers\BankMasterController::class, 'setPrimary'])->name('set-primary');
-                Route::patch('/{bank}/toggle-status', [App\Http\Controllers\BankMasterController::class, 'toggleStatus'])->name('toggle-status');
-                Route::delete('/{bank}', [App\Http\Controllers\BankMasterController::class, 'destroy'])->name('destroy');
+                Route::get('/', [App\Http\Controllers\BankMasterController::class, 'index'])->middleware('can:accounts_master.view')->name('index');
+                Route::post('/', [App\Http\Controllers\BankMasterController::class, 'store'])->middleware('can:accounts_master.create')->name('store');
+                Route::put('/{bank}', [App\Http\Controllers\BankMasterController::class, 'update'])->middleware('can:accounts_master.edit')->name('update');
+                Route::patch('/{bank}/set-primary', [App\Http\Controllers\BankMasterController::class, 'setPrimary'])->middleware('can:accounts_master.edit')->name('set-primary');
+                Route::patch('/{bank}/toggle-status', [App\Http\Controllers\BankMasterController::class, 'toggleStatus'])->middleware('can:accounts_master.edit')->name('toggle-status');
+                Route::delete('/{bank}', [App\Http\Controllers\BankMasterController::class, 'destroy'])->middleware('can:accounts_master.delete')->name('destroy');
             });
 
             // Server Master CRUD
             Route::prefix('servers')->name('servers.')->group(function () {
-                Route::get('/', [App\Http\Controllers\ServerMasterController::class, 'index'])->name('index');
-                Route::post('/', [App\Http\Controllers\ServerMasterController::class, 'store'])->name('store');
-                Route::put('/{server}', [App\Http\Controllers\ServerMasterController::class, 'update'])->name('update');
-                Route::patch('/{server}/toggle-status', [App\Http\Controllers\ServerMasterController::class, 'toggleStatus'])->name('toggle-status');
-                Route::delete('/{server}', [App\Http\Controllers\ServerMasterController::class, 'destroy'])->name('destroy');
+                Route::get('/', [App\Http\Controllers\ServerMasterController::class, 'index'])->middleware('can:accounts_master.view')->name('index');
+                Route::post('/', [App\Http\Controllers\ServerMasterController::class, 'store'])->middleware('can:accounts_master.create')->name('store');
+                Route::get('/{server}', [App\Http\Controllers\ServerMasterController::class, 'show'])->middleware('can:accounts_master.view')->name('show');
+                Route::put('/{server}', [App\Http\Controllers\ServerMasterController::class, 'update'])->middleware('can:accounts_master.edit')->name('update');
+                Route::patch('/{server}/toggle-status', [App\Http\Controllers\ServerMasterController::class, 'toggleStatus'])->middleware('can:accounts_master.edit')->name('toggle-status');
+                Route::delete('/{server}', [App\Http\Controllers\ServerMasterController::class, 'destroy'])->middleware('can:accounts_master.delete')->name('destroy');
             });
 
             // Supplier Master CRUD
             Route::prefix('suppliers')->name('suppliers.')->group(function () {
-                Route::get('/', [App\Http\Controllers\SupplierMasterController::class, 'index'])->name('index');
-                Route::post('/', [App\Http\Controllers\SupplierMasterController::class, 'store'])->name('store');
-                Route::put('/{supplier}', [App\Http\Controllers\SupplierMasterController::class, 'update'])->name('update');
-                Route::patch('/{supplier}/toggle-status', [App\Http\Controllers\SupplierMasterController::class, 'toggleStatus'])->name('toggle-status');
-                Route::delete('/{supplier}', [App\Http\Controllers\SupplierMasterController::class, 'destroy'])->name('destroy');
+                Route::get('/', [App\Http\Controllers\SupplierMasterController::class, 'index'])->middleware('can:accounts_master.view')->name('index');
+                Route::post('/', [App\Http\Controllers\SupplierMasterController::class, 'store'])->middleware('can:accounts_master.create')->name('store');
+                Route::put('/{supplier}', [App\Http\Controllers\SupplierMasterController::class, 'update'])->middleware('can:accounts_master.edit')->name('update');
+                Route::patch('/{supplier}/toggle-status', [App\Http\Controllers\SupplierMasterController::class, 'toggleStatus'])->middleware('can:accounts_master.edit')->name('toggle-status');
+                Route::delete('/{supplier}', [App\Http\Controllers\SupplierMasterController::class, 'destroy'])->middleware('can:accounts_master.delete')->name('destroy');
             });
 
             // Invoice Settings
             Route::prefix('invoice-settings')->name('invoice-settings.')->group(function () {
-                Route::get('/', [App\Http\Controllers\InvoiceSettingController::class, 'index'])->name('index');
-                Route::post('/', [App\Http\Controllers\InvoiceSettingController::class, 'update'])->name('update');
-                Route::delete('/remove-file/{type}', [App\Http\Controllers\InvoiceSettingController::class, 'removeFile'])->name('remove-file');
+                Route::get('/', [App\Http\Controllers\InvoiceSettingController::class, 'index'])->middleware('can:accounts_master.view')->name('index');
+                Route::post('/', [App\Http\Controllers\InvoiceSettingController::class, 'update'])->middleware('can:accounts_master.edit')->name('update');
+                Route::delete('/remove-file/{type}', [App\Http\Controllers\InvoiceSettingController::class, 'removeFile'])->middleware('can:accounts_master.delete')->name('remove-file');
             });
         });
 
@@ -426,131 +434,155 @@ Route::middleware(['auth'])->group(function () {
         Route::prefix('quotations')->name('quotations.')->group(function () {
             Route::get('/', [App\Http\Controllers\QuotationController::class, 'index'])->middleware('can:quotations.view')->name('index');
             Route::get('/{quotation}', [App\Http\Controllers\QuotationController::class, 'show'])->middleware('can:quotations.view')->name('show');
-            Route::post('/{quotation}/convert-to-invoice', [App\Http\Controllers\QuotationController::class, 'convertToInvoice'])->name('convert-to-invoice');
+            Route::patch('/{quotation}/map-lead', [App\Http\Controllers\QuotationController::class, 'mapLead'])->middleware('can:quotations.create')->name('map-lead');
+            Route::post('/{quotation}/convert-to-invoice', [App\Http\Controllers\QuotationController::class, 'convertToInvoice'])->middleware('can:accounts_invoices.create')->name('convert-to-invoice');
         });
 
         // Accounts Sales Group (Invoices)
         Route::prefix('sales')->name('sales.')->group(function () {
             Route::prefix('invoices')->name('invoices.')->group(function () {
-                Route::get('/', [App\Http\Controllers\InvoiceController::class, 'index'])->name('index');
-                Route::get('/create', [App\Http\Controllers\InvoiceController::class, 'create'])->name('create');
-                Route::post('/', [App\Http\Controllers\InvoiceController::class, 'store'])->name('store');
-                Route::get('/customer-details/{customer}', [App\Http\Controllers\InvoiceController::class, 'getCustomerDetails'])->name('customer-details');
-                Route::get('/item-details/{item}', [App\Http\Controllers\InvoiceController::class, 'getItemDetails'])->name('item-details');
-                Route::get('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'show'])->name('show');
-                Route::get('/{invoice}/edit', [App\Http\Controllers\InvoiceController::class, 'edit'])->name('edit');
-                Route::put('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'update'])->name('update');
-                Route::patch('/{invoice}/update-sales-person', [App\Http\Controllers\InvoiceController::class, 'updateSalesPerson'])->name('update-sales-person');
-                Route::delete('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'destroy'])->name('destroy');
-                Route::get('/{invoice}/print', [App\Http\Controllers\InvoiceController::class, 'print'])->name('print');
-                Route::get('/{invoice}/pdf', [App\Http\Controllers\InvoiceController::class, 'downloadPdf'])->name('pdf');
-                Route::post('/{invoice}/send-email', [App\Http\Controllers\InvoiceController::class, 'sendEmail'])->name('send-email');
-                Route::post('/{invoice}/payments', [App\Http\Controllers\InvoicePaymentController::class, 'store'])->name('payments.store');
-                Route::delete('/{invoice}/payments/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroy'])->name('payments.destroy');
-                Route::post('/{invoice}/credit-notes', [App\Http\Controllers\CreditNoteController::class, 'storeForInvoice'])->name('credit-notes.store');
+                Route::get('/', [App\Http\Controllers\InvoiceController::class, 'index'])->middleware('can:accounts_invoices.view')->name('index');
+                Route::get('/create', [App\Http\Controllers\InvoiceController::class, 'create'])->middleware('can:accounts_invoices.create')->name('create');
+                Route::post('/', [App\Http\Controllers\InvoiceController::class, 'store'])->middleware('can:accounts_invoices.create')->name('store');
+                Route::get('/customer-details/{customer}', [App\Http\Controllers\InvoiceController::class, 'getCustomerDetails'])->middleware('can:accounts_invoices.view')->name('customer-details');
+                Route::get('/item-details/{item}', [App\Http\Controllers\InvoiceController::class, 'getItemDetails'])->middleware('can:accounts_invoices.view')->name('item-details');
+                Route::get('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'show'])->middleware('can:accounts_invoices.view')->name('show');
+                Route::get('/{invoice}/edit', [App\Http\Controllers\InvoiceController::class, 'edit'])->middleware('can:accounts_invoices.edit')->name('edit');
+                Route::put('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'update'])->middleware('can:accounts_invoices.edit')->name('update');
+                Route::patch('/{invoice}/update-sales-person', [App\Http\Controllers\InvoiceController::class, 'updateSalesPerson'])->middleware('can:accounts_invoices.edit')->name('update-sales-person');
+                Route::patch('/{invoice}/map-lead', [App\Http\Controllers\InvoiceController::class, 'mapLead'])->middleware('can:accounts_invoices.edit')->name('map-lead');
+                Route::delete('/{invoice}', [App\Http\Controllers\InvoiceController::class, 'destroy'])->middleware('can:accounts_invoices.delete')->name('destroy');
+                Route::get('/{invoice}/print', [App\Http\Controllers\InvoiceController::class, 'print'])->middleware('can:accounts_invoices.view')->name('print');
+                Route::get('/{invoice}/pdf', [App\Http\Controllers\InvoiceController::class, 'downloadPdf'])->middleware('can:accounts_invoices.view')->name('pdf');
+                Route::post('/{invoice}/send-email', [App\Http\Controllers\InvoiceController::class, 'sendEmail'])->middleware('can:accounts_invoices.view')->name('send-email');
+                Route::post('/{invoice}/payments', [App\Http\Controllers\InvoicePaymentController::class, 'store'])->middleware('can:accounts_payments.create')->name('payments.store');
+                Route::delete('/{invoice}/payments/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroy'])->middleware('can:accounts_payments.delete')->name('payments.destroy');
+                Route::post('/{invoice}/credit-notes', [App\Http\Controllers\CreditNoteController::class, 'storeForInvoice'])->middleware('can:accounts_credit_notes.create')->name('credit-notes.store');
             });
 
             // Sales Payments Received against Invoices
             Route::prefix('payments')->name('payments.')->group(function () {
-                Route::get('/', [App\Http\Controllers\InvoicePaymentController::class, 'index'])->name('index');
-                Route::delete('/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroyStandalone'])->name('destroy');
+                Route::get('/', [App\Http\Controllers\InvoicePaymentController::class, 'index'])->middleware('can:accounts_payments.view')->name('index');
+                Route::delete('/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroyStandalone'])->middleware('can:accounts_payments.delete')->name('destroy');
             });
 
             // Sales Credit Notes (CN)
             Route::prefix('credit-notes')->name('credit-notes.')->group(function () {
-                Route::get('/', [App\Http\Controllers\CreditNoteController::class, 'index'])->name('index');
-                Route::get('/create', [App\Http\Controllers\CreditNoteController::class, 'create'])->name('create');
-                Route::post('/', [App\Http\Controllers\CreditNoteController::class, 'storeStandalone'])->name('store');
-                Route::get('/{creditNote}', [App\Http\Controllers\CreditNoteController::class, 'show'])->name('show');
-                Route::get('/{creditNote}/print', [App\Http\Controllers\CreditNoteController::class, 'print'])->name('print');
-                Route::post('/{creditNote}/void', [App\Http\Controllers\CreditNoteController::class, 'toggleVoid'])->name('void');
-                Route::delete('/{creditNote}', [App\Http\Controllers\CreditNoteController::class, 'destroy'])->name('destroy');
+                Route::get('/', [App\Http\Controllers\CreditNoteController::class, 'index'])->middleware('can:accounts_credit_notes.view')->name('index');
+                Route::get('/create', [App\Http\Controllers\CreditNoteController::class, 'create'])->middleware('can:accounts_credit_notes.create')->name('create');
+                Route::post('/', [App\Http\Controllers\CreditNoteController::class, 'storeStandalone'])->middleware('can:accounts_credit_notes.create')->name('store');
+                Route::get('/{creditNote}', [App\Http\Controllers\CreditNoteController::class, 'show'])->middleware('can:accounts_credit_notes.view')->name('show');
+                Route::get('/{creditNote}/print', [App\Http\Controllers\CreditNoteController::class, 'print'])->middleware('can:accounts_credit_notes.view')->name('print');
+                Route::post('/{creditNote}/void', [App\Http\Controllers\CreditNoteController::class, 'toggleVoid'])->middleware('can:accounts_credit_notes.edit')->name('void');
+                Route::delete('/{creditNote}', [App\Http\Controllers\CreditNoteController::class, 'destroy'])->middleware('can:accounts_credit_notes.delete')->name('destroy');
             });
         });
 
         // Purchase Orders (PO Orders)
         Route::prefix('purchase-orders')->name('purchase-orders.')->group(function () {
-            Route::get('/', [App\Http\Controllers\PurchaseOrderController::class, 'index'])->name('index');
-            Route::get('/create', [App\Http\Controllers\PurchaseOrderController::class, 'create'])->name('create');
-            Route::post('/', [App\Http\Controllers\PurchaseOrderController::class, 'store'])->name('store');
-            Route::get('/{purchaseOrder}', [App\Http\Controllers\PurchaseOrderController::class, 'show'])->name('show');
-            Route::get('/{purchaseOrder}/edit', [App\Http\Controllers\PurchaseOrderController::class, 'edit'])->name('edit');
-            Route::put('/{purchaseOrder}', [App\Http\Controllers\PurchaseOrderController::class, 'update'])->name('update');
-            Route::delete('/{purchaseOrder}', [App\Http\Controllers\PurchaseOrderController::class, 'destroy'])->name('destroy');
-            Route::get('/{purchaseOrder}/print', [App\Http\Controllers\PurchaseOrderController::class, 'print'])->name('print');
-            Route::patch('/{purchaseOrder}/update-status', [App\Http\Controllers\PurchaseOrderController::class, 'updateStatus'])->name('update-status');
+            Route::get('/', [App\Http\Controllers\PurchaseOrderController::class, 'index'])->middleware('can:accounts_purchase_orders.view')->name('index');
+            Route::get('/create', [App\Http\Controllers\PurchaseOrderController::class, 'create'])->middleware('can:accounts_purchase_orders.create')->name('create');
+            Route::post('/', [App\Http\Controllers\PurchaseOrderController::class, 'store'])->middleware('can:accounts_purchase_orders.create')->name('store');
+            Route::get('/{purchaseOrder}', [App\Http\Controllers\PurchaseOrderController::class, 'show'])->middleware('can:accounts_purchase_orders.view')->name('show');
+            Route::get('/{purchaseOrder}/edit', [App\Http\Controllers\PurchaseOrderController::class, 'edit'])->middleware('can:accounts_purchase_orders.edit')->name('edit');
+            Route::put('/{purchaseOrder}', [App\Http\Controllers\PurchaseOrderController::class, 'update'])->middleware('can:accounts_purchase_orders.edit')->name('update');
+            Route::delete('/{purchaseOrder}', [App\Http\Controllers\PurchaseOrderController::class, 'destroy'])->middleware('can:accounts_purchase_orders.delete')->name('destroy');
+            Route::get('/{purchaseOrder}/print', [App\Http\Controllers\PurchaseOrderController::class, 'print'])->middleware('can:accounts_purchase_orders.view')->name('print');
+            Route::patch('/{purchaseOrder}/update-status', [App\Http\Controllers\PurchaseOrderController::class, 'updateStatus'])->middleware('can:accounts_purchase_orders.edit')->name('update-status');
         });
 
         // Accounts Expenses CRUD
         Route::prefix('expenses')->name('expenses.')->group(function () {
-            Route::get('/', [App\Http\Controllers\AccountExpenseController::class, 'index'])->name('index');
-            Route::get('/create', [App\Http\Controllers\AccountExpenseController::class, 'create'])->name('create');
-            Route::post('/', [App\Http\Controllers\AccountExpenseController::class, 'store'])->name('store');
-            Route::post('/sync-recurring', [App\Http\Controllers\AccountExpenseController::class, 'syncRecurring'])->name('sync-recurring');
-            Route::get('/pivot', [App\Http\Controllers\AccountExpenseController::class, 'pivot'])->name('pivot');
-            Route::get('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'show'])->name('show');
-            Route::get('/{expense}/edit', [App\Http\Controllers\AccountExpenseController::class, 'edit'])->name('edit');
-            Route::put('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'update'])->name('update');
-            Route::delete('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'destroy'])->name('destroy');
-            Route::delete('/{expense}/attachments/{index}', [App\Http\Controllers\AccountExpenseController::class, 'deleteAttachment'])->name('attachments.destroy');
+            Route::get('/', [App\Http\Controllers\AccountExpenseController::class, 'index'])->middleware('can:accounts_expenses.view')->name('index');
+            Route::get('/create', [App\Http\Controllers\AccountExpenseController::class, 'create'])->middleware('can:accounts_expenses.create')->name('create');
+            Route::post('/', [App\Http\Controllers\AccountExpenseController::class, 'store'])->middleware('can:accounts_expenses.create')->name('store');
+            Route::post('/sync-recurring', [App\Http\Controllers\AccountExpenseController::class, 'syncRecurring'])->middleware('can:accounts_expenses.create')->name('sync-recurring');
+            Route::get('/pivot', [App\Http\Controllers\AccountExpenseController::class, 'pivot'])->middleware('can:accounts_expenses.view')->name('pivot');
+            Route::get('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'show'])->middleware('can:accounts_expenses.view')->name('show');
+            Route::get('/{expense}/edit', [App\Http\Controllers\AccountExpenseController::class, 'edit'])->middleware('can:accounts_expenses.edit')->name('edit');
+            Route::put('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'update'])->middleware('can:accounts_expenses.edit')->name('update');
+            Route::delete('/{expense}', [App\Http\Controllers\AccountExpenseController::class, 'destroy'])->middleware('can:accounts_expenses.delete')->name('destroy');
+            Route::delete('/{expense}/attachments/{index}', [App\Http\Controllers\AccountExpenseController::class, 'deleteAttachment'])->middleware('can:accounts_expenses.delete')->name('attachments.destroy');
         });
 
         // Accounts Reports Group
         Route::prefix('reports')->name('reports.')->group(function () {
-            Route::get('/', [App\Http\Controllers\AccountExpenseReportController::class, 'index'])->name('index');
-            Route::get('/customer-balance-sheet', [App\Http\Controllers\CustomerBalanceSheetController::class, 'index'])->name('customer-balance-sheet');
-            Route::get('/customer-balance-sheet/export-pdf', [App\Http\Controllers\CustomerBalanceSheetController::class, 'exportPdf'])->name('customer-balance-sheet.export-pdf');
-            Route::get('/customer-balance-sheet/print', [App\Http\Controllers\CustomerBalanceSheetController::class, 'print'])->name('customer-balance-sheet.print');
+            Route::get('/', [App\Http\Controllers\AccountExpenseReportController::class, 'index'])->middleware('can:accounts_reports.view')->name('index');
+            Route::get('/customer-balance-sheet', [App\Http\Controllers\CustomerBalanceSheetController::class, 'index'])->middleware('can:accounts_reports.view')->name('customer-balance-sheet');
+            Route::get('/customer-balance-sheet/export-pdf', [App\Http\Controllers\CustomerBalanceSheetController::class, 'exportPdf'])->middleware('can:accounts_reports.view')->name('customer-balance-sheet.export-pdf');
+            Route::get('/customer-balance-sheet/print', [App\Http\Controllers\CustomerBalanceSheetController::class, 'print'])->middleware('can:accounts_reports.view')->name('customer-balance-sheet.print');
 
             // Expense Category Wise Report
-            Route::get('/expense-category-wise', [App\Http\Controllers\AccountExpenseReportController::class, 'categoryWise'])->name('expense-category-wise');
-            Route::get('/expense-category-wise/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportCategoryWiseExcel'])->name('expense-category-wise.export-excel');
-            Route::get('/expense-category-wise/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportCategoryWisePdf'])->name('expense-category-wise.export-pdf');
+            Route::get('/expense-category-wise', [App\Http\Controllers\AccountExpenseReportController::class, 'categoryWise'])->middleware('can:accounts_reports.view')->name('expense-category-wise');
+            Route::get('/expense-category-wise/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportCategoryWiseExcel'])->middleware('can:accounts_reports.view')->name('expense-category-wise.export-excel');
+            Route::get('/expense-category-wise/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportCategoryWisePdf'])->middleware('can:accounts_reports.view')->name('expense-category-wise.export-pdf');
 
             // Expense Subcategory Wise Report
-            Route::get('/expense-subcategory-wise', [App\Http\Controllers\AccountExpenseReportController::class, 'subcategoryWise'])->name('expense-subcategory-wise');
-            Route::get('/expense-subcategory-wise/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportSubcategoryWiseExcel'])->name('expense-subcategory-wise.export-excel');
-            Route::get('/expense-subcategory-wise/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportSubcategoryWisePdf'])->name('expense-subcategory-wise.export-pdf');
+            Route::get('/expense-subcategory-wise', [App\Http\Controllers\AccountExpenseReportController::class, 'subcategoryWise'])->middleware('can:accounts_reports.view')->name('expense-subcategory-wise');
+            Route::get('/expense-subcategory-wise/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportSubcategoryWiseExcel'])->middleware('can:accounts_reports.view')->name('expense-subcategory-wise.export-excel');
+            Route::get('/expense-subcategory-wise/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportSubcategoryWisePdf'])->middleware('can:accounts_reports.view')->name('expense-subcategory-wise.export-pdf');
 
             // Profit & Loss (P & L) Report
-            Route::get('/profit-and-loss', [App\Http\Controllers\AccountExpenseReportController::class, 'profitAndLoss'])->name('profit-and-loss');
-            Route::get('/profit-and-loss/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportProfitAndLossExcel'])->name('profit-and-loss.export-excel');
-            Route::get('/profit-and-loss/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportProfitAndLossPdf'])->name('profit-and-loss.export-pdf');
+            Route::get('/profit-and-loss', [App\Http\Controllers\AccountExpenseReportController::class, 'profitAndLoss'])->middleware('can:accounts_reports.view')->name('profit-and-loss');
+            Route::get('/profit-and-loss/export-excel', [App\Http\Controllers\AccountExpenseReportController::class, 'exportProfitAndLossExcel'])->middleware('can:accounts_reports.view')->name('profit-and-loss.export-excel');
+            Route::get('/profit-and-loss/export-pdf', [App\Http\Controllers\AccountExpenseReportController::class, 'exportProfitAndLossPdf'])->middleware('can:accounts_reports.view')->name('profit-and-loss.export-pdf');
         });
 
         // Zoho Books Migration / Integration Group
         Route::prefix('zoho')->name('zoho.')->group(function () {
-            Route::get('/', [App\Http\Controllers\ZohoBooksController::class, 'index'])->name('index');
-            Route::get('/settings', [App\Http\Controllers\ZohoBooksController::class, 'settings'])->name('settings');
-            Route::post('/settings', [App\Http\Controllers\ZohoBooksController::class, 'updateSettings'])->name('settings.update');
-            Route::get('/oauth/redirect', [App\Http\Controllers\ZohoBooksController::class, 'oauthRedirect'])->name('oauth.redirect');
-            Route::get('/callback', [App\Http\Controllers\ZohoBooksController::class, 'oauthCallback'])->name('oauth.callback');
-            Route::post('/manual-token', [App\Http\Controllers\ZohoBooksController::class, 'manualToken'])->name('manual-token');
-            Route::post('/select-organization', [App\Http\Controllers\ZohoBooksController::class, 'selectOrganization'])->name('select-organization');
-            Route::post('/fetch-organizations', [App\Http\Controllers\ZohoBooksController::class, 'fetchOrganizations'])->name('fetch-organizations');
-            Route::get('/test-connection', [App\Http\Controllers\ZohoBooksController::class, 'testConnection'])->name('test-connection');
-            Route::post('/disconnect', [App\Http\Controllers\ZohoBooksController::class, 'disconnect'])->name('disconnect');
+            Route::get('/', [App\Http\Controllers\ZohoBooksController::class, 'index'])->middleware('can:accounts_zoho.view')->name('index');
+            Route::get('/settings', [App\Http\Controllers\ZohoBooksController::class, 'settings'])->middleware('can:accounts_zoho.view')->name('settings');
+            Route::post('/settings', [App\Http\Controllers\ZohoBooksController::class, 'updateSettings'])->middleware('can:accounts_zoho.edit')->name('settings.update');
+            Route::get('/oauth/redirect', [App\Http\Controllers\ZohoBooksController::class, 'oauthRedirect'])->middleware('can:accounts_zoho.edit')->name('oauth.redirect');
+            Route::get('/callback', [App\Http\Controllers\ZohoBooksController::class, 'oauthCallback'])->middleware('can:accounts_zoho.edit')->name('oauth.callback');
+            Route::post('/manual-token', [App\Http\Controllers\ZohoBooksController::class, 'manualToken'])->middleware('can:accounts_zoho.edit')->name('manual-token');
+            Route::post('/select-organization', [App\Http\Controllers\ZohoBooksController::class, 'selectOrganization'])->middleware('can:accounts_zoho.edit')->name('select-organization');
+            Route::post('/fetch-organizations', [App\Http\Controllers\ZohoBooksController::class, 'fetchOrganizations'])->middleware('can:accounts_zoho.edit')->name('fetch-organizations');
+            Route::get('/test-connection', [App\Http\Controllers\ZohoBooksController::class, 'testConnection'])->middleware('can:accounts_zoho.view')->name('test-connection');
+            Route::post('/disconnect', [App\Http\Controllers\ZohoBooksController::class, 'disconnect'])->middleware('can:accounts_zoho.delete')->name('disconnect');
 
             // Invoices
-            Route::get('/invoices', [App\Http\Controllers\ZohoBooksController::class, 'invoices'])->name('invoices');
-            Route::get('/invoices/{id}', [App\Http\Controllers\ZohoBooksController::class, 'showInvoice'])->name('show-invoice');
-            Route::post('/invoices/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncInvoices'])->name('invoices.sync');
-            Route::post('/invoices/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migrateInvoice'])->name('invoices.migrate');
-            Route::post('/invoices/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigrateInvoices'])->name('invoices.bulk-migrate');
+            Route::get('/invoices', [App\Http\Controllers\ZohoBooksController::class, 'invoices'])->middleware('can:accounts_zoho.view')->name('invoices');
+            Route::get('/invoices/{id}', [App\Http\Controllers\ZohoBooksController::class, 'showInvoice'])->middleware('can:accounts_zoho.view')->name('show-invoice');
+            Route::post('/invoices/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncInvoices'])->middleware('can:accounts_zoho.create')->name('invoices.sync');
+            Route::post('/invoices/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migrateInvoice'])->middleware('can:accounts_zoho.edit')->name('invoices.migrate');
+            Route::post('/invoices/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigrateInvoices'])->middleware('can:accounts_zoho.edit')->name('invoices.bulk-migrate');
+            Route::post('/invoices/migrate-batch', [App\Http\Controllers\ZohoBooksController::class, 'batchMigrateInvoices'])->middleware('can:accounts_zoho.edit')->name('invoices.migrate-batch');
 
             // Expenses
-            Route::get('/expenses', [App\Http\Controllers\ZohoBooksController::class, 'expenses'])->name('expenses');
-            Route::post('/expenses/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncExpenses'])->name('expenses.sync');
-            Route::post('/expenses/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migrateExpense'])->name('expenses.migrate');
-            Route::post('/expenses/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigrateExpenses'])->name('expenses.bulk-migrate');
+            Route::get('/expenses', [App\Http\Controllers\ZohoBooksController::class, 'expenses'])->middleware('can:accounts_zoho.view')->name('expenses');
+            Route::post('/expenses/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncExpenses'])->middleware('can:accounts_zoho.create')->name('expenses.sync');
+            Route::post('/expenses/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migrateExpense'])->middleware('can:accounts_zoho.edit')->name('expenses.migrate');
+            Route::post('/expenses/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigrateExpenses'])->middleware('can:accounts_zoho.edit')->name('expenses.bulk-migrate');
+            Route::post('/expenses/migrate-batch', [App\Http\Controllers\ZohoBooksController::class, 'batchMigrateExpenses'])->middleware('can:accounts_zoho.edit')->name('expenses.migrate-batch');
 
             // Payment Collections (Customer Payments)
-            Route::get('/payments', [App\Http\Controllers\ZohoBooksController::class, 'payments'])->name('payments');
-            Route::post('/payments/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncPayments'])->name('payments.sync');
-            Route::post('/payments/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migratePayment'])->name('payments.migrate');
-            Route::post('/payments/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigratePayments'])->name('payments.bulk-migrate');
+            Route::prefix('payments')->group(function () {
+                Route::get('/', [App\Http\Controllers\ZohoBooksController::class, 'payments'])->middleware('can:accounts_zoho.view')->name('payments');
+                Route::post('/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncPayments'])->middleware('can:accounts_zoho.create')->name('payments.sync');
+                Route::post('/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migratePayment'])->middleware('can:accounts_zoho.edit')->name('payments.migrate');
+                Route::post('/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigratePayments'])->middleware('can:accounts_zoho.edit')->name('payments.bulk-migrate');
+                Route::post('/migrate-batch', [App\Http\Controllers\ZohoBooksController::class, 'batchMigratePayments'])->middleware('can:accounts_zoho.edit')->name('payments.migrate-batch');
+            });
+
+            // Quotations / Estimates
+            Route::prefix('quotations')->group(function () {
+                Route::get('/', [App\Http\Controllers\ZohoBooksController::class, 'quotations'])->middleware('can:accounts_zoho.view')->name('quotations');
+                Route::get('/{id}', [App\Http\Controllers\ZohoBooksController::class, 'showQuotation'])->middleware('can:accounts_zoho.view')->name('show-quotation');
+                Route::post('/sync', [App\Http\Controllers\ZohoBooksController::class, 'syncQuotations'])->middleware('can:accounts_zoho.create')->name('quotations.sync');
+                Route::post('/{id}/migrate', [App\Http\Controllers\ZohoBooksController::class, 'migrateQuotation'])->middleware('can:accounts_zoho.edit')->name('quotations.migrate');
+                Route::post('/bulk-migrate', [App\Http\Controllers\ZohoBooksController::class, 'bulkMigrateQuotations'])->middleware('can:accounts_zoho.edit')->name('quotations.bulk-migrate');
+                Route::post('/migrate-batch', [App\Http\Controllers\ZohoBooksController::class, 'batchMigrateQuotations'])->middleware('can:accounts_zoho.edit')->name('quotations.migrate-batch');
+            });
+
+            // Global Auto-Map all unmapped invoices & quotations to CRM Leads
+            Route::post('/auto-map-leads', [App\Http\Controllers\ZohoBooksController::class, 'autoMapLeads'])->middleware('can:accounts_zoho.edit')->name('auto-map-leads');
         });
     });
+
+    // Friendly redirects for Expense Reports without /accounts prefix
+    Route::redirect('/reports/expense-category-wise', '/accounts/reports/expense-category-wise');
+    Route::redirect('/reports/expense-subcategory-wise', '/accounts/reports/expense-subcategory-wise');
 
     Route::get('/reports/crm/payment-collection', [CrmReportController::class, 'paymentCollection'])
         ->name('reports.crm.payment-collection');
@@ -1251,11 +1283,13 @@ Route::post('/facebook-integration/update-token', [FacebookIntegrationController
     Route::patch('/quotations/{quotation}/approve', [QuotationController::class, 'approve'])->middleware('can:quotations.approve')->name('quotations.approve');
     Route::post('/quotations/{quotation}/send-email', [QuotationController::class, 'sendEmail'])->middleware('can:quotations.view')->name('quotations.send-email');
     Route::post('/quotations/{quotation}/convert-to-invoice', [QuotationController::class, 'convertToInvoice'])->name('quotations.convert-to-invoice');
+    Route::patch('/quotations/{quotation}/map-lead', [QuotationController::class, 'mapLead'])->middleware('can:quotations.create')->name('quotations.map-lead');
     Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->middleware('can:quotations.delete')->name('quotations.destroy');
 
 
     // Helper: product search for Select2 AJAX (optional)
     Route::get('/api/products-search', [QuotationController::class, 'productsApi'])->middleware('can:quotations.create')->name('api.products.search');
+    Route::get('/api/leads-search', [\App\Http\Controllers\LeadController::class, 'searchApi'])->name('api.leads.search');
 
     Route::post('/ai/summarize', [AiController::class, 'summarize'])->name('ai.summarize');
 

@@ -112,6 +112,9 @@
             <a href="{{ route('accounts.domains-hosting.index', ['tab' => 'hostings']) }}" class="dh-btn dh-btn-secondary">
                 <i class="bi bi-arrow-left"></i> Back
             </a>
+            <button type="button" class="dh-btn" style="background:linear-gradient(135deg,#7c3aed,#9333ea); color:#fff;" onclick="openMapDomainsModal()">
+                <i class="bi bi-globe"></i> Map Domains
+            </button>
             <button type="button" class="dh-btn dh-btn-outline" onclick="openMigrateModal()">
                 <i class="bi bi-arrow-left-right" style="color:#0284c7;"></i> Migrate Hosting
             </button>
@@ -187,6 +190,21 @@
             <div>
                 <div class="dh-stat-label">Total Renewal Spend</div>
                 <div class="dh-stat-val">₹{{ number_format($totalRenewalSpend > 0 ? $totalRenewalSpend : ($hosting->renewal_amount ?? 0), 2) }}</div>
+            </div>
+        </div>
+
+        <div class="dh-stat-card">
+            <div class="dh-stat-icon" style="background:#eff6ff; color:#2563eb;">
+                <i class="bi bi-globe"></i>
+            </div>
+            <div>
+                <div class="dh-stat-label">Mapped Domains</div>
+                <div class="dh-stat-val" style="font-size:18px; font-weight:800; color:#1d4ed8;">
+                    {{ $hosting->domains->count() }} {{ Str::plural('Domain', $hosting->domains->count()) }}
+                </div>
+                <div style="font-size:11px; color:#64748b; margin-top:3px;">
+                    Hosted on this server
+                </div>
             </div>
         </div>
 
@@ -357,6 +375,118 @@
             </div>
         </div>
 
+    </div>
+
+    {{-- Mapped Domains Card --}}
+    <div class="dh-card">
+        <div class="dh-card-header">
+            <div>
+                <div class="dh-card-title">
+                    <i class="bi bi-globe" style="color:#0284c7;"></i> Mapped Domains Hosted on this Server
+                    <span style="font-size:12px; font-weight:700; padding:2px 8px; border-radius:999px; background:#eff6ff; color:#1d4ed8; margin-left:6px; border:1px solid #bfdbfe;">
+                        {{ $hosting->domains->count() }} {{ Str::plural('Domain', $hosting->domains->count()) }}
+                    </span>
+                </div>
+                <div style="font-size:12px; color:#64748b; margin-top:2px;">
+                    All customer websites and domains hosted on this hosting account and its server
+                </div>
+            </div>
+            <button type="button" class="dh-btn dh-btn-primary" style="background:linear-gradient(135deg,#7c3aed,#9333ea);" onclick="openMapDomainsModal()">
+                <i class="bi bi-plus-lg"></i> Map Domains to this Hosting
+            </button>
+        </div>
+
+        @if($hosting->domains->isEmpty())
+            <div style="text-align:center; padding:45px 20px; color:#94a3b8;">
+                <i class="bi bi-globe" style="font-size:42px; display:block; margin-bottom:10px; color:#cbd5e1;"></i>
+                <div style="font-size:15px; font-weight:700; color:#475569; margin-bottom:4px;">No Domains Mapped to this Hosting Yet</div>
+                <div style="font-size:13px; color:#64748b; margin-bottom:16px;">
+                    Map one or multiple domains to <strong>{{ $hosting->hosting_name }}</strong> so you can track which websites are running on this server.
+                </div>
+                <button type="button" class="dh-btn dh-btn-primary" style="background:linear-gradient(135deg,#7c3aed,#9333ea);" onclick="openMapDomainsModal()">
+                    <i class="bi bi-plus-lg"></i> Map Domains Now
+                </button>
+            </div>
+        @else
+            <div style="overflow-x:auto;">
+                <table class="dh-tbl">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Domain Name</th>
+                            <th>Registrar</th>
+                            <th>Status</th>
+                            <th>Expiration Date</th>
+                            <th>Client / Project</th>
+                            <th style="text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($hosting->domains as $domainItem)
+                        @php
+                            $dDays = $domainItem->days_until_expiration;
+                            $dExpiring = ($dDays !== null && $dDays >= 0 && $dDays <= 30);
+                            $dExpired = ($dDays !== null && $dDays < 0);
+                        @endphp
+                        <tr>
+                            <td style="color:#94a3b8; font-weight:700;">#{{ $domainItem->id }}</td>
+                            <td>
+                                <a href="{{ route('accounts.domains-hosting.domains.show', $domainItem->id) }}" style="font-size:14px; font-weight:800; color:#0f172a; text-decoration:none;" onmouseover="this.style.color='#fe5f04'" onmouseout="this.style.color='#0f172a'">
+                                    <i class="bi bi-globe" style="color:#0284c7; margin-right:4px;"></i> {{ $domainItem->domain_name }}
+                                </a>
+                            </td>
+                            <td><span style="font-weight:600; color:#475569;">{{ $domainItem->registrar }}</span></td>
+                            <td>
+                                @if($dExpired)
+                                    <span class="dh-badge status-expired">EXPIRED</span>
+                                @elseif($dExpiring)
+                                    <span class="dh-badge status-pending">EXPIRING SOON</span>
+                                @elseif($domainItem->status === 'ACTIVE')
+                                    <span class="dh-badge status-active">ACTIVE</span>
+                                @else
+                                    <span class="dh-badge status-pending">{{ $domainItem->status }}</span>
+                                @endif
+                            </td>
+                            <td style="font-weight:700; white-space:nowrap;">
+                                @if($domainItem->expires_at)
+                                    <div>{{ $domainItem->expires_at->format('d M, Y') }}</div>
+                                    @if($dExpired)
+                                        <span style="font-size:11px; color:#dc2626;">({{ abs($dDays) }} days ago)</span>
+                                    @elseif($dDays !== null)
+                                        <span style="font-size:11px; color:{{ $dExpiring ? '#d97706' : '#16a34a' }};">({{ $dDays }} days left)</span>
+                                    @endif
+                                @else
+                                    <span style="color:#94a3b8;">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if($domainItem->lead)
+                                    <span class="badge" style="background:#e0f2fe; color:#0369a1; font-size:11px; font-weight:700;">
+                                        <i class="bi bi-person-check-fill"></i> {{ $domainItem->lead->contact_name ?: $domainItem->lead->company_name }}
+                                    </span>
+                                @else
+                                    {{ $domainItem->client_name ?: '—' }}
+                                @endif
+                            </td>
+                            <td style="text-align:right;">
+                                <div style="display:inline-flex; gap:6px;">
+                                    <a href="{{ route('accounts.domains-hosting.domains.show', $domainItem->id) }}" class="dh-btn dh-btn-outline" style="padding:4px 10px; font-size:11px;" title="View Domain Details">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+                                    <form method="POST" action="{{ route('accounts.domains-hosting.hostings.unlink-domain', [$hosting->id, $domainItem->id]) }}" onsubmit="return confirm('Are you sure you want to unlink domain {{ $domainItem->domain_name }} from this hosting?')" style="margin:0;">
+                                        @csrf
+                                        <button type="submit" class="dh-btn dh-btn-danger" style="padding:4px 8px; font-size:11px;" title="Unlink from this Hosting">
+                                            Unlink
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
     </div>
 
     {{-- Hosting Renewals History Card --}}
@@ -651,6 +781,80 @@
     </div>
 </div>
 
+{{-- MODAL 4: Map Multiple Domains to this Hosting Modal --}}
+<div class="modal-overlay" id="mapDomainsModal">
+    <div class="modal-box" style="max-width:620px;">
+        <div class="modal-header">
+            <div class="modal-title">
+                <i class="bi bi-globe" style="color:#7c3aed; margin-right:6px;"></i> Map Domains to {{ $hosting->hosting_name }}
+            </div>
+            <button type="button" class="modal-close" onclick="closeMapDomainsModal()">&times;</button>
+        </div>
+        <form method="POST" action="{{ route('accounts.domains-hosting.hostings.map-domains', $hosting->id) }}">
+            @csrf
+            <div class="modal-body">
+                <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px; padding:12px 14px; font-size:13px; color:#5b21b6;">
+                    Select the domain(s) you wish to map and host on <strong>{{ $hosting->hosting_name }}</strong> @if($hosting->server) [Server: {{ $hosting->server->server_name }}] @endif.
+                </div>
+
+                {{-- Search & Select All controls --}}
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:4px;">
+                    <input type="text" id="domainFilterInput" class="form-input" style="padding:6px 10px; font-size:12px;" placeholder="Filter available domains..." onkeyup="filterAvailableDomains(this.value)">
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:#334155; cursor:pointer; white-space:nowrap;">
+                        <input type="checkbox" id="selectAllAvailable" onchange="toggleSelectAllAvailable(this)"> Select All
+                    </label>
+                </div>
+
+                <div style="max-height:280px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:10px; padding:8px; background:#fff; display:flex; flex-direction:column; gap:4px;" id="availableDomainsList">
+                    @forelse($availableDomains as $availDomain)
+                        <label class="available-domain-row" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-radius:8px; border:1px solid #f1f5f9; background:#f8fafc; cursor:pointer; transition:all .15s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <input type="checkbox" name="domain_ids[]" value="{{ $availDomain->id }}" class="available-domain-cb" onchange="updateSelectedDomainsCount()">
+                                <div>
+                                    <div style="font-weight:700; color:#0f172a; font-size:13px;" class="domain-text-name">
+                                        {{ $availDomain->domain_name }}
+                                    </div>
+                                    <div style="font-size:11px; color:#64748b;">
+                                        {{ $availDomain->registrar }} • Expiry: {{ $availDomain->expires_at ? $availDomain->expires_at->format('d M, Y') : 'N/A' }}
+                                        @if($availDomain->lead)
+                                            • <span style="color:#0284c7;">{{ $availDomain->lead->contact_name ?: $availDomain->lead->company_name }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                @if($availDomain->hosting)
+                                    <span style="font-size:10px; background:#fff1f2; color:#be123c; padding:2px 6px; border-radius:4px; font-weight:700;" title="Will be moved to this hosting">
+                                        On: {{ Str::limit($availDomain->hosting->hosting_name, 14) }}
+                                    </span>
+                                @else
+                                    <span style="font-size:10px; background:#f1f5f9; color:#64748b; padding:2px 6px; border-radius:4px; font-weight:700;">
+                                        Unmapped
+                                    </span>
+                                @endif
+                            </div>
+                        </label>
+                    @empty
+                        <div style="text-align:center; padding:24px; color:#94a3b8; font-size:13px;">
+                            No available domains to map.
+                        </div>
+                    @endforelse
+                </div>
+
+                <div style="font-size:12px; font-weight:700; color:#475569;" id="selectedDomainSummary">
+                    0 domain(s) selected
+                </div>
+            </div>
+            <div style="padding:14px 24px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="dh-btn dh-btn-secondary" onclick="closeMapDomainsModal()">Cancel</button>
+                <button type="submit" class="dh-btn dh-btn-primary" style="background:linear-gradient(135deg,#7c3aed,#9333ea);">
+                    <i class="bi bi-check-lg"></i> Map Selected Domains
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -769,6 +973,43 @@ function openEditHostingModal() {
 
 function closeEditHostingModal() {
     $('#editHostingModal').removeClass('active');
+}
+
+function openMapDomainsModal() {
+    $('#mapDomainsModal').addClass('active');
+}
+
+function closeMapDomainsModal() {
+    $('#mapDomainsModal').removeClass('active');
+}
+
+function toggleSelectAllAvailable(master) {
+    const rows = document.querySelectorAll('.available-domain-row');
+    rows.forEach(row => {
+        if (row.style.display !== 'none') {
+            const cb = row.querySelector('.available-domain-cb');
+            if (cb) cb.checked = master.checked;
+        }
+    });
+    updateSelectedDomainsCount();
+}
+
+function updateSelectedDomainsCount() {
+    const checked = document.querySelectorAll('.available-domain-cb:checked').length;
+    document.getElementById('selectedDomainSummary').textContent = checked + ' domain' + (checked === 1 ? '' : 's') + ' selected';
+}
+
+function filterAvailableDomains(val) {
+    const filter = (val || '').toLowerCase().trim();
+    const rows = document.querySelectorAll('.available-domain-row');
+    rows.forEach(row => {
+        const text = row.querySelector('.domain-text-name')?.textContent.toLowerCase() || '';
+        if (text.includes(filter)) {
+            row.style.display = 'flex';
+        } else {
+            row.style.display = 'none';
+        }
+    });
 }
 
 function autoFillShowHostingServer(selectEl) {

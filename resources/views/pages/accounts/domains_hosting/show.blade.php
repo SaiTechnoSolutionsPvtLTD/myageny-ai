@@ -116,6 +116,9 @@
             <a href="{{ route('accounts.domains-hosting.index', ['tab' => 'domains']) }}" class="dh-btn dh-btn-secondary">
                 <i class="bi bi-arrow-left"></i> Back
             </a>
+            <button type="button" class="dh-btn" style="background:linear-gradient(135deg,#7c3aed,#9333ea); color:#fff;" onclick="openMapHostingModal()">
+                <i class="bi bi-hdd-network"></i> {{ $domain->hosting ? 'Change Hosting' : 'Map to Hosting' }}
+            </button>
             <button type="button" class="dh-btn dh-btn-outline" onclick="openMigrateModal()">
                 <i class="bi bi-arrow-left-right" style="color:#0284c7;"></i> Migrate Domain
             </button>
@@ -191,6 +194,27 @@
             <div>
                 <div class="dh-stat-label">Total Renewal Spend</div>
                 <div class="dh-stat-val">₹{{ number_format($totalRenewalSpend, 2) }}</div>
+            </div>
+        </div>
+
+        <div class="dh-stat-card">
+            <div class="dh-stat-icon" style="background:#f5f3ff; color:#7c3aed;">
+                <i class="bi bi-hdd-network"></i>
+            </div>
+            <div>
+                <div class="dh-stat-label">Hosting / Server</div>
+                <div class="dh-stat-val" style="font-size:15px; font-weight:800; color:#5b21b6;">
+                    {{ $domain->hosting ? $domain->hosting->hosting_name : 'Not Mapped' }}
+                </div>
+                <div style="font-size:11px; color:#64748b; margin-top:3px;">
+                    @if($domain->hosting?->server)
+                        🖥️ {{ $domain->hosting->server->server_name }}
+                    @elseif($domain->hosting?->ip_address)
+                        🌐 {{ $domain->hosting->ip_address }}
+                    @else
+                        Click above to map
+                    @endif
+                </div>
             </div>
         </div>
 
@@ -345,6 +369,160 @@
             </div>
         </div>
 
+    </div>
+
+    {{-- Mapped Hosting & Server Card --}}
+    <div class="dh-card">
+        <div class="dh-card-header">
+            <div>
+                <div class="dh-card-title">
+                    <i class="bi bi-hdd-network-fill" style="color:#7c3aed;"></i> Mapped Hosting Account & Server
+                    @if($domain->hosting)
+                        <span style="font-size:12px; font-weight:700; padding:2px 8px; border-radius:999px; background:#f5f3ff; color:#7c3aed; margin-left:6px; border:1px solid #ddd6fe;">
+                            ✓ Active Link
+                        </span>
+                    @else
+                        <span style="font-size:12px; font-weight:700; padding:2px 8px; border-radius:999px; background:#fef3c7; color:#d97706; margin-left:6px; border:1px solid #fde68a;">
+                            ⚠️ Not Mapped
+                        </span>
+                    @endif
+                </div>
+                <div style="font-size:12px; color:#64748b; margin-top:2px;">
+                    Understand which server, provider, and IP address hosts this domain's website and application
+                </div>
+            </div>
+            <div style="display:flex; gap:8px;">
+                @if($domain->hosting)
+                    <button type="button" class="dh-btn dh-btn-outline" style="padding:6px 14px; font-size:12px;" onclick="openMapHostingModal()">
+                        <i class="bi bi-arrow-left-right" style="color:#7c3aed;"></i> Change Hosting
+                    </button>
+                    <form method="POST" action="{{ route('accounts.domains-hosting.domains.unlink-hosting', $domain->id) }}" onsubmit="return confirm('Are you sure you want to unlink this domain from hosting?')" style="margin:0;">
+                        @csrf
+                        <button type="submit" class="dh-btn dh-btn-danger" style="padding:6px 12px; font-size:12px;">
+                            Unlink Hosting
+                        </button>
+                    </form>
+                @else
+                    <button type="button" class="dh-btn" style="background:linear-gradient(135deg,#7c3aed,#9333ea); color:#fff; padding:6px 14px; font-size:12px;" onclick="openMapHostingModal()">
+                        <i class="bi bi-plus-lg"></i> Map to Hosting / Server
+                    </button>
+                @endif
+            </div>
+        </div>
+        <div class="dh-card-body">
+            @if($domain->hosting)
+                <div class="detail-grid" style="grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));">
+                    <div class="detail-item">
+                        <span class="detail-label">Hosting Account Name</span>
+                        <span class="detail-val">
+                            <a href="{{ route('accounts.domains-hosting.hostings.show', $domain->hosting->id) }}" style="font-size:16px; font-weight:800; color:#0f172a; text-decoration:none;" onmouseover="this.style.color='#7c3aed'" onmouseout="this.style.color='#0f172a'" title="View hosting record & renewals">
+                                <i class="bi bi-hdd-network" style="color:#7c3aed;"></i> {{ $domain->hosting->hosting_name }}
+                                <i class="bi bi-box-arrow-up-right" style="font-size:12px; margin-left:4px; color:#94a3b8;"></i>
+                            </a>
+                        </span>
+                    </div>
+
+                    <div class="detail-item">
+                        <span class="detail-label">Server (From Server Master)</span>
+                        <span class="detail-val">
+                            @if($domain->hosting->server)
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <span style="font-size:15px; font-weight:800; color:#5b21b6;">
+                                        🖥️ {{ $domain->hosting->server->server_name }}
+                                    </span>
+                                    <span style="font-size:10px; font-weight:700; background:#ede9fe; color:#6d28d9; padding:2px 6px; border-radius:4px;">
+                                        Master
+                                    </span>
+                                </div>
+                            @else
+                                <span style="font-size:14px; font-weight:700; color:#334155;">{{ $domain->hosting->hosting_name }}</span>
+                            @endif
+                        </span>
+                    </div>
+
+                    <div class="detail-item">
+                        <span class="detail-label">Server IP Address</span>
+                        <span class="detail-val">
+                            @php
+                                $ip = $domain->hosting->server?->ip_address ?: $domain->hosting->ip_address;
+                            @endphp
+                            @if($ip)
+                                <code style="background:#f1f5f9; padding:4px 10px; border-radius:6px; font-size:13px; font-weight:800; color:#0f172a; border:1px solid #cbd5e1;">
+                                    🌐 {{ $ip }}
+                                </code>
+                            @else
+                                <span style="color:#94a3b8;">Not assigned</span>
+                            @endif
+                        </span>
+                    </div>
+
+                    <div class="detail-item">
+                        <span class="detail-label">Hosting Provider</span>
+                        <span class="detail-val">
+                            <strong>{{ $domain->hosting->provider }}</strong>
+                            @if($domain->hosting->server && $domain->hosting->server->provider_name && $domain->hosting->server->provider_name !== $domain->hosting->provider)
+                                <span style="font-size:12px; color:#64748b;">(Server: {{ $domain->hosting->server->provider_name }})</span>
+                            @endif
+                        </span>
+                    </div>
+
+                    <div class="detail-item">
+                        <span class="detail-label">Plan Type</span>
+                        <span class="detail-val">
+                            <span class="badge" style="background:#eff6ff; color:#2563eb; font-size:12px; font-weight:700; padding:3px 8px; border-radius:6px;">
+                                {{ $domain->hosting->plan_type }}
+                            </span>
+                        </span>
+                    </div>
+
+                    <div class="detail-item">
+                        <span class="detail-label">Allocated Storage / Disk</span>
+                        <span class="detail-val">
+                            @if($domain->hosting->allocated_storage)
+                                <code style="background:#f8fafc; border:1px solid #e2e8f0; padding:2px 8px; border-radius:6px; font-size:12px; font-weight:700; color:#0f172a;">
+                                    <i class="bi bi-hdd" style="color:#0284c7;"></i> {{ $domain->hosting->allocated_storage }}
+                                </code>
+                            @elseif($domain->hosting->server && $domain->hosting->server->disk_space)
+                                <code style="background:#f8fafc; border:1px solid #e2e8f0; padding:2px 8px; border-radius:6px; font-size:12px; font-weight:700; color:#0f172a;">
+                                    <i class="bi bi-hdd" style="color:#0284c7;"></i> {{ $domain->hosting->server->disk_space }}
+                                </code>
+                            @else
+                                <span style="color:#94a3b8;">Not specified</span>
+                            @endif
+                        </span>
+                    </div>
+
+                    <div class="detail-item">
+                        <span class="detail-label">Hosting Status</span>
+                        <span class="detail-val">
+                            @if($domain->hosting->status === 'ACTIVE')
+                                <span class="dh-badge status-active">ACTIVE</span>
+                            @else
+                                <span class="dh-badge status-pending">{{ $domain->hosting->status }}</span>
+                            @endif
+                        </span>
+                    </div>
+
+                    <div class="detail-item">
+                        <span class="detail-label">Hosting Next Renewal</span>
+                        <span class="detail-val" style="font-weight:700; color:#0f172a;">
+                            {{ $domain->hosting->renewal_date ? $domain->hosting->renewal_date->format('d M, Y') : '—' }}
+                        </span>
+                    </div>
+                </div>
+            @else
+                <div style="text-align:center; padding:36px 20px; border:2px dashed #cbd5e1; border-radius:12px; background:#f8fafc;">
+                    <i class="bi bi-hdd-network" style="font-size:42px; color:#94a3b8; display:block; margin-bottom:8px;"></i>
+                    <div style="font-size:15px; font-weight:800; color:#1e293b; margin-bottom:4px;">No Hosting Account / Server Mapped Yet</div>
+                    <div style="font-size:12px; color:#64748b; max-width:440px; margin:0 auto 16px;">
+                        Link this domain to an active hosting account so you can easily see which server, provider, and IP address host this domain's website.
+                    </div>
+                    <button type="button" class="dh-btn dh-btn-primary" style="background:linear-gradient(135deg,#7c3aed,#9333ea);" onclick="openMapHostingModal()">
+                        <i class="bi bi-plus-lg"></i> Map to Hosting / Server
+                    </button>
+                </div>
+            @endif
+        </div>
     </div>
 
     {{-- Renewals History Card --}}
@@ -578,6 +756,18 @@
                 </div>
 
                 <div class="form-group">
+                    <label class="form-label">Mapped Hosting / Server</label>
+                    <select name="hosting_record_id" class="form-input">
+                        <option value="">-- None (Unmapped) --</option>
+                        @foreach($hostings as $h)
+                            <option value="{{ $h->id }}" {{ $domain->hosting_record_id == $h->id ? 'selected' : '' }}>
+                                {{ $h->hosting_name }} [{{ $h->provider }}] @if($h->server) • Server: {{ $h->server->server_name }} ({{ $h->server->ip_address }}) @elseif($h->ip_address) • IP: {{ $h->ip_address }} @endif
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">Client / Project Name</label>
                     <input type="text" name="client_name" class="form-input" value="{{ $domain->client_name }}">
                 </div>
@@ -600,6 +790,48 @@
                 <button type="button" class="dh-btn dh-btn-secondary" onclick="closeEditDomainModal()">Cancel</button>
                 <button type="submit" class="dh-btn dh-btn-primary">
                     <i class="bi bi-save"></i> Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- MODAL 4: Map Domain to Hosting Modal --}}
+<div class="modal-overlay" id="mapHostingModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div class="modal-title">
+                <i class="bi bi-hdd-network-fill" style="color:#7c3aed; margin-right:6px;"></i> Map Domain to Hosting / Server
+            </div>
+            <button type="button" class="modal-close" onclick="closeMapHostingModal()">&times;</button>
+        </div>
+        <form method="POST" action="{{ route('accounts.domains-hosting.domains.map-hosting', $domain->id) }}">
+            @csrf
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Domain Name</label>
+                    <input type="text" class="form-input" value="{{ $domain->domain_name }}" readonly style="background:#f1f5f9; font-weight:800; color:#0f172a;">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Select Hosting Account / Server <span style="color:#dc2626;">*</span></label>
+                    <select name="hosting_record_id" class="form-input" required>
+                        <option value="">-- Choose Hosting Account / Server --</option>
+                        @foreach($hostings as $h)
+                            <option value="{{ $h->id }}" {{ $domain->hosting_record_id == $h->id ? 'selected' : '' }}>
+                                {{ $h->hosting_name }} [{{ $h->provider }}] @if($h->server) • Server: {{ $h->server->server_name }} ({{ $h->server->ip_address }}) @elseif($h->ip_address) • IP: {{ $h->ip_address }} @endif
+                            </option>
+                        @endforeach
+                    </select>
+                    <div style="font-size:11px; color:#64748b; margin-top:3px;">
+                        This will associate <strong>{{ $domain->domain_name }}</strong> with this hosting server, enabling you to track its host, IP, and provider.
+                    </div>
+                </div>
+            </div>
+            <div style="padding:14px 24px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="dh-btn dh-btn-secondary" onclick="closeMapHostingModal()">Cancel</button>
+                <button type="submit" class="dh-btn dh-btn-primary" style="background:linear-gradient(135deg,#7c3aed,#9333ea);">
+                    <i class="bi bi-check-lg"></i> Save Hosting Mapping
                 </button>
             </div>
         </form>
@@ -724,6 +956,14 @@ function openEditDomainModal() {
 
 function closeEditDomainModal() {
     $('#editDomainModal').removeClass('active');
+}
+
+function openMapHostingModal() {
+    $('#mapHostingModal').addClass('active');
+}
+
+function closeMapHostingModal() {
+    $('#mapHostingModal').removeClass('active');
 }
 
 // Close modals on clicking overlay backdrop

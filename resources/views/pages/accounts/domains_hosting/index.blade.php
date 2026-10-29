@@ -196,6 +196,16 @@
                         </div>
                     </div>
                     <div class="dh-stat-card">
+                        <div class="dh-stat-icon" style="background:#f5f3ff; color:#7c3aed;">
+                            <i class="bi bi-hdd-network"></i>
+                        </div>
+                        <div>
+                            <div class="dh-stat-label">Mapped to Hosting</div>
+                            <div class="dh-stat-val" style="color:#7c3aed;">{{ $domainStats['mapped_to_hosting'] ?? 0 }}</div>
+                            <div style="font-size:11px; color:#64748b; margin-top:2px;">{{ $domainStats['unmapped_hosting'] ?? 0 }} Unmapped</div>
+                        </div>
+                    </div>
+                    <div class="dh-stat-card">
                         <div class="dh-stat-icon" style="background:#fef3c7; color:#d97706;">
                             <i class="bi bi-exclamation-circle-fill"></i>
                         </div>
@@ -222,10 +232,10 @@
                 <div class="dh-filter-bar">
                     <div class="dh-search-wrap">
                         <i class="bi bi-search dh-search-ico"></i>
-                        <input type="text" name="search" class="dh-search-input" placeholder="Search domain name, registrar, client..." value="{{ request('search') }}">
+                        <input type="text" name="search" class="dh-search-input" placeholder="Search domain name, registrar, hosting, server, client..." value="{{ request('search') }}">
                     </div>
 
-                    <select name="status" class="dh-select" style="min-width:160px; flex-shrink:0;">
+                    <select name="status" class="dh-select" style="min-width:150px; flex-shrink:0;">
                         <option value="">All Status</option>
                         <option value="ACTIVE" {{ request('status') === 'ACTIVE' ? 'selected' : '' }}>ACTIVE</option>
                         <option value="expiring_soon" {{ request('status') === 'expiring_soon' ? 'selected' : '' }}>Expiring Soon (30 Days)</option>
@@ -234,16 +244,42 @@
                         <option value="CANCELLED" {{ request('status') === 'CANCELLED' ? 'selected' : '' }}>CANCELLED</option>
                     </select>
 
+                    <select name="hosting_id" class="dh-select" style="min-width:180px; flex-shrink:0;">
+                        <option value="">All Hostings / Servers</option>
+                        <option value="unmapped" {{ request('hosting_id') === 'unmapped' ? 'selected' : '' }}>⚠️ Not Mapped to Hosting</option>
+                        @foreach($allHostingsList as $h)
+                            <option value="{{ $h->id }}" {{ request('hosting_id') == $h->id ? 'selected' : '' }}>
+                                {{ $h->hosting_name }} @if($h->server) ({{ $h->server->server_name }}) @endif
+                            </option>
+                        @endforeach
+                    </select>
+
                     <button type="submit" class="dh-btn dh-btn-primary" style="padding:8px 16px; font-size:12px; flex-shrink:0;">
                         <i class="bi bi-funnel"></i> Filter
                     </button>
-                    @if(request()->hasAny(['search','status']))
+                    @if(request()->hasAny(['search','status','hosting_id']))
                         <a href="{{ route('accounts.domains-hosting.index', ['tab' => 'domains']) }}" class="dh-btn dh-btn-secondary" style="padding:8px 14px; font-size:12px; flex-shrink:0;">
                             Reset
                         </a>
                     @endif
                 </div>
             </form>
+
+            {{-- Bulk Actions Bar (Appears when checkboxes selected) --}}
+            <div id="bulkActionsBar" style="display:none; padding:10px 20px; background:#0f172a; color:#fff; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; border-bottom:1px solid #1e293b;">
+                <div style="display:flex; align-items:center; gap:12px; font-size:13px; font-weight:700;">
+                    <span style="background:#fe5f04; color:#fff; width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px;" id="selectedCountBadge">0</span>
+                    <span id="selectedCountText">0 domain(s) selected</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <button type="button" class="dh-btn" style="background:#7c3aed; color:#fff; font-size:12px; padding:6px 14px;" onclick="openBulkMapHostingModal()">
+                        <i class="bi bi-hdd-network"></i> Map Selected to Hosting / Server
+                    </button>
+                    <button type="button" class="dh-btn dh-btn-secondary" style="font-size:12px; padding:6px 12px; background:#334155; color:#f8fafc;" onclick="deselectAllDomains()">
+                        Deselect All
+                    </button>
+                </div>
+            </div>
 
             {{-- Table --}}
             @if($domains->isEmpty())
@@ -256,10 +292,14 @@
                     <table class="dh-tbl">
                         <thead>
                             <tr>
+                                <th style="width:36px; text-align:center;">
+                                    <input type="checkbox" id="selectAllDomains" onchange="toggleSelectAllDomains(this)" title="Select all domains on this page">
+                                </th>
                                 <th>#</th>
                                 <th>Domain Name</th>
                                 <th>Registrar</th>
                                 <th>Status</th>
+                                <th>Hosting / Server</th>
                                 <th>Expiration Date</th>
                                 <th>Auto Renew</th>
                                 <th>Privacy</th>
@@ -275,6 +315,9 @@
                                 $isExpired = ($days !== null && $days < 0);
                             @endphp
                             <tr>
+                                <td style="text-align:center;">
+                                    <input type="checkbox" class="domain-checkbox" value="{{ $item->id }}" data-name="{{ $item->domain_name }}" onchange="handleDomainCheckboxChange()">
+                                </td>
                                 <td style="color:#94a3b8; font-weight:700;">#{{ $item->id }}</td>
                                 <td>
                                     <a href="{{ route('accounts.domains-hosting.domains.show', $item->id) }}" style="color:#0f172a; text-decoration:none; font-weight:800;" onmouseover="this.style.color='#fe5f04'" onmouseout="this.style.color='#0f172a'" title="Click to view domain details, lead mapping & renewals">
@@ -296,6 +339,31 @@
                                         <span class="dh-badge status-active">ACTIVE</span>
                                     @else
                                         <span class="dh-badge status-pending">{{ $item->status }}</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($item->hosting)
+                                        <a href="{{ route('accounts.domains-hosting.hostings.show', $item->hosting->id) }}" style="text-decoration:none;" title="Hosting: {{ $item->hosting->hosting_name }} | Provider: {{ $item->hosting->provider }} | IP: {{ $item->hosting->ip_address ?: ($item->hosting->server?->ip_address ?: '—') }}">
+                                            <span class="badge" style="background:#f0fdf4; color:#15803d; font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; border:1px solid #bbf7d0;">
+                                                <i class="bi bi-hdd-network-fill"></i> {{ $item->hosting->hosting_name }}
+                                            </span>
+                                        </a>
+                                        @if($item->hosting->server)
+                                            <div style="font-size:10px; color:#64748b; margin-top:2px; display:flex; align-items:center; gap:3px;">
+                                                <i class="bi bi-server" style="color:#7c3aed;"></i> {{ $item->hosting->server->server_name }}
+                                                @if($item->hosting->server->ip_address)
+                                                    <code style="font-size:9px; background:#f1f5f9; padding:1px 4px; border-radius:3px;">{{ $item->hosting->server->ip_address }}</code>
+                                                @endif
+                                            </div>
+                                        @elseif($item->hosting->ip_address)
+                                            <div style="font-size:10px; color:#64748b; margin-top:2px;">
+                                                <code style="font-size:9px; background:#f1f5f9; padding:1px 4px; border-radius:3px;">{{ $item->hosting->ip_address }}</code>
+                                            </div>
+                                        @endif
+                                    @else
+                                        <button type="button" class="dh-btn dh-btn-outline" style="padding:2px 8px; font-size:10px; border-style:dashed; color:#64748b;" onclick="openSingleMapHostingModal({{ $item->id }}, '{{ addslashes($item->domain_name) }}')">
+                                            <i class="bi bi-plus"></i> Map Hosting
+                                        </button>
                                     @endif
                                 </td>
                                 <td style="font-weight:700; white-space:nowrap;">
@@ -352,6 +420,7 @@
                                                     'expires_at' => $item->expires_at ? $item->expires_at->format('Y-m-d') : '',
                                                     'auto_renew' => $item->auto_renew,
                                                     'privacy' => $item->privacy,
+                                                    'hosting_record_id' => $item->hosting_record_id,
                                                     'client_name' => $item->client_name ?: '',
                                                     'notes' => $item->notes ?: '',
                                                 ]) }}"
@@ -467,6 +536,7 @@
                                 <th>IP Address</th>
                                 <th>Plan Type</th>
                                 <th>Storage</th>
+                                <th>Mapped Domains</th>
                                 <th>Status</th>
                                 <th>Renewal Date</th>
                                 <th>Renewal Amount</th>
@@ -499,6 +569,17 @@
                                     @else
                                         <span style="color:#94a3b8; font-size:12px;">—</span>
                                     @endif
+                                </td>
+                                <td>
+                                    <a href="{{ route('accounts.domains-hosting.hostings.show', $item->id) }}" style="text-decoration:none;" title="Click to view and manage mapped domains">
+                                        @if(($item->domains_count ?? 0) > 0)
+                                            <span class="badge" style="background:#eff6ff; color:#1d4ed8; font-size:11px; font-weight:700; display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; border:1px solid #bfdbfe;">
+                                                <i class="bi bi-globe"></i> {{ $item->domains_count }} {{ Str::plural('domain', $item->domains_count) }}
+                                            </span>
+                                        @else
+                                            <span style="color:#94a3b8; font-size:11px;">0 domains</span>
+                                        @endif
+                                    </a>
                                 </td>
                                 <td>
                                     @if($isExpired)
@@ -634,6 +715,17 @@
                     </label>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Mapped Hosting / Server (Optional)</label>
+                    <select name="hosting_record_id" class="form-input">
+                        <option value="">-- None (Unmapped) --</option>
+                        @foreach($allHostingsList as $h)
+                            <option value="{{ $h->id }}">
+                                {{ $h->hosting_name }} [{{ $h->provider }}] @if($h->server) • Server: {{ $h->server->server_name }} ({{ $h->server->ip_address }}) @elseif($h->ip_address) • IP: {{ $h->ip_address }} @endif
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Notes / Remarks</label>
                     <textarea name="notes" class="form-input" rows="2" placeholder="Additional notes..."></textarea>
                 </div>
@@ -674,6 +766,17 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Mapped Hosting / Server</label>
+                    <select id="edit-d-hosting_record_id" name="hosting_record_id" class="form-input">
+                        <option value="">-- None (Unmapped) --</option>
+                        @foreach($allHostingsList as $h)
+                            <option value="{{ $h->id }}">
+                                {{ $h->hosting_name }} [{{ $h->provider }}] @if($h->server) • Server: {{ $h->server->server_name }} ({{ $h->server->ip_address }}) @elseif($h->ip_address) • IP: {{ $h->ip_address }} @endif
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Expiration Date</label>
                     <input type="date" id="edit-d-expires_at" name="expires_at" class="form-input">
                 </div>
@@ -690,6 +793,87 @@
                     <textarea id="edit-d-notes" name="notes" class="form-input" rows="2"></textarea>
                 </div>
                 <button type="submit" class="dh-btn dh-btn-primary" style="justify-content:center; padding:10px;">Update Domain</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- Bulk Map Domains to Hosting Modal --}}
+<div class="modal-overlay" id="bulkMapHostingModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div class="modal-title">
+                <i class="bi bi-hdd-network" style="color:#7c3aed;"></i> Map Selected Domains to Hosting
+            </div>
+            <button type="button" class="modal-close" onclick="closeModal('bulkMapHostingModal')">×</button>
+        </div>
+        <form method="POST" action="{{ route('accounts.domains-hosting.domains.bulk-map-hosting') }}">
+            @csrf
+            <div class="modal-body">
+                <div id="bulkDomainIdsContainer"></div>
+
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+                    <div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:8px;">
+                        Selected Domains (<span id="bulkModalCount">0</span>):
+                    </div>
+                    <div id="bulkSelectedDomainsList" style="display:flex; flex-wrap:wrap; gap:6px; max-height:120px; overflow-y:auto;"></div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Select Target Hosting Account / Server <span style="color:#ef4444;">*</span></label>
+                    <select name="hosting_record_id" class="form-input" required>
+                        <option value="">-- Choose Hosting Account / Server --</option>
+                        @foreach($allHostingsList as $h)
+                            <option value="{{ $h->id }}">
+                                {{ $h->hosting_name }} [{{ $h->provider }}] @if($h->server) • Server: {{ $h->server->server_name }} ({{ $h->server->ip_address }}) @elseif($h->ip_address) • IP: {{ $h->ip_address }} @endif
+                            </option>
+                        @endforeach
+                    </select>
+                    <div style="font-size:11px; color:#64748b; margin-top:3px;">
+                        All selected domains will be updated and mapped to this hosting and its server.
+                    </div>
+                </div>
+
+                <button type="submit" class="dh-btn dh-btn-primary" style="justify-content:center; padding:10px; background:linear-gradient(135deg,#7c3aed,#9333ea);">
+                    <i class="bi bi-check2-circle"></i> Map Selected Domains
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{{-- Single Domain Quick Map Hosting Modal --}}
+<div class="modal-overlay" id="singleMapHostingModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <div class="modal-title">
+                <i class="bi bi-hdd-network" style="color:#7c3aed;"></i> Map Domain to Hosting
+            </div>
+            <button type="button" class="modal-close" onclick="closeModal('singleMapHostingModal')">×</button>
+        </div>
+        <form id="singleMapHostingForm" method="POST" action="">
+            @csrf
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Domain Name</label>
+                    <input type="text" id="singleMapDomainName" class="form-input" readonly style="background:#f1f5f9; font-weight:800; color:#0f172a;">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Select Hosting Account / Server <span style="color:#ef4444;">*</span></label>
+                    <select name="hosting_record_id" class="form-input" required>
+                        <option value="">-- Choose Hosting Account / Server --</option>
+                        @foreach($allHostingsList as $h)
+                            <option value="{{ $h->id }}">
+                                {{ $h->hosting_name }} [{{ $h->provider }}] @if($h->server) • Server: {{ $h->server->server_name }} ({{ $h->server->ip_address }}) @elseif($h->ip_address) • IP: {{ $h->ip_address }} @endif
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <button type="submit" class="dh-btn dh-btn-primary" style="justify-content:center; padding:10px;">
+                    <i class="bi bi-check2-circle"></i> Save Hosting Mapping
+                </button>
             </div>
         </form>
     </div>
@@ -900,7 +1084,97 @@ function openEditDomainModal(item) {
     document.getElementById('edit-d-auto_renew').checked = !!item.auto_renew;
     document.getElementById('edit-d-privacy').checked = !!item.privacy;
     document.getElementById('edit-d-notes').value = item.notes;
+    if (document.getElementById('edit-d-hosting_record_id')) {
+        document.getElementById('edit-d-hosting_record_id').value = item.hosting_record_id || '';
+    }
     document.getElementById('editDomainModal').classList.add('active');
+}
+
+// Checkbox selection & Bulk Map to Hosting
+let selectedDomains = new Map();
+
+function toggleSelectAllDomains(master) {
+    const checkboxes = document.querySelectorAll('.domain-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = master.checked;
+        const id = cb.value;
+        const name = cb.getAttribute('data-name');
+        if (master.checked) {
+            selectedDomains.set(id, name);
+        } else {
+            selectedDomains.delete(id);
+        }
+    });
+    updateBulkActionBar();
+}
+
+function handleDomainCheckboxChange() {
+    selectedDomains.clear();
+    const checked = document.querySelectorAll('.domain-checkbox:checked');
+    checked.forEach(cb => {
+        selectedDomains.set(cb.value, cb.getAttribute('data-name'));
+    });
+    const all = document.querySelectorAll('.domain-checkbox');
+    const master = document.getElementById('selectAllDomains');
+    if (master) {
+        master.checked = (all.length > 0 && checked.length === all.length);
+    }
+    updateBulkActionBar();
+}
+
+function deselectAllDomains() {
+    selectedDomains.clear();
+    document.querySelectorAll('.domain-checkbox').forEach(cb => cb.checked = false);
+    const master = document.getElementById('selectAllDomains');
+    if (master) master.checked = false;
+    updateBulkActionBar();
+}
+
+function updateBulkActionBar() {
+    const bar = document.getElementById('bulkActionsBar');
+    if (!bar) return;
+    const count = selectedDomains.size;
+    if (count > 0) {
+        bar.style.display = 'flex';
+        document.getElementById('selectedCountBadge').textContent = count;
+        document.getElementById('selectedCountText').textContent = count + ' domain' + (count > 1 ? 's' : '') + ' selected';
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function openBulkMapHostingModal() {
+    if (selectedDomains.size === 0) {
+        alert('Please select at least one domain to map.');
+        return;
+    }
+    const container = document.getElementById('bulkDomainIdsContainer');
+    const list = document.getElementById('bulkSelectedDomainsList');
+    container.innerHTML = '';
+    list.innerHTML = '';
+
+    document.getElementById('bulkModalCount').textContent = selectedDomains.size;
+
+    selectedDomains.forEach((name, id) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'domain_ids[]';
+        input.value = id;
+        container.appendChild(input);
+
+        const badge = document.createElement('span');
+        badge.style.cssText = 'background:#e0f2fe; color:#0369a1; padding:3px 8px; border-radius:6px; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:4px;';
+        badge.innerHTML = '<i class="bi bi-globe"></i> ' + name;
+        list.appendChild(badge);
+    });
+
+    document.getElementById('bulkMapHostingModal').classList.add('active');
+}
+
+function openSingleMapHostingModal(id, name) {
+    document.getElementById('singleMapDomainName').value = name;
+    document.getElementById('singleMapHostingForm').action = '/accounts/domains-hosting/domains/' + id + '/map-hosting';
+    document.getElementById('singleMapHostingModal').classList.add('active');
 }
 
 function openAddHostingModal() {
@@ -989,7 +1263,7 @@ function closeModal(id) {
 }
 
 window.addEventListener('click', function(e) {
-    ['addDomainModal', 'editDomainModal', 'addHostingModal', 'editHostingModal'].forEach(id => {
+    ['addDomainModal', 'editDomainModal', 'addHostingModal', 'editHostingModal', 'bulkMapHostingModal', 'singleMapHostingModal'].forEach(id => {
         const modal = document.getElementById(id);
         if (modal && e.target === modal) {
             closeModal(id);

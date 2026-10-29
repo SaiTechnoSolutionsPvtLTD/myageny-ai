@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\AccountExpense;
 use App\Models\Invoice;
 use App\Models\InvoicePayment;
+use App\Models\Quotation;
 use App\Models\ZohoExpense;
 use App\Models\ZohoIntegration;
 use App\Models\ZohoInvoice;
 use App\Models\ZohoPayment;
+use App\Models\ZohoQuotation;
 use App\Services\ZohoBooksService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -47,6 +49,11 @@ class ZohoBooksController extends Controller
         $pendingPaymentsCount = ZohoPayment::where('is_migrated_to_native', false)->count();
         $totalPaymentAmount = (float) ZohoPayment::sum('amount');
 
+        $totalQuotationsCount = ZohoQuotation::count();
+        $migratedQuotationsCount = ZohoQuotation::where('is_migrated_to_native', true)->count();
+        $pendingQuotationsCount = ZohoQuotation::where('is_migrated_to_native', false)->count();
+        $totalQuotationAmount = (float) ZohoQuotation::sum('total');
+
         $recentInvoices = ZohoInvoice::with('migratedInvoice')
             ->orderBy('invoice_date', 'desc')
             ->orderBy('id', 'desc')
@@ -69,6 +76,10 @@ class ZohoBooksController extends Controller
             'migratedPaymentsCount',
             'pendingPaymentsCount',
             'totalPaymentAmount',
+            'totalQuotationsCount',
+            'migratedQuotationsCount',
+            'pendingQuotationsCount',
+            'totalQuotationAmount',
             'recentInvoices'
         ));
     }
@@ -101,13 +112,20 @@ class ZohoBooksController extends Controller
         $regionKey = $request->input('region');
         $regionConfig = ZohoBooksService::REGIONS[$regionKey] ?? ZohoBooksService::REGIONS['in'];
 
+        $clientId = trim((string) $request->input('client_id'));
+        // Auto-fix if "1000." prefix was accidentally pasted twice (e.g. 1000.1000.XXX -> 1000.XXX)
+        if (preg_match('/^(1000\.)+/', $clientId)) {
+            $clientId = preg_replace('/^(1000\.)+/', '1000.', $clientId);
+        }
+
         $updateData = [
-            'client_id'     => trim($request->input('client_id')),
-            'client_secret' => trim($request->input('client_secret')),
+            'client_id'     => $clientId,
+            'client_secret' => trim((string) $request->input('client_secret')),
             'region'        => $regionKey,
             'accounts_url'  => $regionConfig['accounts_url'],
             'api_url'       => $regionConfig['api_url'],
             'redirect_uri'  => $request->filled('redirect_uri') ? trim($request->input('redirect_uri')) : url('/accounts/zoho/callback'),
+            'last_error'    => null,
             'updated_by'    => auth()->id(),
         ];
 
@@ -381,6 +399,10 @@ class ZohoBooksController extends Controller
      */
     public function syncInvoices(Request $request): RedirectResponse|JsonResponse
     {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+        @ini_set('memory_limit', '512M');
+
         $integration = ZohoIntegration::current();
 
         if (! $integration->is_connected || empty($integration->refresh_token)) {
@@ -393,7 +415,8 @@ class ZohoBooksController extends Controller
         }
 
         try {
-            $result = $this->zohoService->syncAllInvoices($integration, true);
+            // Fast page mode: fetch 200 invoices per page (takes ~3s for 2,000 invoices instead of 10 minutes)
+            $result = $this->zohoService->syncAllInvoices($integration, false);
             $msg = "Invoices sync completed! Synced: {$result['total_synced']} ({$result['new_count']} new, {$result['updated_count']} updated).";
 
             if ($request->wantsJson()) {
@@ -413,6 +436,63 @@ class ZohoBooksController extends Controller
 
             return redirect()->back()->with('error', $err);
         }
+    }
+
+    /**
+     * Batch migrate unmigrated Zoho invoices (safe chunked migration with AJAX progress bar).
+     */
+    public function batchMigrateInvoices(Request $request): JsonResponse
+    {
+        @set_time_limit(180);
+        @ini_set('max_execution_time', '180');
+        $limit = max(10, min(100, (int) $request->input('limit', 50)));
+
+        $totalUnmigrated = ZohoInvoice::where('is_migrated_to_native', false)->count();
+        $totalAll = ZohoInvoice::count();
+
+        if ($totalUnmigrated === 0) {
+            return response()->json([
+                'success'        => true,
+                'completed'      => true,
+                'batch_migrated' => 0,
+                'remaining'      => 0,
+                'total_all'      => $totalAll,
+                'total_migrated' => $totalAll,
+                'progress_pct'   => 100,
+                'message'        => 'All invoices have been migrated to CRM.',
+            ]);
+        }
+
+        $invoices = ZohoInvoice::where('is_migrated_to_native', false)
+            ->limit($limit)
+            ->get();
+
+        $migratedCount = 0;
+        $errors = [];
+
+        foreach ($invoices as $inv) {
+            try {
+                $this->zohoService->migrateInvoiceToNative($inv, auth()->id());
+                $migratedCount++;
+            } catch (\Throwable $e) {
+                $errors[] = "#{$inv->invoice_number}: " . $e->getMessage();
+            }
+        }
+
+        $remaining = ZohoInvoice::where('is_migrated_to_native', false)->count();
+        $migratedTotal = $totalAll - $remaining;
+        $progressPct = $totalAll > 0 ? round(($migratedTotal / $totalAll) * 100, 1) : 100;
+
+        return response()->json([
+            'success'        => true,
+            'completed'      => $remaining === 0,
+            'batch_migrated' => $migratedCount,
+            'remaining'      => $remaining,
+            'total_all'      => $totalAll,
+            'total_migrated' => $migratedTotal,
+            'progress_pct'   => $progressPct,
+            'errors'         => $errors,
+        ]);
     }
 
     /**
@@ -526,6 +606,10 @@ class ZohoBooksController extends Controller
      */
     public function syncExpenses(Request $request): RedirectResponse|JsonResponse
     {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+        @ini_set('memory_limit', '512M');
+
         $integration = ZohoIntegration::current();
 
         if (! $integration->is_connected || empty($integration->refresh_token)) {
@@ -582,6 +666,9 @@ class ZohoBooksController extends Controller
      */
     public function bulkMigrateExpenses(Request $request): RedirectResponse
     {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+
         $ids = $request->input('selected_ids', []);
 
         if (empty($ids) || ! is_array($ids)) {
@@ -612,6 +699,63 @@ class ZohoBooksController extends Controller
         }
 
         return redirect()->route('accounts.zoho.expenses')->with('success', $msg);
+    }
+
+    /**
+     * Batch migrate unmigrated Zoho expenses (safe chunked migration with AJAX progress bar).
+     */
+    public function batchMigrateExpenses(Request $request): JsonResponse
+    {
+        @set_time_limit(180);
+        @ini_set('max_execution_time', '180');
+        $limit = max(10, min(100, (int) $request->input('limit', 50)));
+
+        $totalUnmigrated = ZohoExpense::where('is_migrated_to_native', false)->count();
+        $totalAll = ZohoExpense::count();
+
+        if ($totalUnmigrated === 0) {
+            return response()->json([
+                'success'        => true,
+                'completed'      => true,
+                'batch_migrated' => 0,
+                'remaining'      => 0,
+                'total_all'      => $totalAll,
+                'total_migrated' => $totalAll,
+                'progress_pct'   => 100,
+                'message'        => 'All expenses have been migrated to CRM.',
+            ]);
+        }
+
+        $expenses = ZohoExpense::where('is_migrated_to_native', false)
+            ->limit($limit)
+            ->get();
+
+        $migratedCount = 0;
+        $errors = [];
+
+        foreach ($expenses as $exp) {
+            try {
+                $this->zohoService->migrateExpenseToNative($exp, auth()->id());
+                $migratedCount++;
+            } catch (\Throwable $e) {
+                $errors[] = "#{$exp->zoho_expense_id}: " . $e->getMessage();
+            }
+        }
+
+        $remaining = ZohoExpense::where('is_migrated_to_native', false)->count();
+        $migratedTotal = $totalAll - $remaining;
+        $progressPct = $totalAll > 0 ? round(($migratedTotal / $totalAll) * 100, 1) : 100;
+
+        return response()->json([
+            'success'        => true,
+            'completed'      => $remaining === 0,
+            'batch_migrated' => $migratedCount,
+            'remaining'      => $remaining,
+            'total_all'      => $totalAll,
+            'total_migrated' => $migratedTotal,
+            'progress_pct'   => $progressPct,
+            'errors'         => $errors,
+        ]);
     }
 
     /**
@@ -670,6 +814,10 @@ class ZohoBooksController extends Controller
      */
     public function syncPayments(Request $request): RedirectResponse|JsonResponse
     {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+        @ini_set('memory_limit', '512M');
+
         $integration = ZohoIntegration::current();
 
         if (! $integration->is_connected || empty($integration->refresh_token)) {
@@ -682,7 +830,7 @@ class ZohoBooksController extends Controller
         }
 
         try {
-            $result = $this->zohoService->syncAllPayments($integration, true);
+            $result = $this->zohoService->syncAllPayments($integration, false);
             $msg = "Payments sync completed! Synced: {$result['total_synced']} ({$result['new_count']} new, {$result['updated_count']} updated).";
 
             if ($request->wantsJson()) {
@@ -726,6 +874,9 @@ class ZohoBooksController extends Controller
      */
     public function bulkMigratePayments(Request $request): RedirectResponse
     {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+
         $ids = $request->input('selected_ids', []);
 
         if (empty($ids) || ! is_array($ids)) {
@@ -746,15 +897,324 @@ class ZohoBooksController extends Controller
                 $this->zohoService->migratePaymentToNative($pmt, auth()->id());
                 $migratedCount++;
             } catch (\Throwable $e) {
-                $errors[] = "#{$pmt->payment_number}: " . $e->getMessage();
+                $errors[] = "#" . ($pmt->payment_number ?: $pmt->id) . ": " . $e->getMessage();
             }
         }
 
-        $msg = "{$migratedCount} payments successfully migrated to CRM Payments.";
-        if (! empty($errors)) {
-            $msg .= ' ' . count($errors) . ' payments encountered errors.';
+        if ($migratedCount > 0 && empty($errors)) {
+            return redirect()->route('accounts.zoho.payments')
+                ->with('success', "All {$migratedCount} payments successfully migrated to CRM Payments.");
         }
 
-        return redirect()->route('accounts.zoho.payments')->with('success', $msg);
+        if ($migratedCount > 0 && ! empty($errors)) {
+            return redirect()->route('accounts.zoho.payments')
+                ->with('warning', "{$migratedCount} payments migrated successfully, but " . count($errors) . " encountered issues: " . implode('; ', array_slice($errors, 0, 3)));
+        }
+
+        return redirect()->route('accounts.zoho.payments')
+            ->with('error', "No payments could be migrated. Issues: " . implode('; ', array_slice($errors, 0, 3)));
+    }
+
+    /**
+     * Batch migrate unmigrated Zoho payments (safe chunked migration with AJAX progress bar).
+     */
+    public function batchMigratePayments(Request $request): JsonResponse
+    {
+        @set_time_limit(180);
+        @ini_set('max_execution_time', '180');
+        $limit = max(10, min(100, (int) $request->input('limit', 50)));
+
+        $totalUnmigrated = ZohoPayment::where('is_migrated_to_native', false)->count();
+        $totalAll = ZohoPayment::count();
+
+        if ($totalUnmigrated === 0) {
+            return response()->json([
+                'success'        => true,
+                'completed'      => true,
+                'batch_migrated' => 0,
+                'remaining'      => 0,
+                'total_all'      => $totalAll,
+                'total_migrated' => $totalAll,
+                'progress_pct'   => 100,
+                'message'        => 'All customer payments have been migrated to CRM.',
+            ]);
+        }
+
+        $payments = ZohoPayment::where('is_migrated_to_native', false)
+            ->limit($limit)
+            ->get();
+
+        $migratedCount = 0;
+        $errors = [];
+
+        foreach ($payments as $pmt) {
+            try {
+                $this->zohoService->migratePaymentToNative($pmt, auth()->id());
+                $migratedCount++;
+            } catch (\Throwable $e) {
+                $errors[] = "#" . ($pmt->payment_number ?: $pmt->id) . ": " . $e->getMessage();
+            }
+        }
+
+        $remaining = ZohoPayment::where('is_migrated_to_native', false)->count();
+        $migratedTotal = $totalAll - $remaining;
+        $progressPct = $totalAll > 0 ? round(($migratedTotal / $totalAll) * 100, 1) : 100;
+
+        return response()->json([
+            'success'        => true,
+            'completed'      => $remaining === 0,
+            'batch_migrated' => $migratedCount,
+            'remaining'      => $remaining,
+            'total_all'      => $totalAll,
+            'total_migrated' => $migratedTotal,
+            'progress_pct'   => $progressPct,
+            'errors'         => $errors,
+        ]);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // ESTIMATES / QUOTATIONS ACTIONS
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * List synced Zoho Quotations/Estimates.
+     */
+    public function quotations(Request $request): View
+    {
+        $integration = ZohoIntegration::current();
+
+        $query = ZohoQuotation::with('migratedQuotation.lead');
+
+        // Status Filter
+        if ($request->filled('status') && $request->input('status') !== 'all') {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Migration status
+        if ($request->filled('migration_status')) {
+            if ($request->input('migration_status') === 'migrated') {
+                $query->where('is_migrated_to_native', true);
+            } elseif ($request->input('migration_status') === 'pending') {
+                $query->where('is_migrated_to_native', false);
+            }
+        }
+
+        // Search
+        if ($request->filled('search')) {
+            $s = trim($request->input('search'));
+            $query->where(function ($q) use ($s) {
+                $q->where('estimate_number', 'like', "%{$s}%")
+                    ->orWhere('customer_name', 'like', "%{$s}%")
+                    ->orWhere('company_name', 'like', "%{$s}%")
+                    ->orWhere('reference_number', 'like', "%{$s}%");
+            });
+        }
+
+        // Date range
+        if ($request->filled('from_date')) {
+            $query->whereDate('estimate_date', '>=', $request->input('from_date'));
+        }
+        if ($request->filled('to_date')) {
+            $query->whereDate('estimate_date', '<=', $request->input('to_date'));
+        }
+
+        // Summary totals of current query
+        $totalCount  = (clone $query)->count();
+        $totalAmount = (float) (clone $query)->sum('total');
+        $migratedCount = (clone $query)->where('is_migrated_to_native', true)->count();
+        $pendingCount  = $totalCount - $migratedCount;
+
+        $quotations = $query->orderBy('estimate_date', 'desc')
+            ->orderBy('id', 'desc')
+            ->paginate(25)
+            ->withQueryString();
+
+        return view('pages.accounts.zoho.quotations', compact(
+            'quotations',
+            'integration',
+            'totalCount',
+            'totalAmount',
+            'migratedCount',
+            'pendingCount'
+        ));
+    }
+
+    /**
+     * Show single Zoho Estimate details.
+     */
+    public function showQuotation(int $id): View
+    {
+        $quotation = ZohoQuotation::with('migratedQuotation.items', 'migratedQuotation.lead')->findOrFail($id);
+        return view('pages.accounts.zoho.show_quotation', compact('quotation'));
+    }
+
+    /**
+     * Sync Quotations / Estimates from Zoho Books API.
+     */
+    public function syncQuotations(Request $request): RedirectResponse|JsonResponse
+    {
+        $integration = ZohoIntegration::current();
+        if (! $integration->is_connected) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'Zoho Books is not connected.'], 400);
+            }
+            return redirect()->route('accounts.zoho.settings')
+                ->with('error', 'Zoho Books is not connected. Please connect first.');
+        }
+
+        try {
+            $result = $this->zohoService->syncAllEstimates($integration, true);
+
+            $msg = "Synced {$result['total']} quotations from Zoho Books ({$result['synced_new']} new, {$result['updated']} updated).";
+
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $msg,
+                    'data'    => $result,
+                ]);
+            }
+
+            return redirect()->back()->with('success', $msg);
+        } catch (\Throwable $e) {
+            $err = "Sync failed: " . $e->getMessage();
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $err], 500);
+            }
+            return redirect()->back()->with('error', $err);
+        }
+    }
+
+    /**
+     * Migrate a single Zoho Quotation to native Quotation and link to Lead.
+     */
+    public function migrateQuotation(int $id): RedirectResponse
+    {
+        @set_time_limit(120);
+        @ini_set('max_execution_time', '120');
+
+        $zohoQuotation = ZohoQuotation::findOrFail($id);
+
+        try {
+            $nativeQuotation = $this->zohoService->migrateQuotationToNative($zohoQuotation, auth()->id());
+
+            $leadMsg = $nativeQuotation->lead ? " & mapped to Lead '{$nativeQuotation->lead->name}'" : "";
+            return redirect()->back()->with('success', "Quotation #{$nativeQuotation->quotation_no} migrated successfully{$leadMsg}!");
+        } catch (\Throwable $e) {
+            Log::error("Failed to migrate Zoho quotation #{$id}: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return redirect()->back()->with('error', "Failed to migrate quotation: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Bulk migrate selected Zoho Quotations.
+     */
+    public function bulkMigrateQuotations(Request $request): RedirectResponse
+    {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+        @ini_set('memory_limit', '512M');
+
+        $ids = $request->input('selected_ids', []);
+        if (empty($ids)) {
+            return redirect()->back()->with('error', 'No quotations were selected for migration.');
+        }
+
+        $quotations = ZohoQuotation::whereIn('id', $ids)->get();
+        $migrated = 0;
+        $failed = 0;
+
+        foreach ($quotations as $quotation) {
+            try {
+                $this->zohoService->migrateQuotationToNative($quotation, auth()->id());
+                $migrated++;
+            } catch (\Throwable $e) {
+                Log::error("Bulk migrate error on quotation #{$quotation->estimate_number}: " . $e->getMessage());
+                $failed++;
+            }
+        }
+
+        $msg = "Bulk migration complete: {$migrated} quotations migrated successfully.";
+        if ($failed > 0) {
+            $msg .= " ({$failed} failed).";
+        }
+
+        return redirect()->back()->with('success', $msg);
+    }
+
+    /**
+     * Batch migrate unmigrated Zoho quotations (safe chunked migration with AJAX progress bar).
+     */
+    public function batchMigrateQuotations(Request $request): JsonResponse
+    {
+        @set_time_limit(180);
+        @ini_set('max_execution_time', '180');
+        @ini_set('memory_limit', '512M');
+
+        // Smaller, highly optimized batch size (default 10) to complete in < 3s and avoid any 50X timeout
+        $limit = max(5, min(25, (int) $request->input('limit', 10)));
+
+        $totalUnmigrated = ZohoQuotation::where('is_migrated_to_native', false)->count();
+        $totalAll = ZohoQuotation::count();
+
+        if ($totalUnmigrated === 0) {
+            return response()->json([
+                'success'        => true,
+                'completed'      => true,
+                'batch_migrated' => 0,
+                'remaining'      => 0,
+                'total_all'      => $totalAll,
+                'total_migrated' => $totalAll,
+                'progress_pct'   => 100,
+                'message'        => 'All quotations have been migrated to CRM.',
+            ]);
+        }
+
+        $quotations = ZohoQuotation::where('is_migrated_to_native', false)
+            ->limit($limit)
+            ->get();
+
+        $migratedCount = 0;
+        $errors = [];
+
+        foreach ($quotations as $quotation) {
+            try {
+                $this->zohoService->migrateQuotationToNative($quotation, auth()->id());
+                $migratedCount++;
+            } catch (\Throwable $e) {
+                Log::error("Batch migrate error on quotation #{$quotation->estimate_number}: " . $e->getMessage());
+                $errors[] = "#{$quotation->estimate_number}: " . $e->getMessage();
+            }
+        }
+
+        $remaining = ZohoQuotation::where('is_migrated_to_native', false)->count();
+        $migratedTotal = $totalAll - $remaining;
+        $progressPct = $totalAll > 0 ? round(($migratedTotal / $totalAll) * 100, 1) : 100;
+
+        return response()->json([
+            'success'        => true,
+            'completed'      => $remaining === 0,
+            'batch_migrated' => $migratedCount,
+            'remaining'      => $remaining,
+            'total_all'      => $totalAll,
+            'total_migrated' => $migratedTotal,
+            'progress_pct'   => $progressPct,
+            'errors'         => $errors,
+        ]);
+    }
+
+    /**
+     * Auto-scan and map all unmapped native invoices & quotations to matching Leads in CRM.
+     */
+    public function autoMapLeads(): RedirectResponse
+    {
+        try {
+            $stats = $this->zohoService->autoMapAllUnmappedRecords();
+            $msg = "Auto-mapping complete: {$stats['invoices_mapped']} invoices and {$stats['quotations_mapped']} quotations successfully mapped to Leads!";
+            return redirect()->back()->with('success', $msg);
+        } catch (\Throwable $e) {
+            Log::error("Failed to auto-map leads: " . $e->getMessage());
+            return redirect()->back()->with('error', "Auto-mapping failed: " . $e->getMessage());
+        }
     }
 }

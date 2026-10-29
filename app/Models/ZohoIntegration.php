@@ -52,6 +52,11 @@ class ZohoIntegration extends Model
         return Carbon::now()->addMinutes(2)->isAfter($this->token_expires_at);
     }
 
+    public function quotations()
+    {
+        return $this->hasMany(ZohoQuotation::class, 'company_id', 'company_id');
+    }
+
     /**
      * Get or create singleton integration record for current company/app.
      */

@@ -62,4 +62,27 @@ class ServerMaster extends Model
     {
         return $this->belongsTo(User::class, 'updated_by');
     }
+
+    /**
+     * Hosting accounts hosted on this server
+     */
+    public function hostings()
+    {
+        return $this->hasMany(HostingRecord::class, 'server_id')->orderBy('hosting_name');
+    }
+
+    /**
+     * Domains hosted on this server through mapped hostings
+     */
+    public function domains()
+    {
+        return $this->hasManyThrough(
+            DomainRecord::class,
+            HostingRecord::class,
+            'server_id',          // Foreign key on hosting_records table
+            'hosting_record_id',  // Foreign key on domain_records table
+            'id',                 // Local key on server_masters table
+            'id'                  // Local key on hosting_records table
+        )->orderBy('domain_name');
+    }
 }
