@@ -13,6 +13,7 @@ use App\Models\HostingRecord;
 use App\Models\HostingRenewal;
 use App\Models\Lead;
 use App\Models\LeadProductPayment;
+use App\Models\ServerMaster;
 use App\Models\User;
 use App\Mail\AdBudgetNotificationMail;
 use App\Models\AccountExpense;
@@ -23,6 +24,10 @@ use App\Models\CustomerMaster;
 use App\Models\CreditNote;
 use App\Models\CreditNoteItem;
 use App\Models\Department;
+use App\Models\Quotation;
+use App\Models\QuotationItem;
+use App\Models\QuotationSetting;
+use App\Models\Product;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\InvoicePayment;
@@ -1716,7 +1721,7 @@ class AccountsApiController extends Controller
             $companyId = $user?->company_id;
             $perPage = (int) $request->query('per_page', 15);
 
-            $query = HostingRecord::when($companyId, fn($q) => $q->where('company_id', $companyId))
+            $query = HostingRecord::with(['server', 'domains'])->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->when($request->filled('search'), function ($q) use ($request) {
                     $search = trim($request->search);
                     $q->where(function ($q2) use ($search) {
@@ -1751,16 +1756,20 @@ class AccountsApiController extends Controller
                 'data'   => [
                     'items'      => collect($paginated->items())->map(fn($h) => [
                         'id'                 => $h->id,
+                        'server_id'          => $h->server_id,
                         'hosting_name'       => $h->hosting_name,
                         'provider'           => $h->provider,
                         'ip_address'         => $h->ip_address,
                         'plan_type'          => $h->plan_type,
+                        'allocated_storage'  => $h->allocated_storage,
                         'status'             => $h->status,
                         'renewal_date'       => $h->renewal_date?->format('Y-m-d'),
                         'days_until_renewal' => $h->days_until_renewal,
                         'renewal_amount'     => (float) $h->renewal_amount,
                         'client_name'        => $h->client_name,
                         'notes'              => $h->notes,
+                        'server_name'        => $h->server?->server_name,
+                        'domains_count'      => $h->domains->count(),
                         'created_at'         => $h->created_at?->format('Y-m-d H:i:s'),
                     ]),
                     'pagination' => [
@@ -1785,15 +1794,17 @@ class AccountsApiController extends Controller
     public function storeHosting(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'hosting_name'   => 'required|string|max:255',
-            'provider'       => 'required|string|max:100',
-            'ip_address'     => 'nullable|string|max:100',
-            'plan_type'      => 'required|string|max:100',
-            'status'         => 'required|string|in:ACTIVE,EXPIRED,PENDING_RENEWAL',
-            'renewal_date'   => 'nullable|date',
-            'renewal_amount' => 'nullable|numeric|min:0',
-            'client_name'    => 'nullable|string|max:255',
-            'notes'          => 'nullable|string',
+            'server_id'         => 'nullable|integer',
+            'hosting_name'      => 'required|string|max:255',
+            'provider'          => 'required|string|max:100',
+            'ip_address'        => 'nullable|string|max:100',
+            'plan_type'         => 'required|string|max:100',
+            'allocated_storage' => 'nullable|string|max:100',
+            'status'            => 'required|string|in:ACTIVE,EXPIRED,PENDING_RENEWAL',
+            'renewal_date'      => 'nullable|date',
+            'renewal_amount'    => 'nullable|numeric|min:0',
+            'client_name'       => 'nullable|string|max:255',
+            'notes'             => 'nullable|string',
         ]);
 
         $user = $request->user();
@@ -1812,15 +1823,17 @@ class AccountsApiController extends Controller
     public function updateHosting(Request $request, HostingRecord $hosting): JsonResponse
     {
         $validated = $request->validate([
-            'hosting_name'   => 'required|string|max:255',
-            'provider'       => 'required|string|max:100',
-            'ip_address'     => 'nullable|string|max:100',
-            'plan_type'      => 'required|string|max:100',
-            'status'         => 'required|string|in:ACTIVE,EXPIRED,PENDING_RENEWAL',
-            'renewal_date'   => 'nullable|date',
-            'renewal_amount' => 'nullable|numeric|min:0',
-            'client_name'    => 'nullable|string|max:255',
-            'notes'          => 'nullable|string',
+            'server_id'         => 'nullable|integer',
+            'hosting_name'      => 'required|string|max:255',
+            'provider'          => 'required|string|max:100',
+            'ip_address'        => 'nullable|string|max:100',
+            'plan_type'         => 'required|string|max:100',
+            'allocated_storage' => 'nullable|string|max:100',
+            'status'            => 'required|string|in:ACTIVE,EXPIRED,PENDING_RENEWAL',
+            'renewal_date'      => 'nullable|date',
+            'renewal_amount'    => 'nullable|numeric|min:0',
+            'client_name'       => 'nullable|string|max:255',
+            'notes'             => 'nullable|string',
         ]);
 
         $hosting->update($validated);
@@ -1845,7 +1858,7 @@ class AccountsApiController extends Controller
     public function showDomain(DomainRecord $domain): JsonResponse
     {
         try {
-            $domain->load(['lead', 'creator', 'renewals.creator']);
+            $domain->load(['lead', 'creator', 'renewals.creator', 'hosting.server']);
             $renewalsCount = $domain->renewals->count();
             $totalRenewalSpend = (float) $domain->renewals->sum('amount');
             $days = $domain->days_until_expiration;
@@ -1863,11 +1876,27 @@ class AccountsApiController extends Controller
                         'privacy'               => (bool) $domain->privacy,
                         'client_name'           => $domain->client_name,
                         'lead_id'               => $domain->lead_id,
+                        'hosting_record_id'     => $domain->hosting_record_id,
                         'notes'                 => $domain->notes,
                         'godaddy_domain_id'     => $domain->godaddy_domain_id,
                         'days_until_expiration' => $days,
                         'created_by'            => $domain->creator?->name,
                         'created_at'            => $domain->created_at?->format('Y-m-d H:i:s'),
+                        'hosting'               => $domain->hosting ? [
+                            'id'                => $domain->hosting->id,
+                            'hosting_name'      => $domain->hosting->hosting_name,
+                            'provider'          => $domain->hosting->provider,
+                            'ip_address'        => $domain->hosting->ip_address,
+                            'plan_type'         => $domain->hosting->plan_type,
+                            'allocated_storage' => $domain->hosting->allocated_storage,
+                            'server_id'         => $domain->hosting->server_id,
+                            'server'            => $domain->hosting->server ? [
+                                'id'            => $domain->hosting->server->id,
+                                'server_name'   => $domain->hosting->server->server_name,
+                                'ip_address'    => $domain->hosting->server->ip_address,
+                                'provider_name' => $domain->hosting->server->provider_name,
+                            ] : null,
+                        ] : null,
                     ],
                     'stats' => [
                         'renewals_count'        => $renewalsCount,
@@ -1994,7 +2023,7 @@ class AccountsApiController extends Controller
     public function showHosting(HostingRecord $hosting): JsonResponse
     {
         try {
-            $hosting->load(['lead', 'creator', 'renewals.creator']);
+            $hosting->load(['lead', 'creator', 'renewals.creator', 'server', 'domains']);
             $renewalsCount = $hosting->renewals->count();
             $totalRenewalSpend = (float) $hosting->renewals->sum('amount');
             if ($totalRenewalSpend <= 0 && $hosting->renewal_amount !== null) {
@@ -2007,10 +2036,12 @@ class AccountsApiController extends Controller
                 'data'   => [
                     'hosting' => [
                         'id'                 => $hosting->id,
+                        'server_id'          => $hosting->server_id,
                         'hosting_name'       => $hosting->hosting_name,
                         'provider'           => $hosting->provider,
                         'ip_address'         => $hosting->ip_address,
                         'plan_type'          => $hosting->plan_type,
+                        'allocated_storage'  => $hosting->allocated_storage,
                         'status'             => $hosting->status,
                         'renewal_date'       => $hosting->renewal_date?->format('Y-m-d'),
                         'renewal_amount'     => (float) $hosting->renewal_amount,
@@ -2020,6 +2051,22 @@ class AccountsApiController extends Controller
                         'days_until_renewal' => $days,
                         'created_by'         => $hosting->creator?->name,
                         'created_at'         => $hosting->created_at?->format('Y-m-d H:i:s'),
+                        'server'             => $hosting->server ? [
+                            'id'            => $hosting->server->id,
+                            'server_name'   => $hosting->server->server_name,
+                            'provider_name' => $hosting->server->provider_name,
+                            'ip_address'    => $hosting->server->ip_address,
+                            'plan_type'     => $hosting->server->plan_type,
+                            'disk_space'    => $hosting->server->disk_space,
+                        ] : null,
+                        'domains_count'      => $hosting->domains->count(),
+                        'domains'            => $hosting->domains->map(fn($d) => [
+                            'id'           => $d->id,
+                            'domain_name'  => $d->domain_name,
+                            'registrar'    => $d->registrar,
+                            'expires_at'   => $d->expires_at?->format('Y-m-d'),
+                            'status'       => $d->status,
+                        ]),
                     ],
                     'stats' => [
                         'renewals_count'      => $renewalsCount,
@@ -2203,6 +2250,140 @@ class AccountsApiController extends Controller
             ], 500);
         }
     }
+
+    public function mapDomainHosting(Request $request, DomainRecord $domain): JsonResponse
+    {
+        $validated = $request->validate([
+            'hosting_record_id' => 'required|exists:hosting_records,id',
+        ]);
+
+        $hosting = HostingRecord::findOrFail($validated['hosting_record_id']);
+        $domain->hosting_record_id = $hosting->id;
+        $domain->save();
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Domain '{$domain->domain_name}' successfully mapped to hosting: {$hosting->hosting_name}!",
+            'data'    => $domain->load('hosting.server'),
+        ]);
+    }
+
+    public function unlinkDomainHosting(DomainRecord $domain): JsonResponse
+    {
+        $domain->hosting_record_id = null;
+        $domain->save();
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Domain '{$domain->domain_name}' unlinked from hosting.",
+        ]);
+    }
+
+    public function mapHostingDomains(Request $request, HostingRecord $hosting): JsonResponse
+    {
+        $validated = $request->validate([
+            'domain_ids'   => 'required|array|min:1',
+            'domain_ids.*' => 'required|integer|exists:domain_records,id',
+        ]);
+
+        $user = $request->user();
+        $companyId = $hosting->company_id ?: $user?->company_id;
+
+        $updatedCount = DomainRecord::whereIn('id', $validated['domain_ids'])
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->update([
+                'hosting_record_id' => $hosting->id,
+            ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Successfully mapped {$updatedCount} domain(s) to this hosting!",
+            'updated_count' => $updatedCount,
+        ]);
+    }
+
+    public function unlinkHostingDomain(HostingRecord $hosting, DomainRecord $domain): JsonResponse
+    {
+        if ($domain->hosting_record_id === $hosting->id) {
+            $domain->hosting_record_id = null;
+            $domain->save();
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => "Domain '{$domain->domain_name}' unlinked from this hosting.",
+        ]);
+    }
+
+    public function availableDomainsForHosting(Request $request, HostingRecord $hosting): JsonResponse
+    {
+        $companyId = $hosting->company_id ?: $request->user()?->company_id;
+        $domains = DomainRecord::when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->with(['hosting.server'])
+            ->orderBy('domain_name')
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $domains->map(fn($d) => [
+                'id'                   => $d->id,
+                'domain_name'          => $d->domain_name,
+                'registrar'            => $d->registrar,
+                'expires_at'           => $d->expires_at?->format('Y-m-d'),
+                'status'               => $d->status,
+                'hosting_record_id'    => $d->hosting_record_id,
+                'is_mapped_to_this'    => $d->hosting_record_id === $hosting->id,
+                'is_unmapped'          => $d->hosting_record_id === null,
+                'current_hosting_name' => $d->hosting?->hosting_name,
+                'current_server_name'  => $d->hosting?->server?->server_name,
+            ]),
+        ]);
+    }
+
+    public function domainsHostingServers(Request $request): JsonResponse
+    {
+        $companyId = $request->user()?->company_id;
+        $servers = ServerMaster::forCompany($companyId)->active()->orderBy('server_name')->get();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $servers->map(fn($s) => [
+                'id'            => $s->id,
+                'server_name'   => $s->server_name,
+                'provider_name' => $s->provider_name,
+                'ip_address'    => $s->ip_address,
+                'plan_type'     => $s->plan_type,
+                'disk_space'    => $s->disk_space,
+                'status'        => $s->status,
+                'display_text'  => $s->server_name . ($s->ip_address ? " ({$s->ip_address})" : '') . ($s->provider_name ? " - {$s->provider_name}" : '') . ($s->disk_space ? " [{$s->disk_space}]" : ''),
+            ]),
+        ]);
+    }
+
+    public function allHostingsForMapping(Request $request): JsonResponse
+    {
+        $companyId = $request->user()?->company_id;
+        $hostings = HostingRecord::when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->with('server')
+            ->orderBy('hosting_name')
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $hostings->map(fn($h) => [
+                'id'                => $h->id,
+                'hosting_name'      => $h->hosting_name,
+                'provider'          => $h->provider,
+                'ip_address'        => $h->ip_address,
+                'plan_type'         => $h->plan_type,
+                'allocated_storage' => $h->allocated_storage,
+                'server_name'       => $h->server?->server_name,
+                'server_ip'         => $h->server?->ip_address,
+                'display_text'      => $h->hosting_name . ' [' . $h->provider . ']' . ($h->server ? ' • Server: ' . $h->server->server_name . ($h->server->ip_address ? ' (' . $h->server->ip_address . ')' : '') : ($h->ip_address ? ' • IP: ' . $h->ip_address : '')),
+            ]),
+        ]);
+    }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     //  7. AD ACCOUNTS MASTER
@@ -3143,9 +3324,9 @@ class AccountsApiController extends Controller
                 // 1. Active master subcategories
                 foreach ($cat->activeSubcategories as $subcat) {
                     $items = $subcatExpensesGrouped->get($subcat->id, collect());
-                    $fixed = (float) $items->where('expense_type', 'Fixed')->sum('amount');
-                    $variable = (float) $items->where('expense_type', 'Variable')->sum('amount');
-                    $total = $fixed + $variable;
+                    $fixed = (float) $items->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') === 0)->sum('amount');
+                    $variable = (float) $items->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') !== 0)->sum('amount');
+                    $total = (float) $items->sum('amount');
                     $count = $items->count();
 
                     if ($count > 0 || $request->has('show_all')) {
@@ -3167,9 +3348,9 @@ class AccountsApiController extends Controller
                 // 2. Direct under category (no subcategory)
                 $directItems = $subcatExpensesGrouped->get(0, collect());
                 if ($directItems->isNotEmpty()) {
-                    $fixed = (float) $directItems->where('expense_type', 'Fixed')->sum('amount');
-                    $variable = (float) $directItems->where('expense_type', 'Variable')->sum('amount');
-                    $total = $fixed + $variable;
+                    $fixed = (float) $directItems->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') === 0)->sum('amount');
+                    $variable = (float) $directItems->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') !== 0)->sum('amount');
+                    $total = (float) $directItems->sum('amount');
                     $count = $directItems->count();
 
                     $subcatRows[] = [
@@ -3192,9 +3373,9 @@ class AccountsApiController extends Controller
                     if ($subId != 0 && !in_array($subId, $masterSubcatIds)) {
                         $firstItem = $items->first();
                         $subName = $firstItem?->subcategory?->name ?: "Subcategory #{$subId}";
-                        $fixed = (float) $items->where('expense_type', 'Fixed')->sum('amount');
-                        $variable = (float) $items->where('expense_type', 'Variable')->sum('amount');
-                        $total = $fixed + $variable;
+                        $fixed = (float) $items->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') === 0)->sum('amount');
+                        $variable = (float) $items->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') !== 0)->sum('amount');
+                        $total = (float) $items->sum('amount');
                         $count = $items->count();
 
                         $subcatRows[] = [
@@ -3238,9 +3419,9 @@ class AccountsApiController extends Controller
             // Uncategorized
             $unlinked = $expenses->filter(fn ($e) => empty($e->account_expense_category_id) || !$allCategories->contains('id', $e->account_expense_category_id));
             if ($unlinked->isNotEmpty()) {
-                $fixed = (float) $unlinked->where('expense_type', 'Fixed')->sum('amount');
-                $variable = (float) $unlinked->where('expense_type', 'Variable')->sum('amount');
-                $total = $fixed + $variable;
+                $fixed = (float) $unlinked->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') === 0)->sum('amount');
+                $variable = (float) $unlinked->filter(fn ($e) => strcasecmp((string) $e->expense_type, 'Fixed') !== 0)->sum('amount');
+                $total = (float) $unlinked->sum('amount');
                 $count = $unlinked->count();
 
                 $pivotRows[] = [
@@ -3390,7 +3571,7 @@ class AccountsApiController extends Controller
             $companyId = $user?->company_id;
             $perPage = (int) $request->query('per_page', 15);
 
-            $query = Invoice::query()->with(['customer', 'salesPerson']);
+            $query = Invoice::query()->with(['customer', 'salesPerson', 'lead']);
             if ($companyId) {
                 $query->where('company_id', $companyId);
             }
@@ -3567,7 +3748,7 @@ class AccountsApiController extends Controller
     {
         try {
             $companyId = auth()->user()?->company_id;
-            $invoice = Invoice::with(['items.itemMaster', 'customer', 'salesPerson', 'creator', 'payments.recordedBy', 'creditNotes.creator'])
+            $invoice = Invoice::with(['items.itemMaster', 'customer', 'salesPerson', 'creator', 'payments.recordedBy', 'creditNotes.creator', 'lead'])
                 ->when($companyId, fn($q) => $q->where('company_id', $companyId))
                 ->findOrFail($id);
 
@@ -3907,6 +4088,61 @@ class AccountsApiController extends Controller
         }
     }
 
+
+    /**
+     * Map or change the Lead linked to this invoice.
+     * PATCH /api/mobile/accounts/sales/invoices/{id}/map-lead
+     */
+    public function mapSalesInvoiceLead(Request $request, int $id): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'lead_id' => 'required|exists:leads,id',
+            ]);
+
+            $companyId = $request->user()?->company_id ?: auth()->user()?->company_id;
+            $invoice = Invoice::when($companyId, fn($q) => $q->where('company_id', $companyId))->findOrFail($id);
+
+            $lead = Lead::withoutGlobalScopes()->findOrFail($validated['lead_id']);
+
+            $invoice->update([
+                'lead_id'   => $lead->id,
+                'branch_id' => $invoice->branch_id ?: $lead->branch_id,
+            ]);
+
+            if ($invoice->customer && empty($invoice->customer->lead_id)) {
+                $invoice->customer->update(['lead_id' => $lead->id]);
+            }
+
+            $invoice->load(['items.itemMaster', 'customer', 'salesPerson', 'creator', 'payments.recordedBy', 'creditNotes.creator', 'lead']);
+
+            $leadName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #' . $lead->id);
+
+            $invoiceData = $invoice->toArray();
+            if ($invoice->payments) {
+                $invoiceData['payments'] = $invoice->payments->map(function ($p) {
+                    $arr = $p->toArray();
+                    $arr['recorded_by_name'] = $p->recordedBy?->name ?: 'System';
+                    $arr['recorded_at'] = $p->created_at?->format('Y-m-d H:i:s');
+                    $arr['payment_mode_label'] = $p->payment_mode_label;
+                    $arr['attachment_url'] = $p->attachment_url;
+                    return $arr;
+                })->values()->toArray();
+            }
+
+            return response()->json([
+                'status'  => true,
+                'message' => "Invoice #{$invoice->invoice_number} successfully mapped to Lead #{$lead->id} ({$leadName})!",
+                'data'    => $invoiceData,
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts mapSalesInvoiceLead error: ' . $e->getMessage());
+            return response()->json([
+                'status'  => false,
+                'message' => 'Failed to map lead: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
     public function destroySalesInvoice(int $id): JsonResponse
     {
         try {
@@ -7048,4 +7284,556 @@ class AccountsApiController extends Controller
             ], 404);
         }
     }
+
+    // =========================================================================
+    // ACCOUNTS MODULE: QUOTATIONS
+    // =========================================================================
+
+    /**
+     * GET /api/mobile/accounts/quotations
+     */
+    public function quotations(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+            $perPage = (int) $request->query('per_page', 15);
+
+            $query = Quotation::with(['lead', 'approver', 'createdBy', 'items.product'])->latest('id');
+
+            if ($companyId) {
+                $query->where(function ($q) use ($companyId) {
+                    $q->where('company_id', $companyId)->orWhereNull('company_id');
+                });
+            }
+
+            if ($search = trim((string) $request->query('search', $request->query('quotation_no')))) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('quotation_no', 'LIKE', "%{$search}%")
+                      ->orWhereHas('lead', function ($lq) use ($search) {
+                          $lq->where('contact_name', 'LIKE', "%{$search}%")
+                             ->orWhere('company_name', 'LIKE', "%{$search}%");
+                      });
+                });
+            }
+
+            if ($request->filled('lead_id')) {
+                $query->where('lead_id', $request->lead_id);
+            }
+
+            if ($request->filled('status')) {
+                $status = strtolower($request->status);
+                if ($status === 'approved') {
+                    $query->where('is_approved', true);
+                } elseif ($status === 'pending') {
+                    $query->where('is_approved', false);
+                }
+            }
+
+            if ($request->filled('approved_by')) {
+                $query->where('approved_by', $request->approved_by);
+            }
+
+            if ($request->filled('start_date')) {
+                $query->whereDate('quotation_date', '>=', $request->start_date);
+            }
+
+            if ($request->filled('end_date')) {
+                $query->whereDate('quotation_date', '<=', $request->end_date);
+            }
+
+            if ($request->filled('customer_response')) {
+                $resp = strtolower($request->customer_response);
+                if ($resp === 'pending') {
+                    $query->where(function ($q) {
+                        $q->whereNull('customer_response')->orWhere('customer_response', 'pending');
+                    });
+                } else {
+                    $query->where('customer_response', $resp);
+                }
+            }
+
+            $totalCount = (clone $query)->count();
+            $approvedCount = (clone $query)->where('is_approved', true)->count();
+            $pendingCount = (clone $query)->where('is_approved', false)->count();
+            $totalAmount = (float) (clone $query)->sum('total_amount');
+
+            $paginated = $query->paginate($perPage);
+
+            $approvers = User::select('id', 'name')->orderBy('name')->get();
+
+            $items = collect($paginated->items())->map(function ($q) {
+                $converted = $q->converted_invoice;
+                $arr = $q->toArray();
+                $arr['converted_invoice'] = $converted ? [
+                    'id' => $converted->id,
+                    'invoice_number' => $converted->invoice_number,
+                    'total_amount' => (float) $converted->total_amount,
+                    'status' => $converted->status,
+                ] : null;
+                return $arr;
+            });
+
+            return response()->json([
+                'status' => true,
+                'data' => $items,
+                'stats' => [
+                    'total_count' => $totalCount,
+                    'approved_count' => $approvedCount,
+                    'pending_count' => $pendingCount,
+                    'total_amount' => $totalAmount,
+                ],
+                'approvers' => $approvers,
+                'pagination' => [
+                    'current_page' => $paginated->currentPage(),
+                    'last_page' => $paginated->lastPage(),
+                    'per_page' => $paginated->perPage(),
+                    'total' => $paginated->total(),
+                    'has_more' => $paginated->hasMorePages(),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mobile Accounts quotations error: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to load quotations: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/mobile/accounts/quotations/meta
+     */
+    public function quotationMeta(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $companyId = $user?->company_id;
+
+            $approvers = User::select('id', 'name')->orderBy('name')->get();
+
+            $leadQuery = Lead::select('id', 'contact_name', 'company_name', 'mobile_number', 'email', 'billing_address', 'shipping_address', 'state');
+            if ($companyId) {
+                $leadQuery->where('company_id', $companyId);
+            }
+            $leads = $leadQuery->orderBy('contact_name')->limit(150)->get();
+
+            $products = Product::select('id', 'product_name', 'description', 'final_price', 'base_price', 'discount_type', 'discount_value')
+                ->orderBy('product_name')
+                ->get();
+
+            $nextQuotationNo = Quotation::generateQuotationNo($companyId);
+
+            $indianStates = InvoiceController::$indianStates ?? [
+                '[33] Tamil Nadu' => 'Tamil Nadu',
+                '[29] Karnataka' => 'Karnataka',
+                '[27] Maharashtra' => 'Maharashtra',
+                '[32] Kerala' => 'Kerala',
+                '[36] Telangana' => 'Telangana',
+                '[37] Andhra Pradesh' => 'Andhra Pradesh',
+                '[07] Delhi' => 'Delhi',
+            ];
+
+            return response()->json([
+                'status' => true,
+                'data' => [
+                    'next_quotation_no' => $nextQuotationNo,
+                    'quotation_date' => now()->toDateString(),
+                    'valid_until' => now()->addDays(7)->toDateString(),
+                    'approvers' => $approvers,
+                    'leads' => $leads,
+                    'products' => $products,
+                    'indian_states' => $indianStates,
+                    'payment_terms' => ['Due on Receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60'],
+                ],
+            ]);
+        } catch (Throwable $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/mobile/accounts/quotations/{id}
+     */
+    public function showQuotation(Request $request, $id): JsonResponse
+    {
+        try {
+            $quotation = Quotation::with(['lead', 'approver', 'createdBy', 'items.product'])->findOrFail($id);
+            $converted = $quotation->converted_invoice;
+
+            $data = $quotation->toArray();
+            $data['converted_invoice'] = $converted ? [
+                'id' => $converted->id,
+                'invoice_number' => $converted->invoice_number,
+                'total_amount' => (float) $converted->total_amount,
+                'status' => $converted->status,
+            ] : null;
+
+            return response()->json([
+                'status' => true,
+                'data' => $data,
+            ]);
+        } catch (Throwable $e) {
+            return response()->json(['status' => false, 'message' => 'Quotation not found: ' . $e->getMessage()], 404);
+        }
+    }
+
+    /**
+     * POST /api/mobile/accounts/quotations/{id}/convert-to-invoice
+     */
+    public function convertQuotationToInvoice(Request $request, $id): JsonResponse
+    {
+        try {
+            $quotation = Quotation::with(['lead', 'items.product'])->findOrFail($id);
+            $companyId = $quotation->company_id ?: auth()->user()?->company_id;
+            $userId    = auth()->id();
+            $lead      = $quotation->lead;
+
+            // 1. Resolve or create CustomerMaster
+            $customer = null;
+            if ($lead) {
+                $customer = CustomerMaster::where('lead_id', $lead->id)->first();
+                if (! $customer && ! empty($lead->company_name)) {
+                    $customer = CustomerMaster::where(function ($q) use ($companyId) {
+                        if ($companyId) {
+                            $q->where('company_id', $companyId)->orWhereNull('company_id');
+                        }
+                    })
+                    ->whereRaw('LOWER(TRIM(company_name)) = ?', [strtolower(trim($lead->company_name))])
+                    ->first();
+                }
+            }
+
+            if (! $customer) {
+                $customerName = $lead?->contact_name ?: ($lead?->company_name ?: 'Valued Customer');
+                $customer = CustomerMaster::create([
+                    'company_id'                => $companyId,
+                    'lead_id'                   => $lead?->id,
+                    'customer_name'             => $customerName,
+                    'company_name'              => $lead?->company_name ?: $customerName,
+                    'mobile_number'             => $lead?->mobile_number,
+                    'email'                     => $lead?->email,
+                    'gst_number'                => $quotation->gst_number,
+                    'payment_terms'             => $request->input('payment_terms', 'Due on Receipt'),
+                    'billing_attention'         => $customerName,
+                    'billing_country'           => 'India',
+                    'billing_address_street_1'  => $quotation->bill_to_address,
+                    'billing_state'             => $quotation->customer_state ?: 'Tamil Nadu',
+                    'shipping_attention'        => $customerName,
+                    'shipping_country'          => 'India',
+                    'shipping_address_street_1' => $quotation->ship_to_address ?: $quotation->bill_to_address,
+                    'shipping_state'            => $quotation->customer_state ?: 'Tamil Nadu',
+                    'status'                    => 'active',
+                    'created_by'                => $userId,
+                ]);
+            }
+
+            // 2. Resolve place of supply
+            $placeOfSupply = '[33] Tamil Nadu';
+            if (! empty($quotation->customer_state)) {
+                $states = InvoiceController::$indianStates ?? [];
+                foreach ($states as $codeName => $stateName) {
+                    if (strcasecmp($stateName, trim($quotation->customer_state)) === 0 || stripos($codeName, trim($quotation->customer_state)) !== false) {
+                        $placeOfSupply = $codeName;
+                        break;
+                    }
+                }
+            }
+
+            // 3. Resolve terms & conditions
+            $setting = InvoiceSetting::forCompany($companyId);
+            $terms   = $setting?->terms_conditions ?: InvoiceSetting::defaultTerms();
+
+            // 4. Generate next invoice number
+            $invoiceNumber = Invoice::generateNextInvoiceNumber($companyId);
+
+            $invoiceDate   = $request->input('invoice_date', now()->toDateString());
+            $dueDate       = $request->input('due_date', ($quotation->valid_until ? Carbon::parse($quotation->valid_until)->toDateString() : now()->addDays(7)->toDateString()));
+            $paymentTerms  = $request->input('payment_terms', 'Due on Receipt');
+
+            DB::beginTransaction();
+            try {
+                $invoice = Invoice::create([
+                    'company_id'         => $companyId,
+                    'branch_id'          => $lead?->branch_id,
+                    'customer_id'        => $customer->id,
+                    'sales_person_id'    => $lead?->assigned_to ?: ($lead?->created_by ?: $userId),
+                    'invoice_number'     => $invoiceNumber,
+                    'invoice_date'       => $invoiceDate,
+                    'due_date'           => $dueDate,
+                    'payment_terms'      => $paymentTerms,
+                    'place_of_supply'    => $placeOfSupply,
+                    'customer_name'      => $customer->customer_name,
+                    'company_name'       => $customer->company_name,
+                    'customer_email'     => $customer->email,
+                    'customer_phone'     => $customer->mobile_number,
+                    'customer_gstin'     => $quotation->gst_number ?: $customer->gst_number,
+                    'customer_pan'       => $customer->pan_number,
+                    'billing_attention'  => $customer->customer_name,
+                    'billing_address'    => $quotation->bill_to_address ?: $customer->billing_address_street_1,
+                    'billing_city'       => $customer->billing_city,
+                    'billing_state'      => $quotation->customer_state ?: $customer->billing_state,
+                    'billing_pincode'    => $customer->billing_pin_code,
+                    'billing_country'    => 'India',
+                    'billing_gstin'      => $quotation->gst_number ?: $customer->gst_number,
+                    'shipping_attention' => $customer->customer_name,
+                    'shipping_address'   => $quotation->ship_to_address ?: $quotation->bill_to_address,
+                    'shipping_city'      => $customer->shipping_city ?: $customer->billing_city,
+                    'shipping_state'     => $quotation->customer_state ?: $customer->shipping_state,
+                    'shipping_pincode'   => $customer->shipping_pin_code ?: $customer->billing_pin_code,
+                    'shipping_country'   => 'India',
+                    'shipping_gstin'     => $quotation->gst_number ?: $customer->gst_number,
+                    'subtotal'           => (float) $quotation->subtotal,
+                    'total_cgst'         => (float) $quotation->cgst_amount,
+                    'total_sgst'         => (float) $quotation->sgst_amount,
+                    'total_igst'         => (float) $quotation->igst_amount,
+                    'total_tax'          => (float) $quotation->tax_amount,
+                    'round_off'          => 0.00,
+                    'total_amount'       => (float) $quotation->total_amount,
+                    'paid_amount'        => 0.00,
+                    'total_tds'          => 0.00,
+                    'total_credited'     => 0.00,
+                    'balance_due'        => (float) $quotation->total_amount,
+                    'customer_notes'     => "Converted from Quotation #{$quotation->quotation_no}." . ($quotation->notes ? "\n" . $quotation->notes : ''),
+                    'terms_conditions'   => $terms,
+                    'status'             => 'draft',
+                    'created_by'         => $userId,
+                    'updated_by'         => $userId,
+                ]);
+
+                $cgstPct = (float) ($quotation->cgst_rate ?: 0);
+                $sgstPct = (float) ($quotation->sgst_rate ?: 0);
+                $igstPct = (float) ($quotation->igst_rate ?: 0);
+
+                foreach ($quotation->items as $index => $qItem) {
+                    $rate   = (float) $qItem->unit_price;
+                    $qty    = (float) ($qItem->qty ?: 1);
+                    $amount = (float) ($qItem->total ?: ($rate * $qty));
+
+                    $lineCgst  = round(($amount * $cgstPct) / 100, 2);
+                    $lineSgst  = round(($amount * $sgstPct) / 100, 2);
+                    $lineIgst  = round(($amount * $igstPct) / 100, 2);
+                    $lineTotal = $amount + $lineCgst + $lineSgst + $lineIgst;
+
+                    $itemName = $qItem->product?->product_name ?: ($qItem->product?->package_name ?: ($qItem->description ?: 'Product / Service'));
+
+                    $itemMaster = ItemMaster::where(function ($q) use ($companyId) {
+                        if ($companyId) {
+                            $q->where('company_id', $companyId)->orWhereNull('company_id');
+                        }
+                    })
+                    ->whereRaw('LOWER(TRIM(item_name)) = ?', [strtolower(trim($itemName))])
+                    ->first();
+
+                    if (! $itemMaster) {
+                        $itemMaster = ItemMaster::create([
+                            'company_id'   => $companyId,
+                            'item_name'    => $itemName,
+                            'description'  => $qItem->description ?: ($qItem->product?->description ?: null),
+                            'hsn_sac_code' => null,
+                            'rate'         => $rate,
+                            'gst'          => $cgstPct + $sgstPct + $igstPct,
+                            'status'       => 'active',
+                            'created_by'   => $userId,
+                        ]);
+                    }
+
+                    InvoiceItem::create([
+                        'invoice_id'    => $invoice->id,
+                        'item_id'       => $itemMaster?->id,
+                        'item_name'     => $itemName,
+                        'description'   => $qItem->description,
+                        'hsn_sac_code'  => $itemMaster?->hsn_sac_code,
+                        'qty'           => $qty,
+                        'rate'          => $rate,
+                        'amount'        => $amount,
+                        'cgst_percent'  => $cgstPct,
+                        'cgst_amount'   => $lineCgst,
+                        'sgst_percent'  => $sgstPct,
+                        'sgst_amount'   => $lineSgst,
+                        'igst_percent'  => $igstPct,
+                        'igst_amount'   => $lineIgst,
+                        'total_amount'  => $lineTotal,
+                        'sort_order'    => $index + 1,
+                    ]);
+                }
+
+                DB::commit();
+
+                return response()->json([
+                    'status' => true,
+                    'message' => "Quotation #{$quotation->quotation_no} was successfully converted to Invoice #{$invoice->invoice_number}!",
+                    'data' => [
+                        'invoice_id' => $invoice->id,
+                        'invoice_number' => $invoice->invoice_number,
+                    ],
+                ]);
+            } catch (Throwable $e) {
+                DB::rollBack();
+                Log::error("Failed to convert quotation #{$id} to invoice: " . $e->getMessage());
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Failed to convert quotation: ' . $e->getMessage(),
+                ], 500);
+            }
+        } catch (Throwable $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/mobile/accounts/quotations/{id}/approve
+     */
+    public function approveQuotation(Request $request, $id): JsonResponse
+    {
+        try {
+            $quotation = Quotation::findOrFail($id);
+            $quotation->update([
+                'is_approved' => true,
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => "Quotation #{$quotation->quotation_no} approved successfully!",
+            ]);
+        } catch (Throwable $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * DELETE /api/mobile/accounts/quotations/{id}
+     */
+    public function destroyQuotation(Request $request, $id): JsonResponse
+    {
+        try {
+            $quotation = Quotation::findOrFail($id);
+            $quotation->delete();
+
+            return response()->json([
+                'status' => true,
+                'message' => "Quotation #{$quotation->quotation_no} deleted successfully!",
+            ]);
+        } catch (Throwable $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * POST /api/mobile/accounts/quotations/{id}/send-email
+     */
+    public function sendQuotationEmail(Request $request, $id): JsonResponse
+    {
+        try {
+            $quotation = Quotation::with(['lead', 'items.product', 'createdBy'])->findOrFail($id);
+            $lead = $quotation->lead;
+            $email = trim((string) $lead?->email);
+
+            if (! $lead || $email === '') {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Lead email is not available for this quotation.',
+                ], 422);
+            }
+
+            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Lead email is invalid.',
+                ], 422);
+            }
+
+            $pdf = Pdf::loadView('pages.quotations.quotation_format_1', [
+                'quotation' => $quotation,
+                'quoteSetting' => QuotationSetting::forQuotation($quotation),
+            ])->setPaper('a4', 'portrait');
+
+            $filename = 'QT-' . str_pad((string) $quotation->id, 6, '0', STR_PAD_LEFT) . '.pdf';
+            $agreeUrl = url("/quotations/{$quotation->id}/response/agree");
+            $disagreeUrl = url("/quotations/{$quotation->id}/response/disagree");
+
+            Mail::send('emails.quotation', [
+                'quotation' => $quotation,
+                'lead' => $lead,
+                'agreeUrl' => $agreeUrl,
+                'disagreeUrl' => $disagreeUrl,
+            ], function ($message) use ($email, $lead, $quotation, $pdf, $filename) {
+                $message->to($email, $lead->contact_name)
+                    ->subject("Quotation #{$quotation->quotation_no} from " . config('app.name'))
+                    ->attachData($pdf->output(), $filename, ['mime' => 'application/pdf']);
+            });
+
+            return response()->json([
+                'status' => true,
+                'message' => "Quotation email sent successfully to {$email}!",
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Send quotation email error: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to send email: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * PATCH /api/mobile/accounts/quotations/{id}/map-lead
+     */
+    public function mapQuotationLead(Request $request, $id): JsonResponse
+    {
+        try {
+            $request->validate([
+                'lead_id' => 'required|exists:leads,id',
+            ]);
+
+            $quotation = Quotation::findOrFail($id);
+            $lead = Lead::findOrFail($request->lead_id);
+
+            $quotation->update([
+                'lead_id' => $lead->id,
+                'bill_to_address' => $quotation->bill_to_address ?: $lead->billing_address,
+                'ship_to_address' => $quotation->ship_to_address ?: ($lead->shipping_address ?: $lead->billing_address),
+                'customer_state' => $quotation->customer_state ?: $lead->state,
+            ]);
+
+            return response()->json([
+                'status' => true,
+                'message' => "Quotation linked to Lead #{$lead->id} ({$lead->contact_name}) successfully!",
+            ]);
+        } catch (Throwable $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * GET /api/mobile/accounts/quotations/{id}/pdf
+     */
+    public function quotationPdf(Request $request, $id)
+    {
+        try {
+            $quotation = Quotation::with(['items.product', 'createdBy', 'lead.createdBy', 'lead.assignedTo'])->findOrFail($id);
+            $quoteSetting = QuotationSetting::forQuotation($quotation);
+
+            $pdf = Pdf::loadView('pages.quotations.quotation_format_1', compact('quotation', 'quoteSetting'))
+                ->setPaper('a4', 'portrait')
+                ->setOptions([
+                    'defaultFont' => 'DejaVu Sans',
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled' => true,
+                    'isPhpEnabled' => true,
+                ]);
+
+            $filename = 'QT-' . str_pad((string) $quotation->id, 6, '0', STR_PAD_LEFT) . '.pdf';
+            return $pdf->stream($filename);
+        } catch (Throwable $e) {
+            Log::error('Quotation PDF error: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to generate quotation PDF: ' . $e->getMessage(),
+            ], 404);
+        }
+    }
+
 }

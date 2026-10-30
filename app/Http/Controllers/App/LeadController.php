@@ -2421,4 +2421,66 @@ class LeadController extends Controller
             'price_request' => $req->fresh(['lead', 'product', 'requestedBy', 'approvedBy']),
         ]);
     }
+
+    /**
+     * GET /api/mobile/leads/today-count
+     * Lightweight endpoint returning today's new leads count according to
+     * authenticated user's role and visibility permissions.
+     */
+    public function todayNewLeadsCount(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['status' => false, 'message' => 'Unauthenticated'], 401);
+        }
+
+        // Current calendar date in application timezone (Asia/Kolkata)
+        $today = Carbon::now('Asia/Kolkata')->toDateString();
+
+        $query = Lead::query();
+
+        // 1. Role-based visibility scoping:
+        // Privileged roles (Company Admin, CBO, Chief Operating Officer, Super Admin)
+        // receive company-wide access via DataVisibilityService::isCompanyWideUser.
+        // Regular users and restricted roles are scoped to assigned_to / team / branch.
+        $this->visibility->applyLeadVisibility($query, $user);
+
+        // 2. Non-company-wide branch isolation:
+        // Ensure regular users cannot see leads belonging to branches they are not authorized to access.
+        if (! $this->visibility->isCompanyWideUser($user)) {
+            $branchIds = $user->getMyBranchIds();
+            if (! empty($branchIds)) {
+                $query->where(function ($bq) use ($branchIds, $user) {
+                    $bq->whereIn('branch_id', $branchIds)
+                       ->orWhere('assigned_to', $user->id);
+                });
+            }
+        }
+
+        // 3. Current calendar date filter matching CRM Leads module logic
+        // (checks lead_date or created_at for current date so no leads are dropped)
+        $query->where(function ($dq) use ($today) {
+            $dq->whereDate('lead_date', $today)
+               ->orWhereDate('created_at', $today);
+        });
+
+        // Fast count query without fetching full records
+        $count = $query->count();
+
+        $formattedDate = Carbon::parse($today)->format('d-m-Y');
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'date'           => $today,
+                'formatted_date' => $formattedDate,
+                'count'          => (int) $count,
+                'role_scope'     => $this->visibility->isCompanyWideUser($user) ? 'company' : 'user',
+                'notification'   => [
+                    'title'   => "Today's New Leads",
+                    'message' => "{$formattedDate} – You have {$count} new leads today.",
+                ],
+            ],
+        ]);
+    }
 }

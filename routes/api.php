@@ -656,6 +656,7 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')->group(function () {
 
     // ── Static routes MUST come before {lead} wildcard ──────────────────────
+    Route::get('today-count',      [MobileLeadController::class, 'todayNewLeadsCount'])->name('today-count');
     Route::get('meta',             [MobileLeadController::class, 'meta'])->name('meta');
     Route::get('sources',          [MobileLeadController::class, 'sources'])->name('sources');
     Route::get('statuses',         [MobileLeadController::class, 'statuses'])->name('statuses');
@@ -842,6 +843,8 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::delete('/domains/{domain}/renewals/{renewal}', [AccountsApiController::class, 'destroyDomainRenewal'])->name('domains.renewals.destroy');
     Route::post('/domains/{domain}/migrate-lead', [AccountsApiController::class, 'migrateDomainLead'])->name('domains.migrate-lead');
     Route::post('/domains/{domain}/unlink-lead', [AccountsApiController::class, 'unlinkDomainLead'])->name('domains.unlink-lead');
+    Route::post('/domains/{domain}/map-hosting', [AccountsApiController::class, 'mapDomainHosting'])->name('domains.map-hosting');
+    Route::post('/domains/{domain}/unlink-hosting', [AccountsApiController::class, 'unlinkDomainHosting'])->name('domains.unlink-hosting');
 
     Route::get('/hostings', [AccountsApiController::class, 'hostings'])->name('hostings.index');
     Route::post('/hostings', [AccountsApiController::class, 'storeHosting'])->name('hostings.store');
@@ -852,8 +855,13 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::delete('/hostings/{hosting}/renewals/{renewal}', [AccountsApiController::class, 'destroyHostingRenewal'])->name('hostings.renewals.destroy');
     Route::post('/hostings/{hosting}/migrate-lead', [AccountsApiController::class, 'migrateHostingLead'])->name('hostings.migrate-lead');
     Route::post('/hostings/{hosting}/unlink-lead', [AccountsApiController::class, 'unlinkHostingLead'])->name('hostings.unlink-lead');
+    Route::post('/hostings/{hosting}/map-domains', [AccountsApiController::class, 'mapHostingDomains'])->name('hostings.map-domains');
+    Route::post('/hostings/{hosting}/unlink-domain/{domain}', [AccountsApiController::class, 'unlinkHostingDomain'])->name('hostings.unlink-domain');
+    Route::get('/hostings/{hosting}/available-domains', [AccountsApiController::class, 'availableDomainsForHosting'])->name('hostings.available-domains');
 
     Route::get('/domains-hosting/leads', [AccountsApiController::class, 'domainsHostingLeads'])->name('domains-hosting.leads');
+    Route::get('/domains-hosting/servers', [AccountsApiController::class, 'domainsHostingServers'])->name('domains-hosting.servers');
+    Route::get('/domains-hosting/all-hostings', [AccountsApiController::class, 'allHostingsForMapping'])->name('domains-hosting.all-hostings');
 
     // Ad Accounts Master
     Route::get('/ad-accounts-master', [AccountsApiController::class, 'adAccounts'])->name('ad-accounts-master.index');
@@ -882,6 +890,7 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::get('/sales/invoices/{id}/pdf', [AccountsApiController::class, 'salesInvoicePdf'])->name('sales.invoices.pdf');
     Route::put('/sales/invoices/{id}', [AccountsApiController::class, 'updateSalesInvoice'])->name('sales.invoices.update');
     Route::patch('/sales/invoices/{id}/sales-person', [AccountsApiController::class, 'updateInvoiceSalesPerson'])->name('sales.invoices.sales-person');
+    Route::patch('/sales/invoices/{id}/map-lead', [AccountsApiController::class, 'mapSalesInvoiceLead'])->name('sales.invoices.map-lead');
     Route::delete('/sales/invoices/{id}', [AccountsApiController::class, 'destroySalesInvoice'])->name('sales.invoices.destroy');
 
     // Accounts Sales Customers (Creation & Converted Leads)
@@ -922,6 +931,19 @@ Route::middleware('auth:sanctum')->prefix('mobile/accounts')->name('mobile.accou
     Route::patch('/purchase-orders/{id}/status', [AccountsApiController::class, 'updatePurchaseOrderStatus'])->name('purchase-orders.update-status');
     Route::delete('/purchase-orders/{id}', [AccountsApiController::class, 'destroyPurchaseOrder'])->name('purchase-orders.destroy');
     Route::get('/purchase-orders/{id}/pdf', [AccountsApiController::class, 'purchaseOrderPdf'])->name('purchase-orders.pdf');
+
+    // Accounts Quotations
+    Route::get('/quotations', [AccountsApiController::class, 'quotations'])->name('quotations.index');
+    Route::get('/quotations/meta', [AccountsApiController::class, 'quotationMeta'])->name('quotations.meta');
+    Route::post('/quotations', [AccountsApiController::class, 'storeQuotation'])->name('quotations.store');
+    Route::get('/quotations/{id}', [AccountsApiController::class, 'showQuotation'])->name('quotations.show');
+    Route::put('/quotations/{id}', [AccountsApiController::class, 'updateQuotation'])->name('quotations.update');
+    Route::delete('/quotations/{id}', [AccountsApiController::class, 'destroyQuotation'])->name('quotations.destroy');
+    Route::post('/quotations/{id}/approve', [AccountsApiController::class, 'approveQuotation'])->name('quotations.approve');
+    Route::post('/quotations/{id}/send-email', [AccountsApiController::class, 'sendQuotationEmail'])->name('quotations.send-email');
+    Route::patch('/quotations/{id}/map-lead', [AccountsApiController::class, 'mapQuotationLead'])->name('quotations.map-lead');
+    Route::post('/quotations/{id}/convert-to-invoice', [AccountsApiController::class, 'convertQuotationToInvoice'])->name('quotations.convert-to-invoice');
+    Route::get('/quotations/{id}/pdf', [AccountsApiController::class, 'quotationPdf'])->name('quotations.pdf');
 });
 
 /*

@@ -337,6 +337,7 @@ return [
             ['key' => 'accounts.ad_spend', 'label' => 'Ad Spend', 'section' => 'AD BUDGET', 'order' => 40],
             ['key' => 'accounts.allocation_vs_spent', 'label' => 'Allocation Vs Spend', 'section' => 'AD BUDGET', 'order' => 50],
             ['key' => 'accounts.domains_hosting', 'label' => 'Domains & Hosting', 'section' => 'ACCOUNTS', 'order' => 60],
+            ['key' => 'accounts.quotations', 'label' => 'Quotations', 'section' => 'ACCOUNTS', 'order' => 60.5],
             ['key' => 'accounts.sales_invoices', 'label' => 'Invoices', 'section' => 'SALES', 'order' => 61],
             ['key' => 'accounts.sales_payments', 'label' => 'Payments', 'section' => 'SALES', 'order' => 62],
             ['key' => 'accounts.sales_credit_notes', 'label' => 'Credit Notes', 'section' => 'SALES', 'order' => 63],
