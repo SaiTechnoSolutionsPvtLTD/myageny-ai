@@ -517,10 +517,16 @@
                         <div class="acc-filter-select-wrap">
                             <i class="bi bi-funnel acc-lead-icon"></i>
                             <select id="topExpensesPeriodSelect" class="acc-filter-select no-select2" data-no-select2="true" onchange="fetchTopExpensesChartData()">
+                                <option value="all" selected>All Time (All Records)</option>
+                                <option value="year">Current FY (FY {{ $currentFyStartYear }}-{{ substr($currentFyStartYear + 1, -2) }})</option>
+                                @foreach($fyYears as $fyYr)
+                                    @if($fyYr !== $currentFyStartYear)
+                                        <option value="fy_{{ $fyYr }}">FY {{ $fyYr }}-{{ substr($fyYr + 1, -2) }}</option>
+                                    @endif
+                                @endforeach
+                                <option value="quarter">This Quarter</option>
+                                <option value="month">This Month</option>
                                 <option value="today">Today</option>
-                                <option value="month" selected>Month (This Month)</option>
-                                <option value="quarter">Quarter (This Quarter)</option>
-                                <option value="year">Year (This Year)</option>
                             </select>
                             <i class="bi bi-chevron-down acc-arrow-icon"></i>
                         </div>

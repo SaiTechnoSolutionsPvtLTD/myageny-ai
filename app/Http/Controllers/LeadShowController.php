@@ -16,10 +16,13 @@ use App\Models\LeadStatus;
 use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
+use App\Models\ZohoIntegration;
 use App\Services\ActivityLogger;
 use App\Services\DataVisibilityService;
+use App\Services\ZohoBooksService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class LeadShowController extends Controller
 {
@@ -526,6 +529,18 @@ class LeadShowController extends Controller
         }
 
         $quotation->refresh()->recalculateTotals();
+
+        // Auto-create / sync quotation in Zoho Books if connected
+        try {
+            $companyId = $lead->company_id ?: auth()->user()?->company_id;
+            $zohoIntegration = ZohoIntegration::current($companyId);
+            if ($zohoIntegration && $zohoIntegration->is_connected) {
+                $zohoService = app(ZohoBooksService::class);
+                $zohoService->createEstimateInZoho($quotation, $zohoIntegration);
+            }
+        } catch (\Throwable $ze) {
+            Log::warning('Zoho Books auto-sync estimate from lead failed: ' . $ze->getMessage());
+        }
 
         return back()->with('success', "Quotation <strong>{$quotation->quotation_number}</strong> created.");
     }

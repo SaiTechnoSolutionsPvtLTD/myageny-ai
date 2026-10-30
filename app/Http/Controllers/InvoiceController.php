@@ -13,6 +13,8 @@ use App\Models\ItemMaster;
 use App\Models\Lead;
 use App\Models\Quotation;
 use App\Models\User;
+use App\Models\ZohoIntegration;
+use App\Services\ZohoBooksService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -589,6 +591,24 @@ class InvoiceController extends Controller
 
             DB::commit();
 
+            // Auto-create / sync Invoice in Zoho Books if connected
+            $zohoSyncMsg = null;
+            try {
+                $zohoIntegration = ZohoIntegration::current($companyId);
+                if ($zohoIntegration && $zohoIntegration->is_connected) {
+                    $zohoService = app(ZohoBooksService::class);
+                    $zohoInvResult = $zohoService->createInvoiceInZoho($invoice, $zohoIntegration);
+                    if ($zohoInvResult) {
+                        $zohoSyncMsg = ' & synced to Zoho Books';
+                    }
+                }
+            } catch (\Throwable $ze) {
+                Log::warning('Zoho Books auto-sync invoice failed: ' . $ze->getMessage(), [
+                    'invoice_id'     => $invoice->id,
+                    'invoice_number' => $invoice->invoice_number,
+                ]);
+            }
+
             // Handle email dispatch if requested by user
             $mailSent = false;
             $mailError = null;
@@ -655,16 +675,16 @@ class InvoiceController extends Controller
 
             if ($mailSent) {
                 return redirect()->route('accounts.sales.invoices.show', $invoice->id)
-                                 ->with('success', "Invoice #{$invoice->invoice_number} created and email successfully sent to {$invoice->customer_email}!");
+                                 ->with('success', "Invoice #{$invoice->invoice_number} created" . ($zohoSyncMsg ?? '') . " and email successfully sent to {$invoice->customer_email}!");
             }
 
             if ($mailError && $request->boolean('send_email')) {
                 return redirect()->route('accounts.sales.invoices.show', $invoice->id)
-                                 ->with('success', "Invoice #{$invoice->invoice_number} created successfully, but mail could not be sent: {$mailError}");
+                                 ->with('success', "Invoice #{$invoice->invoice_number} created" . ($zohoSyncMsg ?? '') . " successfully, but mail could not be sent: {$mailError}");
             }
 
             return redirect()->route('accounts.sales.invoices.show', $invoice->id)
-                             ->with('success', "Invoice #{$invoice->invoice_number} created successfully!");
+                             ->with('success', "Invoice #{$invoice->invoice_number} created" . ($zohoSyncMsg ?? '') . " successfully!");
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()->withInput()->with('error', 'Failed to create invoice: ' . $e->getMessage());
@@ -1126,5 +1146,41 @@ class InvoiceController extends Controller
         $leadName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #' . $lead->id);
 
         return redirect()->back()->with('success', "Invoice #{$invoice->invoice_number} successfully mapped to Lead #{$lead->id} ({$leadName})!");
+    }
+
+    /**
+     * Manually post / push this invoice to Zoho Books API.
+     */
+    public function postToZoho(int $id, ZohoBooksService $zohoService)
+    {
+        $invoice = Invoice::findOrFail($id);
+        $companyId = $invoice->company_id ?: auth()->user()?->company_id;
+        $integration = ZohoIntegration::current($companyId);
+
+        if (! $integration || ! $integration->is_connected) {
+            $msg = 'Zoho Books is not connected. Please connect via Settings first.';
+            if (request()->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg], 400);
+            }
+            return redirect()->back()->with('error', $msg);
+        }
+
+        try {
+            $result = $zohoService->createInvoiceInZoho($invoice, $integration);
+            $msg = "Invoice #{$invoice->invoice_number} successfully posted to Zoho Books!";
+
+            if (request()->wantsJson()) {
+                return response()->json(['success' => true, 'message' => $msg, 'data' => $result]);
+            }
+            return redirect()->back()->with('success', $msg);
+        } catch (\Throwable $e) {
+            $err = 'Failed to post to Zoho Books: ' . $e->getMessage();
+            Log::error("[ZohoManualPost] Invoice #{$invoice->invoice_number} error: " . $e->getMessage());
+
+            if (request()->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $err], 500);
+            }
+            return redirect()->back()->with('error', $err);
+        }
     }
 }

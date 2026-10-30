@@ -433,6 +433,42 @@ class Lead extends Model
         return $this->hasMany(\App\Models\HostingRecord::class, 'lead_id')->latest();
     }
 
+    /**
+     * Find duplicate leads matching a given mobile number or normalized last 10 digits.
+     */
+    public static function findDuplicatesByMobile(?string $mobileNumber, ?int $excludeLeadId = null, ?int $companyId = null)
+    {
+        if (empty($mobileNumber)) {
+            return collect();
+        }
+
+        $digits = preg_replace('/[^0-9]/', '', (string) $mobileNumber);
+        $last10 = strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+
+        if (strlen($last10) < 7) {
+            return collect();
+        }
+
+        return static::withoutGlobalScopes()
+            ->when($excludeLeadId, fn ($q) => $q->where('id', '!=', $excludeLeadId))
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->where(function ($q) use ($mobileNumber, $last10) {
+                $q->where('mobile_number', $mobileNumber)
+                  ->orWhere('mobile_number', 'LIKE', "%{$last10}");
+            })
+            ->with(['assignedTo.employee', 'assignedTo.internJoiningForm', 'branch', 'leadStatus', 'leadSource'])
+            ->latest('id')
+            ->get();
+    }
+
+    /**
+     * Get all duplicate leads for this lead instance.
+     */
+    public function duplicateLeads()
+    {
+        return static::findDuplicatesByMobile($this->mobile_number, $this->id, $this->company_id);
+    }
+
     public function show(Lead $lead)
     {
         $lead->load([

@@ -28,7 +28,7 @@ class InvoiceSettingController extends Controller
         $validated = $request->validate([
             // Numbering
             'invoice_prefix'   => 'nullable|string|max:50',
-            'date_format'      => 'required|string|in:financial_year,calendar_year,year_month,none',
+            'date_format'      => 'required|string|in:financial_year,short_financial_year,full_financial_year,calendar_year,year_month,none',
             'next_number'      => 'required|integer|min:1',
             'number_padding'   => 'required|integer|min:2|max:10',
             'invoice_suffix'   => 'nullable|string|max:50',

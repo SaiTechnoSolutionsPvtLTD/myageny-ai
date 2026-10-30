@@ -9628,6 +9628,8 @@
 
             <input type="hidden" id="daEditPiId" value="">
 
+            <input type="hidden" id="daEditLeadProductId" value="">
+
             
 
             <div style="margin-bottom: 16px;">
@@ -17116,7 +17118,7 @@ function buildAccordionSubTableHtml(leads) {
 
                 '<span>' + (l.closure_date || '-') + '</span>' +
 
-                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\', ' + (l.expected_value !== undefined && l.expected_value !== null ? l.expected_value : 'null') + ')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date">✏️</button>' +
+                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\', ' + (l.expected_value !== undefined && l.expected_value !== null ? l.expected_value : 'null') + ', ' + (l.lead_product_id || 'null') + ')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date">✏️</button>' +
 
                 '</div>';
 
@@ -17438,7 +17440,7 @@ function renderFullDetailsTable(leads) {
 
                 '<span>' + (l.closure_date || '-') + '</span>' +
 
-                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\', ' + (l.expected_value !== undefined && l.expected_value !== null ? l.expected_value : 'null') + ')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date">✏️</button>' +
+                '<button type="button" onclick="event.stopPropagation(); openEditProspectDateModal(' + (l.lead_id || 'null') + ', ' + (l.pi_id || 'null') + ', \'' + (l.closure_date_raw || '') + '\', \'' + safeComp + '\', ' + (l.expected_value !== undefined && l.expected_value !== null ? l.expected_value : 'null') + ', ' + (l.lead_product_id || 'null') + ')" style="background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:#2563eb;" title="Edit Closure / Delivery Date">✏️</button>' +
 
                 '</div>';
 
@@ -21273,11 +21275,13 @@ window.showToast = function(title, desc, type) {
 
 
 
-window.openEditProspectDateModal = function(leadId, piId, currentDateRaw, companyName, expectedAmount) {
+window.openEditProspectDateModal = function(leadId, piId, currentDateRaw, companyName, expectedAmount, leadProductId) {
 
     var leadIdEl = document.getElementById('daEditLeadId');
 
     var piIdEl = document.getElementById('daEditPiId');
+
+    var leadProductIdEl = document.getElementById('daEditLeadProductId');
 
     var newDateEl = document.getElementById('daEditNewDate');
 
@@ -21296,6 +21300,8 @@ window.openEditProspectDateModal = function(leadId, piId, currentDateRaw, compan
     if (leadIdEl) leadIdEl.value = (leadId && leadId !== 'null') ? leadId : '';
 
     if (piIdEl) piIdEl.value = (piId && piId !== 'null') ? piId : '';
+
+    if (leadProductIdEl) leadProductIdEl.value = (leadProductId && leadProductId !== 'null') ? leadProductId : '';
 
     if (newDateEl) newDateEl.value = currentDateRaw || '';
 
@@ -21374,6 +21380,8 @@ window.submitProspectDateUpdate = function(event) {
     var leadId = document.getElementById('daEditLeadId')?.value || '';
 
     var piId = document.getElementById('daEditPiId')?.value || '';
+
+    var leadProductId = document.getElementById('daEditLeadProductId')?.value || '';
 
     var newDate = document.getElementById('daEditNewDate')?.value || '';
 
@@ -21473,6 +21481,8 @@ window.submitProspectDateUpdate = function(event) {
 
             pi_id: piId ? parseInt(piId) : null,
 
+            lead_product_id: leadProductId ? parseInt(leadProductId) : null,
+
             new_date: newDate,
 
             expected_amount: expectedAmount ? parseFloat(expectedAmount) : null,
@@ -21513,15 +21523,31 @@ window.submitProspectDateUpdate = function(event) {
 
                 var targetPiId = piId ? parseInt(piId) : null;
 
+                var targetLpId = leadProductId ? parseInt(leadProductId) : null;
+
 
 
                 currentLoadedLeads.forEach(function(item) {
 
-                    var matchLead = targetLeadId && item.lead_id == targetLeadId;
+                    var match = false;
 
-                    var matchPi = targetPiId && item.pi_id == targetPiId;
+                    if (targetPiId && item.pi_id && item.pi_id == targetPiId) {
 
-                    if (matchLead || matchPi) {
+                        match = true;
+
+                    } else if (targetLpId && item.lead_product_id && item.lead_product_id == targetLpId) {
+
+                        match = true;
+
+                    } else if (!targetPiId && !targetLpId && targetLeadId && item.lead_id == targetLeadId) {
+
+                        match = true;
+
+                    }
+
+
+
+                    if (match) {
 
                         item.closure_date = data.closure_date;
 

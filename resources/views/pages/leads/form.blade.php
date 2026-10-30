@@ -75,9 +75,10 @@
                         <label class="lf-label">Mobile Number <span class="lf-req">*</span></label>
                         <div class="lf-iw">
                             <svg class="lf-ico" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-                            <input type="text" name="mobile_number" class="lf-inp {{ $errors->has('mobile_number') ? 'err' : '' }}"
+                            <input type="text" name="mobile_number" id="leadMobileInput" class="lf-inp {{ $errors->has('mobile_number') ? 'err' : '' }}"
                                    placeholder="+91 98765 43210" value="{{ $old('mobile_number') }}" required>
                         </div>
+                        <div id="mobileDuplicateWarning" style="display:none; margin-top:6px; font-size:12px; color:#be123c; background:#fff1f2; border:1px solid #fecdd3; border-radius:6px; padding:8px 12px; font-weight:600; line-height:1.4;"></div>
                         @error('mobile_number')<div class="lf-err">{{ $message }}</div>@enderror
                     </div>
                     <div class="lf-group">
@@ -622,6 +623,47 @@ $(document).ready(function() {
         if (validBranchOptions.length === 1 && !$initialBranch.val()) {
             $initialBranch.val(validBranchOptions.val()).trigger('change');
         }
+    }
+
+    // Real-time Duplicate Mobile Number validation
+    let mobileCheckTimeout = null;
+    const $mobileInput = $('#leadMobileInput');
+    const $duplicateWarn = $('#mobileDuplicateWarning');
+    const excludeLeadId = '{{ $isEdit && $lead ? $lead->id : "" }}';
+
+    function checkMobileDuplicate(val) {
+        val = (val || '').trim();
+        const digits = val.replace(/[^0-9]/g, '');
+        if (digits.length < 10) {
+            $duplicateWarn.hide().empty();
+            return;
+        }
+
+        const url = '{{ route("leads.check-duplicate") }}?mobile=' + encodeURIComponent(val) + (excludeLeadId ? '&exclude_id=' + excludeLeadId : '');
+        $.getJSON(url, function(res) {
+            if (res && res.is_duplicate && res.primary) {
+                const p = res.primary;
+                $duplicateWarn.html(
+                    `<strong>⚠️ Duplicate Lead Detected:</strong> This mobile number is already registered with ` +
+                    `<a href="${p.url}" target="_blank" style="color:#be123c; font-weight:800; text-decoration:underline;">Lead #${p.id} (${p.company_name || p.contact_name})</a>.<br>` +
+                    `<span style="display:inline-block; margin-top:3px;">👤 <strong>Allocated User:</strong> ${p.assigned_user} ${p.user_mobile && p.user_mobile !== 'N/A' ? '(Mobile: ' + p.user_mobile + ')' : ''} | 🏢 <strong>Branch:</strong> ${p.branch_name}</span>`
+                ).slideDown(150);
+                $mobileInput.addClass('err');
+            } else {
+                $duplicateWarn.slideUp(150).empty();
+                $mobileInput.removeClass('err');
+            }
+        });
+    }
+
+    $mobileInput.on('input change blur', function() {
+        clearTimeout(mobileCheckTimeout);
+        const val = $(this).val();
+        mobileCheckTimeout = setTimeout(() => checkMobileDuplicate(val), 350);
+    });
+
+    if ($mobileInput.val()) {
+        checkMobileDuplicate($mobileInput.val());
     }
 });
 </script>

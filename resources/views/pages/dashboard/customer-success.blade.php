@@ -981,6 +981,51 @@
                 </div>
                 <div id="technicalSeoPagination" class="app-pagination" style="display:none; border-top:1px solid var(--cs-border); padding:12px 16px; border-radius:0 0 12px 12px; margin-top:4px;"></div>
             </div>
+
+            {{-- Expiring Domains & Hosting Panel --}}
+            <div class="dashboard-panel dashboard-grid-full" id="domainsHostingPanel">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <h4 style="margin:0;">🌐 Expiring Domains &amp; Hosting (Current Month)</h4>
+                        <div style="font-size:12px;color:var(--cs-muted);margin-top:2px;">Domain registrations and Web Hosting accounts expiring or due for renewal in the current month.</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <div style="display:flex;gap:6px;">
+                            <button type="button" class="cs-tab-btn active" id="btn_dh_all" onclick="switchDhTab('all')">
+                                <span>🌐 All</span> (<span id="dhCountAll">0</span>)
+                            </button>
+                            <button type="button" class="cs-tab-btn" id="btn_dh_domain" onclick="switchDhTab('domain')">
+                                <span>🔗 Domains</span> (<span id="dhCountDomains">0</span>)
+                            </button>
+                            <button type="button" class="cs-tab-btn" id="btn_dh_hosting" onclick="switchDhTab('hosting')">
+                                <span>🖥️ Hosting</span> (<span id="dhCountHostings">0</span>)
+                            </button>
+                        </div>
+                        <input type="text" id="dhSearchInput" class="lpd-input" placeholder="Search domain, hosting, client..." style="padding:6px 12px;font-size:12px;width:200px;" oninput="onDhSearch(this.value)">
+                        <a href="{{ route('accounts.domains-hosting.index') }}" target="_blank" class="lpd-btn lpd-btn-ghost" style="padding:5px 12px;font-size:11px;text-decoration:none;" title="Open Domains & Hosting Management">Manage Module ↗</a>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="cs-table">
+                        <thead>
+                            <tr>
+                                <th style="text-align:center;">Type</th>
+                                <th>Domain / Hosting Name</th>
+                                <th>Account / Client</th>
+                                <th>Provider / Registrar</th>
+                                <th style="text-align:center;">Expiry / Renewal Date</th>
+                                <th style="text-align:center;">Status / Timeline</th>
+                                <th style="text-align:right;">Renewal Amount</th>
+                                <th style="text-align:center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="domainsHostingTableBody">
+                            <tr><td colspan="8" style="text-align:center;color:var(--cs-muted);padding:20px;">Loading Expiring Domains &amp; Hosting data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="domainsHostingPagination" class="app-pagination" style="display:none; border-top:1px solid var(--cs-border); padding:12px 16px; border-radius:0 0 12px 12px; margin-top:4px;"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -1706,6 +1751,12 @@ function renderDashboard(data) {
             <div class="sc-label">Technical SEO Projects</div>
             <div class="sc-sub">${fmt(data.technical_seo?.value ?? 0)} total &bull; Default: Current Month</div>
         </div>
+        <div class="summary-card sc-cyan" style="background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%) !important;" onclick="document.getElementById('domainsHostingPanel')?.scrollIntoView({behavior: 'smooth'})" title="Click to view Expiring Domains & Hosting Accounts">
+            <div class="sc-icon">🌐</div>
+            <div class="sc-value">${data.domains_hosting?.count ?? 0}</div>
+            <div class="sc-label">Domains & Hosting (Expiring)</div>
+            <div class="sc-sub">${data.domains_hosting?.domains_count ?? 0} Domains, ${data.domains_hosting?.hostings_count ?? 0} Hostings &bull; View ↗</div>
+        </div>
     `;
 
     // 2. Department Pending Table
@@ -1794,6 +1845,15 @@ function renderDashboard(data) {
 
     // 10. Technical SEO Projects
     renderTechnicalSeoProjects();
+
+    // 11. Domains & Hosting Expiring
+    const elDhAll = document.getElementById('dhCountAll');
+    const elDhDomains = document.getElementById('dhCountDomains');
+    const elDhHostings = document.getElementById('dhCountHostings');
+    if (elDhAll) elDhAll.textContent = data.domains_hosting?.count ?? 0;
+    if (elDhDomains) elDhDomains.textContent = data.domains_hosting?.domains_count ?? 0;
+    if (elDhHostings) elDhHostings.textContent = data.domains_hosting?.hostings_count ?? 0;
+    renderDomainsHostingTable();
 }
 
 let activeCampaignTab = 'cm_not_renewed';
@@ -2502,6 +2562,188 @@ function renderTechnicalSeoProjects() {
 function changeTechnicalSeoPage(page) {
     technicalSeoCurrentPage = page;
     renderTechnicalSeoProjects();
+}
+
+let activeDhTab = 'all';
+let dhCurrentPage = 1;
+const dhPageSize = 10;
+let dhSearchTerm = '';
+
+function switchDhTab(tab) {
+    activeDhTab = tab;
+    dhCurrentPage = 1;
+
+    ['all', 'domain', 'hosting'].forEach(k => {
+        const btn = document.getElementById('btn_dh_' + k);
+        if (btn) {
+            if (k === tab) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    });
+
+    renderDomainsHostingTable();
+}
+
+function onDhSearch(val) {
+    dhSearchTerm = (val || '').toLowerCase().trim();
+    dhCurrentPage = 1;
+    renderDomainsHostingTable();
+}
+
+function changeDhPage(page) {
+    dhCurrentPage = page;
+    renderDomainsHostingTable();
+}
+
+function renderDomainsHostingTable() {
+    if (!dashboardDataRaw || !dashboardDataRaw.domains_hosting) return;
+    const allItems = dashboardDataRaw.domains_hosting.items || [];
+
+    let items = allItems;
+    if (activeDhTab === 'domain') {
+        items = allItems.filter(item => item.type === 'domain');
+    } else if (activeDhTab === 'hosting') {
+        items = allItems.filter(item => item.type === 'hosting');
+    }
+
+    if (dhSearchTerm) {
+        items = items.filter(item => {
+            const str = `${item.name} ${item.company_name} ${item.contact_name} ${item.mobile_number} ${item.provider} ${item.status}`.toLowerCase();
+            return str.includes(dhSearchTerm);
+        });
+    }
+
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / dhPageSize));
+    if (dhCurrentPage > totalPages) dhCurrentPage = totalPages;
+    if (dhCurrentPage < 1) dhCurrentPage = 1;
+
+    const startIdx = (dhCurrentPage - 1) * dhPageSize;
+    const endIdx = Math.min(startIdx + dhPageSize, total);
+    const pageItems = items.slice(startIdx, endIdx);
+
+    const tbody = document.getElementById('domainsHostingTableBody');
+    const paginationEl = document.getElementById('domainsHostingPagination');
+
+    if (!tbody) return;
+
+    if (total === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--cs-muted);padding:24px;">No expiring domains or hostings found for this filter.</td></tr>`;
+        if (paginationEl) paginationEl.style.display = 'none';
+        return;
+    }
+
+    tbody.innerHTML = pageItems.map(row => {
+        const isDomain = row.type === 'domain';
+        const typeBadge = isDomain 
+            ? `<span class="cs-badge" style="background:#e0f2fe;color:#0369a1;font-weight:700;">🌐 DOMAIN</span>`
+            : `<span class="cs-badge" style="background:#f3e8ff;color:#7e22ce;font-weight:700;">🖥️ HOSTING</span>`;
+            
+        let daysBadge = '';
+        if (row.days_diff < 0) {
+            daysBadge = `<span class="cs-badge cs-badge-pending" title="Expired ${Math.abs(row.days_diff)} days ago">Expired (${Math.abs(row.days_diff)}d ago)</span>`;
+        } else if (row.days_diff === 0) {
+            daysBadge = `<span class="cs-badge cs-badge-pending" style="font-weight:700;">Expires Today</span>`;
+        } else if (row.days_diff <= 7) {
+            daysBadge = `<span class="cs-badge cs-badge-partial" style="font-weight:700;">In ${row.days_diff} days</span>`;
+        } else {
+            daysBadge = `<span class="cs-badge cs-badge-paid">In ${row.days_diff} days</span>`;
+        }
+
+        const leadLink = row.lead_id 
+            ? `<a href="${row.lead_url}" target="_blank" style="font-weight:600;color:var(--cs-primary);text-decoration:none;">${row.company_name}</a>`
+            : `<strong style="color:var(--cs-text);">${row.company_name}</strong>`;
+
+        return `
+            <tr>
+                <td style="text-align:center;">${typeBadge}</td>
+                <td>
+                    <strong style="color:var(--cs-text);font-size:13px;">${row.name}</strong>
+                    <div style="font-size:11px;color:var(--cs-muted);margin-top:2px;">
+                        ${isDomain ? 'Registered via: ' : 'Hosted on: '}<strong>${row.provider || 'N/A'}</strong>
+                    </div>
+                </td>
+                <td>
+                    ${leadLink}
+                    <div style="font-size:11px;color:var(--cs-muted);margin-top:2px;">
+                        👤 ${row.contact_name || 'N/A'} · 📞 ${row.mobile_number || '—'}
+                    </div>
+                </td>
+                <td>
+                    <span style="font-size:12px;font-weight:500;">${row.provider || 'N/A'}</span>
+                    <div style="font-size:11px;color:var(--cs-muted);">${row.branch_name || 'General'}</div>
+                </td>
+                <td style="text-align:center;font-size:12px;font-weight:600;">
+                    ${row.renewal_date_formatted || row.renewal_date}
+                </td>
+                <td style="text-align:center;">
+                    ${daysBadge}
+                </td>
+                <td style="text-align:right;font-weight:700;color:${row.value > 0 ? 'var(--cs-rose)' : 'var(--cs-muted)'};">
+                    ${row.value > 0 ? fmt(row.value) : '—'}
+                </td>
+                <td style="text-align:center;">
+                    <a href="${row.project_url}" target="_blank" class="lpd-btn lpd-btn-ghost" style="padding:4px 10px;font-size:11px;text-decoration:none;display:inline-flex;">
+                        View ${isDomain ? 'Domain' : 'Hosting'} ↗
+                    </a>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (paginationEl) {
+        if (totalPages <= 1 && total <= dhPageSize) {
+            paginationEl.style.display = total > 0 ? 'flex' : 'none';
+            paginationEl.innerHTML = `
+                <div class="app-pagination__info">
+                    Showing <strong>${startIdx + 1}</strong> to <strong>${endIdx}</strong> of <strong>${total}</strong> records
+                </div>
+                <div class="app-pagination__links">
+                    <span class="app-pagination__link is-active">1</span>
+                </div>
+            `;
+            return;
+        }
+
+        paginationEl.style.display = 'flex';
+        let linksHtml = '';
+
+        if (dhCurrentPage > 1) {
+            linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changeDhPage(${dhCurrentPage - 1})">Prev</a>`;
+        } else {
+            linksHtml += `<span class="app-pagination__link is-disabled">Prev</span>`;
+        }
+
+        for (let p = 1; p <= totalPages; p++) {
+            if (p === 1 || p === totalPages || (p >= dhCurrentPage - 1 && p <= dhCurrentPage + 1)) {
+                if (p === dhCurrentPage) {
+                    linksHtml += `<span class="app-pagination__link is-active">${p}</span>`;
+                } else {
+                    linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changeDhPage(${p})">${p}</a>`;
+                }
+            } else if (p === dhCurrentPage - 2 || p === dhCurrentPage + 2) {
+                linksHtml += `<span class="app-pagination__ellipsis">...</span>`;
+            }
+        }
+
+        if (dhCurrentPage < totalPages) {
+            linksHtml += `<a href="javascript:void(0)" class="app-pagination__link" onclick="changeDhPage(${dhCurrentPage + 1})">Next</a>`;
+        } else {
+            linksHtml += `<span class="app-pagination__link is-disabled">Next</span>`;
+        }
+
+        paginationEl.innerHTML = `
+            <div class="app-pagination__info">
+                Showing <strong>${startIdx + 1}</strong> to <strong>${endIdx}</strong> of <strong>${total}</strong> records
+            </div>
+            <div class="app-pagination__links">
+                ${linksHtml}
+            </div>
+        `;
+    }
 }
 
 

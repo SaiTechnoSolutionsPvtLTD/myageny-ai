@@ -125,8 +125,8 @@ class AccountsDashboardController extends Controller
             now()->year - 2,
         ];
 
-        // 5. Initial Top Expenses by Category Data (Default: Month)
-        $initialTopExpenses = $this->calculateTopExpensesData($companyId, 'month');
+        // 5. Initial Top Expenses by Category Data (Default: All Time to display all Zoho migrated & native records)
+        $initialTopExpenses = $this->calculateTopExpensesData($companyId, 'all');
         $topExpenseLabels = $initialTopExpenses['labels'];
         $topExpenseValues = $initialTopExpenses['values'];
         $topExpenseTotal  = $initialTopExpenses['total'];
@@ -297,11 +297,13 @@ class AccountsDashboardController extends Controller
     }
 
     /**
-     * Helper to compute Top Expenses category breakdown for Today, Month, Quarter, Year.
+     * Helper to compute Top Expenses category breakdown for All Time, Year/FY, Quarter, Month, Today.
      */
-    private function calculateTopExpensesData(?int $companyId, string $period): array
+    private function calculateTopExpensesData(?int $companyId, string $period = 'all'): array
     {
         $query = AccountExpense::forCompany($companyId);
+
+        $period = strtolower(trim($period));
 
         if ($period === 'today') {
             $query->whereDate('expense_date', today());
@@ -309,35 +311,71 @@ class AccountsDashboardController extends Controller
             $query->whereBetween('expense_date', [now()->startOfMonth(), now()->endOfMonth()]);
         } elseif ($period === 'quarter') {
             $query->whereBetween('expense_date', [now()->startOfQuarter(), now()->endOfQuarter()]);
-        } elseif ($period === 'year') {
-            // Current Financial Year
+        } elseif ($period === 'year' || $period === 'this_year' || $period === 'current_fy') {
+            // Current Financial Year (April - March)
             $fyStart = now()->month >= 4 ? Carbon::create(now()->year, 4, 1)->startOfDay() : Carbon::create(now()->year - 1, 4, 1)->startOfDay();
             $fyEnd   = $fyStart->copy()->addYear()->subDay()->endOfDay();
             $query->whereBetween('expense_date', [$fyStart, $fyEnd]);
+        } elseif ($period === 'last_year' || $period === 'prev_fy') {
+            // Previous Financial Year
+            $currentFyStartYear = now()->month >= 4 ? now()->year : now()->year - 1;
+            $fyStart = Carbon::create($currentFyStartYear - 1, 4, 1)->startOfDay();
+            $fyEnd   = $fyStart->copy()->addYear()->subDay()->endOfDay();
+            $query->whereBetween('expense_date', [$fyStart, $fyEnd]);
+        } elseif (preg_match('/^fy_?(\d{4})$/', $period, $m)) {
+            $yr = (int) $m[1];
+            $fyStart = Carbon::create($yr, 4, 1)->startOfDay();
+            $fyEnd   = $fyStart->copy()->addYear()->subDay()->endOfDay();
+            $query->whereBetween('expense_date', [$fyStart, $fyEnd]);
+        } elseif (preg_match('/^cy_?(\d{4})$/', $period, $m)) {
+            $yr = (int) $m[1];
+            $cyStart = Carbon::create($yr, 1, 1)->startOfDay();
+            $cyEnd   = Carbon::create($yr, 12, 31)->endOfDay();
+            $query->whereBetween('expense_date', [$cyStart, $cyEnd]);
+        } elseif (is_numeric($period) && strlen($period) === 4) {
+            $yr = (int) $period;
+            $fyStart = Carbon::create($yr, 4, 1)->startOfDay();
+            $fyEnd   = $fyStart->copy()->addYear()->subDay()->endOfDay();
+            $query->whereBetween('expense_date', [$fyStart, $fyEnd]);
         }
+        // If $period === 'all' or empty, no date filter is applied so all Zoho migrated and historic expenses show up.
 
-        $categoryExpenses = $query->with('category')
+        $categoryExpenses = $query->with(['category' => function ($q) {
+                $q->withTrashed();
+            }])
             ->select('account_expense_category_id', DB::raw('SUM(amount) as total'))
             ->groupBy('account_expense_category_id')
             ->orderByDesc('total')
             ->get();
 
+        $categoryTotals = [];
+        $grandTotal = 0;
+
+        foreach ($categoryExpenses as $item) {
+            $catName = trim($item->category?->name ?? '');
+            if (empty($catName)) {
+                $catName = 'Uncategorized';
+            }
+            $val = round((float) $item->total, 2);
+            $categoryTotals[$catName] = ($categoryTotals[$catName] ?? 0.0) + $val;
+            $grandTotal += $val;
+        }
+
+        arsort($categoryTotals);
+
         $topExpenseLabels = [];
         $topExpenseValues = [];
         $otherExpenseTotal = 0;
-        $grandTotal = 0;
+        $count = 0;
 
-        foreach ($categoryExpenses as $index => $item) {
-            $catName = $item->category?->name ?? 'Uncategorized';
-            $val = round((float) $item->total, 2);
-            $grandTotal += $val;
-
-            if ($index < 5) {
+        foreach ($categoryTotals as $catName => $val) {
+            if ($count < 5) {
                 $topExpenseLabels[] = $catName;
-                $topExpenseValues[] = $val;
+                $topExpenseValues[] = round($val, 2);
             } else {
                 $otherExpenseTotal += $val;
             }
+            $count++;
         }
 
         if ($otherExpenseTotal > 0) {
@@ -353,7 +391,7 @@ class AccountsDashboardController extends Controller
         return [
             'labels' => $topExpenseLabels,
             'values' => $topExpenseValues,
-            'total'  => $grandTotal,
+            'total'  => round($grandTotal, 2),
         ];
     }
 
@@ -363,7 +401,7 @@ class AccountsDashboardController extends Controller
     public function getTopExpensesChartData(Request $request, ?int $companyId = null)
     {
         $companyId = $companyId ?? auth()->user()?->company_id;
-        $period = $request->input('expense_period', 'month');
+        $period = $request->input('expense_period', 'all');
 
         $data = $this->calculateTopExpensesData($companyId, $period);
 

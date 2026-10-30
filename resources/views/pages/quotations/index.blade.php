@@ -273,8 +273,8 @@ tbody tr:last-child td { border-bottom: none; }
                         <td>{{ $q->lead?->contact_name ?? '—' }}<br>
                             <small style="color:#9e9e9e">{{ $q->lead->company_name ?? '' }}</small>
                         </td>
-                        <td>{{ $q->quotation_date->format('d M Y') }}</td>
-                        <td>{{ $q->valid_until->format('d M Y') }}</td>
+                        <td>{{ $q->quotation_date ? $q->quotation_date->format('d M Y') : '—' }}</td>
+                        <td>{{ $q->valid_until ? $q->valid_until->format('d M Y') : ($q->quotation_date ? $q->quotation_date->copy()->addDays(7)->format('d M Y') : '—') }}</td>
                         <td><strong>₹{{ number_format($q->total_amount, 2) }}</strong></td>
                         <td>
                             <span class="badge {{ $responseBadge }}">

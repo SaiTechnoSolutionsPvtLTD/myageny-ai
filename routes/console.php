@@ -27,3 +27,9 @@ Schedule::command('hrms:send-calendar-notifications')
 
 Schedule::command('expenses:generate-recurring')
     ->dailyAt('00:05');
+
+// Auto-sync Zoho Books (Quotations, Invoices, Expenses) every 20 minutes (GET sync only, strictly no auto-posting)
+Schedule::command('zoho:auto-sync')
+    ->cron('*/20 * * * *')
+    ->withoutOverlapping()
+    ->runInBackground();

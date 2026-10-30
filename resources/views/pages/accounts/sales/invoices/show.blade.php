@@ -918,6 +918,16 @@
                         <span id="invoiceStatusBadgeContainer">
                             {!! $invoice->status_badge !!}
                         </span>
+                        @php
+                            $zohoInvRecord = \App\Models\ZohoInvoice::where('migrated_native_invoice_id', $invoice->id)
+                                ->orWhere('invoice_number', $invoice->invoice_number)
+                                ->first();
+                        @endphp
+                        @if($zohoInvRecord)
+                            <span class="cs-badge" style="background:#e0f2fe; color:#0369a1; font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;" title="Zoho Books Invoice ID: {{ $zohoInvRecord->zoho_invoice_id }}">
+                                <i class="bi bi-cloud-check-fill"></i> Zoho Synced
+                            </span>
+                        @endif
                     </div>
                     <div class="inv-meta-row">
                         <span class="inv-meta-item">
@@ -1024,6 +1034,21 @@
                             <i class="bi bi-share" style="color:#2563eb;"></i>
                             <span>Share Link</span>
                         </button>
+
+                        @if($zohoInvRecord)
+                            <a href="{{ route('accounts.zoho.show-invoice', $zohoInvRecord->id) }}" target="_blank" class="inv-action-item" style="color:#0284c7;" title="View Zoho Books Record">
+                                <i class="bi bi-cloud-check-fill" style="color:#0284c7;"></i>
+                                <span>View in Zoho Hub ↗</span>
+                            </a>
+                        @else
+                            <form action="{{ route('accounts.sales.invoices.post-to-zoho', $invoice->id) }}" method="POST" style="margin:0;" onsubmit="return confirm('Manually post Invoice #{{ $invoice->invoice_number }} to Zoho Books?');">
+                                @csrf
+                                <button type="submit" class="inv-action-item" style="color:#fe5f04;">
+                                    <i class="bi bi-cloud-arrow-up-fill" style="color:#fe5f04;"></i>
+                                    <span>Post to Zoho Books</span>
+                                </button>
+                            </form>
+                        @endif
 
                         <div class="inv-action-divider"></div>
 
