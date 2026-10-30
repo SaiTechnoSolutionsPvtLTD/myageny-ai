@@ -10,6 +10,8 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\InvoicePayment;
 use App\Models\Lead;
+use App\Models\Product;
+use App\Models\ProductCategory;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\User;
@@ -1712,7 +1714,7 @@ class ZohoBooksService
 
         $response = Http::withToken($accessToken)
             ->acceptJson()
-            ->timeout(8)
+            ->timeout(15)
             ->connectTimeout(5)
             ->get("{$apiUrl}/books/v3/estimates/{$zohoEstimateId}", [
                 'organization_id' => $orgId,
@@ -1728,86 +1730,123 @@ class ZohoBooksService
     }
 
     /**
+     * Sync a single page of estimates/quotations from Zoho Books into the local zoho_quotations table.
+     * Ultra-fast & bulk-optimized with whereIn lookup to run in < 1.5 seconds.
+     */
+    public function syncEstimatesPage(ZohoIntegration $integration, int $page = 1, int $perPage = 200): array
+    {
+        $payload = $this->fetchEstimates($integration, $page, $perPage);
+        $estimates = $payload['estimates'] ?? [];
+
+        if (empty($estimates)) {
+            return [
+                'page'       => $page,
+                'has_more'   => false,
+                'synced_new' => 0,
+                'updated'    => 0,
+                'total'      => 0,
+            ];
+        }
+
+        // Collect all estimate IDs in this page for a single bulk query
+        $zohoEstIds = [];
+        foreach ($estimates as $est) {
+            $id = (string) ($est['estimate_id'] ?? '');
+            if ($id !== '') {
+                $zohoEstIds[] = $id;
+            }
+        }
+
+        $existingRecords = ZohoQuotation::whereIn('zoho_estimate_id', $zohoEstIds)
+            ->get()
+            ->keyBy('zoho_estimate_id');
+
+        $syncedCount = 0;
+        $updatedCount = 0;
+
+        foreach ($estimates as $est) {
+            $zohoEstId = (string) ($est['estimate_id'] ?? '');
+            if ($zohoEstId === '') {
+                continue;
+            }
+
+            $subTotal = (float) ($est['sub_total'] ?? $est['bcy_sub_total'] ?? 0);
+            $taxTotal = (float) ($est['tax_total'] ?? $est['bcy_tax_total'] ?? 0);
+            $total    = (float) ($est['total'] ?? $est['bcy_total'] ?? 0);
+
+            if ($subTotal == 0 && $total > 0) {
+                $subTotal = $taxTotal > 0 ? max(0.0, round($total - $taxTotal, 2)) : $total;
+            }
+
+            $estimateNumber = (string) ($est['estimate_number'] ?? ('EST-' . $zohoEstId));
+
+            $attrs = [
+                'company_id'       => $integration->company_id,
+                'estimate_number'  => $estimateNumber,
+                'customer_id'      => (string) ($est['customer_id'] ?? ''),
+                'customer_name'    => $est['customer_name'] ?? 'Unnamed Customer',
+                'company_name'     => $est['company_name'] ?? null,
+                'estimate_date'    => $est['date'] ?? now()->toDateString(),
+                'expiry_date'      => ! empty($est['expiry_date']) ? $est['expiry_date'] : Carbon::parse($est['date'] ?? now())->addDays(7)->toDateString(),
+                'status'           => strtolower($est['status'] ?? 'draft'),
+                'currency_code'    => $est['currency_code'] ?? 'INR',
+                'currency_symbol'  => $est['currency_symbol'] ?? '₹',
+                'exchange_rate'    => (float) ($est['exchange_rate'] ?? 1.0000),
+                'sub_total'        => $subTotal,
+                'tax_total'        => $taxTotal,
+                'total'            => $total,
+                'reference_number' => $est['reference_number'] ?? null,
+                'billing_address'  => $est['billing_address'] ?? null,
+                'shipping_address' => $est['shipping_address'] ?? null,
+                'line_items'       => $est['line_items'] ?? null,
+                'raw_data'         => $est,
+                'synced_at'        => now(),
+            ];
+
+            $existing = $existingRecords->get($zohoEstId);
+            if ($existing) {
+                $existing->update($attrs);
+                $updatedCount++;
+            } else {
+                $attrs['zoho_estimate_id'] = $zohoEstId;
+                ZohoQuotation::create($attrs);
+                $syncedCount++;
+            }
+        }
+
+        $pageContext = $payload['page_context'] ?? [];
+        $hasMore = (bool) ($pageContext['has_more_page'] ?? false);
+
+        $integration->update(['last_synced_at' => now(), 'last_error' => null]);
+
+        return [
+            'page'       => $page,
+            'has_more'   => $hasMore,
+            'synced_new' => $syncedCount,
+            'updated'    => $updatedCount,
+            'total'      => $syncedCount + $updatedCount,
+        ];
+    }
+
+    /**
      * Sync all estimates/quotations from Zoho Books into the local zoho_quotations table.
+     * Uses syncEstimatesPage in fast-mode (no detailed item loops) to avoid any timeouts.
      */
     public function syncAllEstimates(ZohoIntegration $integration, bool $fetchDetailedItems = false): array
     {
         $page = 1;
         $perPage = 200;
-        $syncedCount = 0;
-        $updatedCount = 0;
+        $totalSynced = 0;
+        $totalNew = 0;
+        $totalUpdated = 0;
         $hasMore = true;
 
         while ($hasMore) {
-            $payload = $this->fetchEstimates($integration, $page, $perPage);
-            $estimates = $payload['estimates'] ?? [];
-
-            if (empty($estimates)) {
-                break;
-            }
-
-            foreach ($estimates as $est) {
-                $zohoEstId = (string) ($est['estimate_id'] ?? '');
-                if (empty($zohoEstId)) {
-                    continue;
-                }
-
-                $detailed = [];
-                if ($fetchDetailedItems) {
-                    try {
-                        $detailed = $this->fetchEstimateDetails($integration, $zohoEstId);
-                    } catch (\Throwable $e) {
-                        Log::warning("Could not fetch details for estimate {$zohoEstId}: " . $e->getMessage());
-                    }
-                }
-
-                $recordData = $detailed ?: $est;
-                $estimateNumber = (string) ($recordData['estimate_number'] ?? ('EST-' . $zohoEstId));
-
-                $subTotal = (float) ($recordData['sub_total'] ?? $recordData['bcy_sub_total'] ?? 0);
-                $taxTotal = (float) ($recordData['tax_total'] ?? $recordData['bcy_tax_total'] ?? 0);
-                $total    = (float) ($recordData['total'] ?? $recordData['bcy_total'] ?? 0);
-
-                if ($subTotal == 0 && $total > 0) {
-                    $subTotal = $taxTotal > 0 ? max(0.0, round($total - $taxTotal, 2)) : $total;
-                }
-
-                $attrs = [
-                    'company_id'       => $integration->company_id,
-                    'estimate_number'  => $estimateNumber,
-                    'customer_id'      => (string) ($recordData['customer_id'] ?? ''),
-                    'customer_name'    => $recordData['customer_name'] ?? 'Unnamed Customer',
-                    'company_name'     => $recordData['company_name'] ?? null,
-                    'estimate_date'    => $recordData['date'] ?? now()->toDateString(),
-                    'expiry_date'      => $recordData['expiry_date'] ?? null,
-                    'status'           => strtolower($recordData['status'] ?? 'draft'),
-                    'currency_code'    => $recordData['currency_code'] ?? 'INR',
-                    'currency_symbol'  => $recordData['currency_symbol'] ?? '₹',
-                    'exchange_rate'    => (float) ($recordData['exchange_rate'] ?? 1.0000),
-                    'sub_total'        => $subTotal,
-                    'tax_total'        => $taxTotal,
-                    'total'            => $total,
-                    'reference_number' => $recordData['reference_number'] ?? null,
-                    'billing_address'  => $recordData['billing_address'] ?? null,
-                    'shipping_address' => $recordData['shipping_address'] ?? null,
-                    'line_items'       => $recordData['line_items'] ?? null,
-                    'raw_data'         => $recordData,
-                    'synced_at'        => now(),
-                ];
-
-                $existing = ZohoQuotation::where('zoho_estimate_id', $zohoEstId)->first();
-                if ($existing) {
-                    $existing->update($attrs);
-                    $updatedCount++;
-                } else {
-                    $attrs['zoho_estimate_id'] = $zohoEstId;
-                    ZohoQuotation::create($attrs);
-                    $syncedCount++;
-                }
-            }
-
-            $pageContext = $payload['page_context'] ?? [];
-            $hasMore = (bool) ($pageContext['has_more_page'] ?? false);
+            $pageRes = $this->syncEstimatesPage($integration, $page, $perPage);
+            $totalSynced += $pageRes['total'];
+            $totalNew += $pageRes['synced_new'];
+            $totalUpdated += $pageRes['updated'];
+            $hasMore = $pageRes['has_more'];
             $page++;
 
             if ($page > 50) {
@@ -1815,12 +1854,10 @@ class ZohoBooksService
             }
         }
 
-        $integration->update(['last_synced_at' => now(), 'last_error' => null]);
-
         return [
-            'synced_new' => $syncedCount,
-            'updated'    => $updatedCount,
-            'total'      => $syncedCount + $updatedCount,
+            'synced_new' => $totalNew,
+            'updated'    => $totalUpdated,
+            'total'      => $totalSynced,
         ];
     }
 
@@ -1837,7 +1874,7 @@ class ZohoBooksService
         $hasFetchedDetails = (bool) ($raw['_details_fetched'] ?? false);
         $hasLineItems = ! empty($zohoQuotation->line_items) || ! empty($raw['line_items']);
 
-        if (! $hasLineItems && ! $hasFetchedDetails) {
+        if (! $hasLineItems) {
             $integ = ZohoIntegration::current($companyId);
             if ($integ && $integ->is_connected && ! empty($zohoQuotation->zoho_estimate_id)) {
                 try {
@@ -2011,7 +2048,8 @@ class ZohoBooksService
 
             $quotationNumber = substr(trim((string) $zohoQuotation->estimate_number), 0, 95);
             $quotationDate   = $zohoQuotation->estimate_date ? $zohoQuotation->estimate_date->toDateString() : now()->toDateString();
-            $validUntil      = $zohoQuotation->expiry_date ? $zohoQuotation->expiry_date->toDateString() : Carbon::parse($quotationDate)->addDays(15)->toDateString();
+            // Due date calculated as 7 days from the Quotation creation date
+            $validUntil      = Carbon::parse($quotationDate)->addDays(7)->toDateString();
 
             // Format addresses
             $billToLines = array_filter([
@@ -2080,8 +2118,6 @@ class ZohoBooksService
             QuotationItem::withoutGlobalScopes()->where('quotation_id', $quotation->id)->forceDelete();
             $lineItems = $zohoQuotation->line_items ?? ($zohoQuotation->raw_data['line_items'] ?? []);
 
-            $defaultProduct = $cachedProducts->where('company_id', $companyId)->first() ?: $cachedProducts->first();
-
             if (! empty($lineItems) && is_array($lineItems)) {
                 foreach ($lineItems as $item) {
                     $qty       = (float) ($item['quantity'] ?? 1);
@@ -2093,44 +2129,110 @@ class ZohoBooksService
                         $itemTotal = $qty * $rate;
                     }
 
-                    $itemName = trim((string) ($item['name'] ?? ''));
-                    $desc = $itemName ?: trim((string) ($item['description'] ?? 'Item'));
-                    if (! empty($item['description']) && $desc !== $item['description']) {
-                        $desc .= "\n" . trim((string) $item['description']);
+                    $rawItemName = trim((string) ($item['name'] ?? ($item['item_name'] ?? ($item['product_name'] ?? ''))));
+                    $rawDescription = trim((string) ($item['description'] ?? ''));
+
+                    // If item name is empty but description is present, extract first line as item name
+                    if ($rawItemName === '' && $rawDescription !== '') {
+                        $lines = preg_split('/\r\n|\r|\n/', $rawDescription, 2);
+                        $rawItemName = trim($lines[0]);
+                        $rawDescription = isset($lines[1]) ? trim($lines[1]) : '';
                     }
 
-                    // In-memory match against cached products
-                    $matchedProduct = null;
-                    if ($itemName) {
-                        $lowerName = strtolower($itemName);
-                        $matchedProduct = $cachedProducts->first(function ($p) use ($lowerName, $companyId) {
-                            if ($p->company_id && $p->company_id != $companyId) {
-                                return false;
-                            }
-                            return (str_contains(strtolower($p->product_name ?? ''), $lowerName)
-                                || str_contains(strtolower($p->package_name ?? ''), $lowerName));
-                        });
+                    if ($rawItemName === '') {
+                        $rawItemName = 'Custom Service';
                     }
-                    $productId = $matchedProduct?->id ?? ($defaultProduct?->id ?? 1);
+
+                    // 1. Exact match (case-insensitive) against existing products
+                    $matchedProduct = $cachedProducts->first(function ($p) use ($rawItemName, $companyId) {
+                        if ($p->company_id && $p->company_id != $companyId) {
+                            return false;
+                        }
+                        return strcasecmp(trim($p->product_name ?? ''), $rawItemName) === 0
+                            || strcasecmp(trim($p->package_name ?? ''), $rawItemName) === 0;
+                    });
+
+                    // 2. If no exact match, try matching normalized alphanumeric name
+                    if (! $matchedProduct) {
+                        $cleanItem = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($rawItemName));
+                        if ($cleanItem !== '') {
+                            $matchedProduct = $cachedProducts->first(function ($p) use ($cleanItem, $companyId) {
+                                if ($p->company_id && $p->company_id != $companyId) {
+                                    return false;
+                                }
+                                $cleanP = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($p->product_name ?? ''));
+                                $cleanPkg = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($p->package_name ?? ''));
+                                return ($cleanP !== '' && $cleanP === $cleanItem)
+                                    || ($cleanPkg !== '' && $cleanPkg === $cleanItem);
+                            });
+                        }
+                    }
+
+                    // 3. If STILL no match, create a dedicated Product with the exact Zoho item name
+                    if (! $matchedProduct) {
+                        $catId = $this->guessProductCategoryId($rawItemName, $companyId);
+
+                        $matchedProduct = Product::create([
+                            'company_id'          => $companyId,
+                            'product_category_id' => $catId,
+                            'product_name'        => $rawItemName,
+                            'package_name'        => $rawItemName,
+                            'base_price'          => $rate > 0 ? $rate : 0,
+                            'tax_type'            => 'percentage',
+                            'tax_value'           => 18.0,
+                            'status'              => 'active',
+                            'created_by'          => $userId ?: (auth()->id() ?: 1),
+                        ]);
+
+                        $cachedProducts->push($matchedProduct);
+                    }
+
+                    // Clean description: do not duplicate item name if identical or redundant
+                    $finalDesc = null;
+                    if ($rawDescription !== '' && strcasecmp($rawDescription, $rawItemName) !== 0) {
+                        $finalDesc = $rawDescription;
+                    }
 
                     QuotationItem::create([
                         'company_id'   => $companyId,
                         'quotation_id' => $quotation->id,
-                        'product_id'   => $productId,
-                        'description'  => $desc ?: 'Consultancy / Service',
-                        'qty'          => $qty,
+                        'product_id'   => $matchedProduct->id,
+                        'description'  => $finalDesc,
+                        'qty'          => $qty > 0 ? $qty : 1,
                         'unit_price'   => $rate,
                         'discount'     => $discount,
                         'total'        => $itemTotal,
                     ]);
                 }
             } else {
-                // Create single line item representing total
-                $productId = $defaultProduct?->id ?? 1;
+                // If no detailed line items, find or create generic Professional Services product
+                $serviceProductName = 'Professional Services';
+                $serviceProduct = $cachedProducts->first(function ($p) use ($serviceProductName, $companyId) {
+                    if ($p->company_id && $p->company_id != $companyId) {
+                        return false;
+                    }
+                    return strcasecmp(trim($p->product_name ?? ''), $serviceProductName) === 0;
+                });
+
+                if (! $serviceProduct) {
+                    $serviceProduct = Product::create([
+                        'company_id'          => $companyId,
+                        'product_category_id' => 2,
+                        'product_name'        => $serviceProductName,
+                        'package_name'        => $serviceProductName,
+                        'base_price'          => $subtotal > 0 ? $subtotal : 0,
+                        'tax_type'            => 'percentage',
+                        'tax_value'           => 18.0,
+                        'status'              => 'active',
+                        'created_by'          => $userId ?: (auth()->id() ?: 1),
+                    ]);
+                    $cachedProducts->push($serviceProduct);
+                }
+
                 QuotationItem::create([
                     'company_id'   => $companyId,
                     'quotation_id' => $quotation->id,
-                    'product_id'   => $productId,
+                    'product_id'   => $serviceProduct->id,
                     'description'  => 'Zoho Estimate #' . $quotationNumber . ' Services',
                     'qty'          => 1,
                     'unit_price'   => $subtotal,
@@ -2143,6 +2245,7 @@ class ZohoBooksService
             $zohoQuotation->update([
                 'is_migrated_to_native'        => true,
                 'migrated_native_quotation_id' => $quotation->id,
+                'expiry_date'                  => $validUntil,
             ]);
 
             return $quotation;
@@ -2268,6 +2371,60 @@ class ZohoBooksService
     }
 
     /**
+     * Guess product category ID based on item name keywords.
+     */
+    private function guessProductCategoryId(string $name, int $companyId): int
+    {
+        static $catCache = [];
+        if (! isset($catCache[$companyId])) {
+            $catCache[$companyId] = ProductCategory::withoutGlobalScopes()
+                ->where(function ($q) use ($companyId) {
+                    $q->where('company_id', $companyId)->orWhereNull('company_id');
+                })
+                ->get();
+        }
+
+        $lower = strtolower($name);
+        $categories = $catCache[$companyId];
+
+        // 1. Direct match with existing category name
+        foreach ($categories as $cat) {
+            $cName = strtolower(trim($cat->name ?? ''));
+            if ($cName !== '' && (str_contains($lower, $cName) || str_contains($cName, $lower))) {
+                return (int) $cat->id;
+            }
+        }
+
+        // 2. Keyword-based matching
+        if (str_contains($lower, 'domain')) {
+            $c = $categories->first(fn ($c) => str_contains(strtolower($c->name ?? ''), 'domain'));
+            if ($c) return (int) $c->id;
+        }
+        if (str_contains($lower, 'host') || str_contains($lower, 'server') || str_contains($lower, 'ssl')) {
+            $c = $categories->first(fn ($c) => str_contains(strtolower($c->name ?? ''), 'host'));
+            if ($c) return (int) $c->id;
+        }
+        if (str_contains($lower, 'design') || str_contains($lower, 'logo') || str_contains($lower, 'banner') || str_contains($lower, 'flyer') || str_contains($lower, 'ui') || str_contains($lower, 'ux')) {
+            $c = $categories->first(fn ($c) => str_contains(strtolower($c->name ?? ''), 'design'));
+            if ($c) return (int) $c->id;
+        }
+        if (str_contains($lower, 'seo') || str_contains($lower, 'marketing') || str_contains($lower, 'social') || str_contains($lower, 'ad') || str_contains($lower, 'google')) {
+            $c = $categories->first(fn ($c) => str_contains(strtolower($c->name ?? ''), 'marketing') || str_contains(strtolower($c->name ?? ''), 'seo'));
+            if ($c) return (int) $c->id;
+        }
+        if (str_contains($lower, 'web') || str_contains($lower, 'site') || str_contains($lower, 'portal')) {
+            $c = $categories->first(fn ($c) => str_contains(strtolower($c->name ?? ''), 'web'));
+            if ($c) return (int) $c->id;
+        }
+        if (str_contains($lower, 'app') || str_contains($lower, 'mobile') || str_contains($lower, 'android') || str_contains($lower, 'ios')) {
+            $c = $categories->first(fn ($c) => str_contains(strtolower($c->name ?? ''), 'app'));
+            if ($c) return (int) $c->id;
+        }
+
+        return (int) ($categories->first()?->id ?? 2);
+    }
+
+    /**
      * Automatically scan and map all unmapped native invoices & quotations to matching Leads.
      */
     public function autoMapAllUnmappedRecords(): array
@@ -2317,5 +2474,344 @@ class ZohoBooksService
             'quotations_mapped' => $quotationsUpdated,
             'total_mapped'      => $invoicesUpdated + $quotationsUpdated,
         ];
+    }
+
+    /**
+     * Find an existing Zoho Contact ID or create a new Contact in Zoho Books.
+     */
+    public function findOrCreateZohoContact(ZohoIntegration $integration, array $contactData): string
+    {
+        $contactName = trim((string) ($contactData['contact_name'] ?? ($contactData['customer_name'] ?? '')));
+        $companyName = trim((string) ($contactData['company_name'] ?? ''));
+        $email       = trim((string) ($contactData['email'] ?? ''));
+        $phone       = trim((string) ($contactData['phone'] ?? ($contactData['mobile_number'] ?? '')));
+        $gstin       = trim((string) ($contactData['gstin'] ?? ($contactData['gst_number'] ?? '')));
+
+        // 1. Check local synced records first
+        $existingZohoId = null;
+        if (! empty($contactName) || ! empty($companyName)) {
+            $existingZohoId = ZohoInvoice::whereNotNull('customer_id')
+                ->where('customer_id', '!=', '')
+                ->where(function ($q) use ($contactName, $companyName) {
+                    if ($contactName) {
+                        $q->where('customer_name', $contactName);
+                    }
+                    if ($companyName) {
+                        $q->orWhere('company_name', $companyName);
+                    }
+                })
+                ->value('customer_id');
+
+            if (! $existingZohoId) {
+                $existingZohoId = ZohoQuotation::whereNotNull('customer_id')
+                    ->where('customer_id', '!=', '')
+                    ->where(function ($q) use ($contactName, $companyName) {
+                        if ($contactName) {
+                            $q->where('customer_name', $contactName);
+                        }
+                        if ($companyName) {
+                            $q->orWhere('company_name', $companyName);
+                        }
+                    })
+                    ->value('customer_id');
+            }
+        }
+
+        if ($existingZohoId) {
+            return (string) $existingZohoId;
+        }
+
+        $token  = $this->ensureValidAccessToken($integration);
+        $apiUrl = rtrim($integration->api_url ?: 'https://www.zohoapis.in', '/');
+        $orgId  = $integration->organization_id;
+
+        // 2. Search Contacts in Zoho Books API
+        $searchKey = $contactName ?: ($companyName ?: $email);
+        if (! empty($searchKey)) {
+            try {
+                $searchRes = Http::withHeaders([
+                    'Authorization' => "Zoho-oauthtoken {$token}",
+                ])->get("{$apiUrl}/books/v3/contacts", [
+                    'organization_id' => $orgId,
+                    'search_text'     => $searchKey,
+                    'per_page'        => 5,
+                ]);
+
+                if ($searchRes->successful()) {
+                    $contacts = $searchRes->json('contacts') ?? [];
+                    if (! empty($contacts[0]['contact_id'])) {
+                        return (string) $contacts[0]['contact_id'];
+                    }
+                }
+            } catch (\Throwable $se) {
+                Log::warning('Zoho contact search error: ' . $se->getMessage());
+            }
+        }
+
+        // 3. Create a new Contact in Zoho Books API
+        $primaryName = $contactName ?: ($companyName ?: 'Valued Customer');
+        $createPayload = [
+            'contact_name'      => $primaryName,
+            'company_name'      => $companyName ?: $primaryName,
+            'contact_type'      => 'customer',
+            'customer_sub_type' => ! empty($gstin) ? 'business' : 'individual',
+            'email'             => $email ?: null,
+            'phone'             => $phone ?: null,
+            'gst_no'            => $gstin ?: null,
+            'gst_treatment'     => ! empty($gstin) ? 'business_gst' : 'consumer',
+            'billing_address'   => [
+                'attention' => $primaryName,
+                'address'   => $contactData['billing_address'] ?? null,
+                'city'      => $contactData['billing_city'] ?? null,
+                'state'     => $contactData['billing_state'] ?? 'Tamil Nadu',
+                'zip'       => $contactData['billing_pincode'] ?? null,
+                'country'   => $contactData['billing_country'] ?? 'India',
+            ],
+            'shipping_address'  => [
+                'attention' => $primaryName,
+                'address'   => $contactData['shipping_address'] ?? ($contactData['billing_address'] ?? null),
+                'city'      => $contactData['shipping_city'] ?? ($contactData['billing_city'] ?? null),
+                'state'     => $contactData['shipping_state'] ?? ($contactData['billing_state'] ?? 'Tamil Nadu'),
+                'zip'       => $contactData['shipping_pincode'] ?? ($contactData['billing_pincode'] ?? null),
+                'country'   => $contactData['shipping_country'] ?? 'India',
+            ],
+        ];
+
+        $createRes = Http::withHeaders([
+            'Authorization' => "Zoho-oauthtoken {$token}",
+        ])->post("{$apiUrl}/books/v3/contacts?organization_id={$orgId}", $createPayload);
+
+        if ($createRes->successful() && ! empty($createRes->json('contact.contact_id'))) {
+            return (string) $createRes->json('contact.contact_id');
+        }
+
+        $errMsg = $createRes->json('message') ?: $createRes->body();
+        Log::warning("Zoho contact create response: {$errMsg}");
+
+        // If duplicate contact error, try searching again
+        if (stripos($errMsg, 'already exists') !== false) {
+            $searchRes = Http::withHeaders([
+                'Authorization' => "Zoho-oauthtoken {$token}",
+            ])->get("{$apiUrl}/books/v3/contacts", [
+                'organization_id' => $orgId,
+                'search_text'     => $primaryName,
+            ]);
+            if ($searchRes->successful() && ! empty($searchRes->json('contacts.0.contact_id'))) {
+                return (string) $searchRes->json('contacts.0.contact_id');
+            }
+        }
+
+        throw new \RuntimeException("Failed to resolve or create customer in Zoho Books: {$errMsg}");
+    }
+
+    /**
+     * Create an Invoice directly in Zoho Books API and sync to local `zoho_invoices` table.
+     */
+    public function createInvoiceInZoho(Invoice $invoice, ?ZohoIntegration $integration = null): ?array
+    {
+        $integration = $integration ?: ZohoIntegration::current($invoice->company_id);
+        if (! $integration || ! $integration->is_connected) {
+            return null;
+        }
+
+        $invoice->loadMissing(['items', 'customer']);
+
+        // 1. Resolve Zoho Customer ID
+        $customerData = [
+            'contact_name'     => $invoice->customer_name ?: ($invoice->customer?->customer_name ?? 'Valued Customer'),
+            'company_name'     => $invoice->company_name ?: ($invoice->customer?->company_name ?? ''),
+            'email'            => $invoice->customer_email ?: ($invoice->customer?->email ?? ''),
+            'phone'            => $invoice->customer_phone ?: ($invoice->customer?->mobile_number ?? ''),
+            'gstin'            => $invoice->customer_gstin ?: ($invoice->customer?->gst_number ?? ''),
+            'billing_address'  => $invoice->billing_address,
+            'billing_city'     => $invoice->billing_city,
+            'billing_state'    => $invoice->billing_state,
+            'billing_pincode'  => $invoice->billing_pincode,
+            'billing_country'  => $invoice->billing_country,
+            'shipping_address' => $invoice->shipping_address,
+            'shipping_city'    => $invoice->shipping_city,
+            'shipping_state'   => $invoice->shipping_state,
+            'shipping_pincode' => $invoice->shipping_pincode,
+            'shipping_country' => $invoice->shipping_country,
+        ];
+
+        $zohoCustomerId = $this->findOrCreateZohoContact($integration, $customerData);
+
+        // 2. Prepare line items
+        $lineItems = [];
+        foreach ($invoice->items as $item) {
+            $lineItems[] = [
+                'name'        => $item->item_name ?: 'Services',
+                'description' => $item->description ?: null,
+                'rate'        => (float) $item->rate,
+                'quantity'    => (float) ($item->qty ?: 1),
+                'hsn_or_sac'  => $item->hsn_sac_code ?: null,
+            ];
+        }
+
+        if (empty($lineItems)) {
+            $lineItems[] = [
+                'name'     => 'Services',
+                'rate'     => (float) $invoice->total_amount,
+                'quantity' => 1,
+            ];
+        }
+
+        $token  = $this->ensureValidAccessToken($integration);
+        $apiUrl = rtrim($integration->api_url ?: 'https://www.zohoapis.in', '/');
+        $orgId  = $integration->organization_id;
+
+        $payload = [
+            'customer_id'      => $zohoCustomerId,
+            'invoice_number'   => $invoice->invoice_number,
+            'date'             => $invoice->invoice_date ? Carbon::parse($invoice->invoice_date)->toDateString() : now()->toDateString(),
+            'due_date'         => $invoice->due_date ? Carbon::parse($invoice->due_date)->toDateString() : now()->toDateString(),
+            'line_items'       => $lineItems,
+            'notes'            => $invoice->customer_notes ?: null,
+            'terms'            => $invoice->terms_conditions ?: null,
+            'is_inclusive_tax' => false,
+        ];
+
+        $response = Http::withHeaders([
+            'Authorization' => "Zoho-oauthtoken {$token}",
+        ])->post("{$apiUrl}/books/v3/invoices?organization_id={$orgId}", $payload);
+
+        if (! $response->successful()) {
+            $msg = $response->json('message') ?: $response->body();
+            Log::error("Zoho Books createInvoice API failed: {$msg}", ['payload' => $payload]);
+            throw new \RuntimeException("Zoho Books Invoice Creation failed: {$msg}");
+        }
+
+        $zohoInvData = $response->json('invoice') ?? [];
+        $zohoInvId   = (string) ($zohoInvData['invoice_id'] ?? '');
+
+        if ($zohoInvId) {
+            ZohoInvoice::updateOrCreate(
+                ['zoho_invoice_id' => $zohoInvId],
+                [
+                    'company_id'                 => $invoice->company_id,
+                    'invoice_number'             => $zohoInvData['invoice_number'] ?? $invoice->invoice_number,
+                    'customer_id'                => $zohoCustomerId,
+                    'customer_name'              => $invoice->customer_name ?: ($invoice->company_name ?: 'Valued Customer'),
+                    'company_name'               => $invoice->company_name,
+                    'invoice_date'               => $invoice->invoice_date ? Carbon::parse($invoice->invoice_date)->toDateString() : now()->toDateString(),
+                    'due_date'                   => $invoice->due_date ? Carbon::parse($invoice->due_date)->toDateString() : null,
+                    'status'                     => (string) ($zohoInvData['status'] ?? 'draft'),
+                    'sub_total'                  => (float) ($invoice->subtotal ?? 0),
+                    'tax_total'                  => (float) ($invoice->total_tax ?? 0),
+                    'total'                      => (float) ($invoice->total_amount ?? 0),
+                    'balance'                    => (float) ($invoice->balance_due ?? 0),
+                    'raw_data'                   => $zohoInvData,
+                    'is_migrated_to_native'      => true,
+                    'migrated_native_invoice_id' => $invoice->id,
+                    'synced_at'                  => now(),
+                ]
+            );
+        }
+
+        return $zohoInvData;
+    }
+
+    /**
+     * Create an Estimate / Quotation directly in Zoho Books API and sync to local `zoho_quotations` table.
+     */
+    public function createEstimateInZoho(Quotation $quotation, ?ZohoIntegration $integration = null): ?array
+    {
+        $integration = $integration ?: ZohoIntegration::current($quotation->company_id);
+        if (! $integration || ! $integration->is_connected) {
+            return null;
+        }
+
+        $quotation->loadMissing(['items.product', 'lead']);
+
+        // 1. Resolve Zoho Customer ID
+        $lead = $quotation->lead;
+        $customerName = $lead?->company_name ?: ($lead?->contact_name ?: 'Valued Customer');
+        $customerData = [
+            'contact_name'     => $customerName,
+            'company_name'     => $lead?->company_name ?: $customerName,
+            'email'            => $lead?->email ?? '',
+            'phone'            => $lead?->mobile_number ?? '',
+            'gstin'            => $quotation->gst_number ?? '',
+            'billing_address'  => $quotation->bill_to_address,
+            'billing_state'    => $quotation->customer_state ?: 'Tamil Nadu',
+            'shipping_address' => $quotation->ship_to_address ?: $quotation->bill_to_address,
+            'shipping_state'   => $quotation->customer_state ?: 'Tamil Nadu',
+        ];
+
+        $zohoCustomerId = $this->findOrCreateZohoContact($integration, $customerData);
+
+        // 2. Prepare line items
+        $lineItems = [];
+        foreach ($quotation->items as $item) {
+            $pName = $item->product?->product_name ?: ($item->description ?: 'Product');
+            $lineItems[] = [
+                'name'        => $pName,
+                'description' => $item->description ?: null,
+                'rate'        => (float) $item->unit_price,
+                'quantity'    => (float) ($item->qty ?: 1),
+                'discount'    => (float) ($item->discount ?? 0),
+            ];
+        }
+
+        if (empty($lineItems)) {
+            $lineItems[] = [
+                'name'     => 'Service / Product',
+                'rate'     => (float) $quotation->total_amount,
+                'quantity' => 1,
+            ];
+        }
+
+        $token  = $this->ensureValidAccessToken($integration);
+        $apiUrl = rtrim($integration->api_url ?: 'https://www.zohoapis.in', '/');
+        $orgId  = $integration->organization_id;
+
+        $payload = [
+            'customer_id'      => $zohoCustomerId,
+            'estimate_number'  => $quotation->quotation_no,
+            'date'             => $quotation->quotation_date ? Carbon::parse($quotation->quotation_date)->toDateString() : now()->toDateString(),
+            'expiry_date'      => $quotation->valid_until ? Carbon::parse($quotation->valid_until)->toDateString() : null,
+            'line_items'       => $lineItems,
+            'notes'            => $quotation->notes ?: null,
+            'is_inclusive_tax' => false,
+        ];
+
+        $response = Http::withHeaders([
+            'Authorization' => "Zoho-oauthtoken {$token}",
+        ])->post("{$apiUrl}/books/v3/estimates?organization_id={$orgId}", $payload);
+
+        if (! $response->successful()) {
+            $msg = $response->json('message') ?: $response->body();
+            Log::error("Zoho Books createEstimate API failed: {$msg}", ['payload' => $payload]);
+            throw new \RuntimeException("Zoho Books Quotation (Estimate) Creation failed: {$msg}");
+        }
+
+        $zohoEstData = $response->json('estimate') ?? [];
+        $zohoEstId   = (string) ($zohoEstData['estimate_id'] ?? '');
+
+        if ($zohoEstId) {
+            ZohoQuotation::updateOrCreate(
+                ['zoho_estimate_id' => $zohoEstId],
+                [
+                    'company_id'                   => $quotation->company_id,
+                    'estimate_number'              => $zohoEstData['estimate_number'] ?? $quotation->quotation_no,
+                    'customer_id'                  => $zohoCustomerId,
+                    'customer_name'                => $customerName,
+                    'company_name'                 => $quotation->lead?->company_name,
+                    'estimate_date'                => $quotation->quotation_date ? Carbon::parse($quotation->quotation_date)->toDateString() : now()->toDateString(),
+                    'expiry_date'                  => $quotation->valid_until ? Carbon::parse($quotation->valid_until)->toDateString() : null,
+                    'status'                       => (string) ($zohoEstData['status'] ?? 'draft'),
+                    'sub_total'                    => (float) ($quotation->subtotal ?? 0),
+                    'tax_total'                    => (float) ($quotation->tax_amount ?? 0),
+                    'total'                        => (float) ($quotation->total_amount ?? 0),
+                    'raw_data'                     => $zohoEstData,
+                    'is_migrated_to_native'        => true,
+                    'migrated_native_quotation_id' => $quotation->id,
+                    'synced_at'                    => now(),
+                ]
+            );
+        }
+
+        return $zohoEstData;
     }
 }

@@ -3818,15 +3818,21 @@ class SuperAdminDashboardController extends ApiController
                 }
             })->update(['end_date' => $formattedNewDateRaw]);
 
-            // Update associated LeadProduct closure_date and expected_value
+            // Update associated LeadProduct closure_date and expected_value ONLY for this specific product
             $lpUpdate = ['closure_date' => $formattedNewDateRaw];
             if ($targetExpectedValue !== null && $targetExpectedValue > 0) {
                 $lpUpdate['expected_value'] = $targetExpectedValue;
             }
             if ($pi->lead_product_id) {
                 LeadProduct::where('id', $pi->lead_product_id)->update($lpUpdate);
-            } elseif ($pi->lead_id) {
-                LeadProduct::where('lead_id', $pi->lead_id)->update($lpUpdate);
+            } elseif ($request && $request->filled('lead_product_id')) {
+                LeadProduct::where('id', (int)$request->input('lead_product_id'))->update($lpUpdate);
+            } elseif ($pi->product_id && $pi->lead_id) {
+                // If lead_product_id was not explicitly linked, update only the product matching this PI's product_id
+                LeadProduct::where('lead_id', $pi->lead_id)
+                    ->where('product_id', $pi->product_id)
+                    ->limit(1)
+                    ->update($lpUpdate);
             }
         };
 
@@ -3862,8 +3868,8 @@ class SuperAdminDashboardController extends ApiController
                 $updated = true;
             }
         }
-        // 2. If LeadProduct ID specifically passed (NST prospect item)
-        elseif ($leadProductId) {
+        // 2. If LeadProduct ID specifically passed (NST prospect item or specific lead product)
+        if ($leadProductId) {
             $lp = LeadProduct::find($leadProductId);
             if ($lp) {
                 $lpUpdates = ['closure_date' => $formattedNewDateRaw];
@@ -3876,50 +3882,20 @@ class SuperAdminDashboardController extends ApiController
                 $updated = true;
             }
         }
-        // 3. Fallback when neither piId nor leadProductId provided
-        elseif ($leadId) {
+        // 3. Fallback only when neither piId nor leadProductId provided
+        elseif (!$piId && $leadId) {
             $lead = Lead::find($leadId);
             if ($lead) {
-                // Find or update lead products
-                $lps = LeadProduct::where('lead_id', $leadId)->get();
-                $reqExpAmount = $request->filled('expected_amount') ? (float)$request->input('expected_amount') : ($request->filled('expected_value') ? (float)$request->input('expected_value') : null);
-                foreach ($lps as $lpItem) {
+                // If only lead_id is provided without specific product, update only the first/active product or lead
+                $lpItem = LeadProduct::where('lead_id', $leadId)->first();
+                if ($lpItem) {
                     $lpUpdates = ['closure_date' => $formattedNewDateRaw];
+                    $reqExpAmount = $request->filled('expected_amount') ? (float)$request->input('expected_amount') : ($request->filled('expected_value') ? (float)$request->input('expected_value') : null);
                     $targetLpExp = $reqExpAmount ?? ($lpItem->expected_value ?? (float)($lpItem->total_price ?? 0));
                     if ($targetLpExp > 0) {
                         $lpUpdates['expected_value'] = $targetLpExp;
                     }
                     $lpItem->update($lpUpdates);
-                }
-
-                // Update associated CustomerCampaign records by lead_id
-                CustomerCampaign::where('lead_id', $leadId)->update(['end_date' => $formattedNewDateRaw]);
-
-                // Update associated SmmSheet records by lead_id
-                SmmSheet::where('lead_id', $leadId)->update(['end_date' => $formattedNewDateRaw]);
-
-                $pis = ProductionInitiation::where('lead_id', $leadId)->get();
-                foreach ($pis as $pItem) {
-                    $oldDateStr = $pItem->project_delivery_date ? Carbon::parse($pItem->project_delivery_date)->format('d M Y') : 'None';
-
-                    $applyInitiationDateUpdates($pItem);
-
-                    $timelineContent = "Closure / End Date updated from <strong>{$oldDateStr}</strong> to <strong>{$formattedNewDate}</strong>";
-                    if ($pItem->expected_value !== null && (float)$pItem->expected_value > 0) {
-                        $timelineContent .= "<br><strong>Expected Amount:</strong> ₹" . number_format((float)$pItem->expected_value, 2);
-                    }
-                    if (!empty($reason)) {
-                        $timelineContent .= "<br><strong>Reason:</strong> " . e($reason);
-                    }
-                    if (!empty($remarks)) {
-                        $timelineContent .= "<br><strong>Remarks:</strong> " . e($remarks);
-                    }
-
-                    $pItem->projectUpdates()->create([
-                        'type'       => 'schedule_history',
-                        'content'    => $timelineContent,
-                        'created_by' => $currentUser->id,
-                    ]);
                 }
 
                 $updated = true;

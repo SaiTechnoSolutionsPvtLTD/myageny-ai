@@ -124,9 +124,17 @@
                     </div>
                 </div>
                 <div>
-                    <div style="font-size:11.5px; font-weight:600; text-transform:uppercase; color:#64748b;">Valid Until</div>
+                    <div style="font-size:11.5px; font-weight:600; text-transform:uppercase; color:#64748b;">Valid Until (Due Date)</div>
                     <div style="font-size:14px; font-weight:700; color:#0f172a; margin-top:3px;">
-                        {{ $quotation->expiry_date ? $quotation->expiry_date->format('d M, Y') : '—' }}
+                        @if($quotation->expiry_date)
+                            {{ $quotation->expiry_date->format('d M, Y') }}
+                        @elseif($quotation->migratedQuotation && $quotation->migratedQuotation->valid_until)
+                            {{ $quotation->migratedQuotation->valid_until->format('d M, Y') }}
+                        @elseif($quotation->estimate_date)
+                            {{ $quotation->estimate_date->copy()->addDays(7)->format('d M, Y') }}
+                        @else
+                            —
+                        @endif
                     </div>
                 </div>
                 <div>

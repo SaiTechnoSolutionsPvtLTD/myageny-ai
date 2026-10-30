@@ -10,6 +10,8 @@ use App\Models\Branch;
 use App\Models\Product;
 use App\Models\ProductionInitiation;
 use App\Models\CustomerCampaign;
+use App\Models\DomainRecord;
+use App\Models\HostingRecord;
 use App\Models\SmmSheet;
 use App\Services\DataVisibilityService;
 use Carbon\Carbon;
@@ -395,6 +397,129 @@ class CustomerSuccessDashboardController extends Controller
                     $lmrItems[] = $item;
                 }
             }
+
+            // Fetch Domains & Hostings for renewals & expiry tracking
+            $domains = DomainRecord::query()
+                ->with(['lead.branch', 'creator'])
+                ->when($currentUser->company_id, fn($q) => $q->where('company_id', $currentUser->company_id))
+                ->whereNotNull('expires_at')
+                ->whereBetween('expires_at', [$lmStart->toDateString(), $nmEnd->toDateString()])
+                ->get();
+
+            $hostings = HostingRecord::query()
+                ->with(['lead.branch', 'server', 'creator'])
+                ->when($currentUser->company_id, fn($q) => $q->where('company_id', $currentUser->company_id))
+                ->whereNotNull('renewal_date')
+                ->whereBetween('renewal_date', [$lmStart->toDateString(), $nmEnd->toDateString()])
+                ->get();
+
+            $dhCurrentMonthItems = [];
+            $dhCurrentMonthDomainsCount = 0;
+            $dhCurrentMonthHostingsCount = 0;
+            $dhCurrentMonthValue = 0;
+
+            foreach ($domains as $d) {
+                $dExp = Carbon::parse($d->expires_at);
+                $daysDiff = (int) round($today->diffInDays($dExp, false));
+                $lead = $d->lead;
+                $clientName = $d->client_name ?: ($lead?->company_name ?: ($lead?->contact_name ?: 'N/A'));
+
+                $item = [
+                    'id'                     => 'dom_' . $d->id,
+                    'type'                   => 'domain',
+                    'type_badge'             => 'Domain',
+                    'name'                   => $d->domain_name,
+                    'lead_id'                => $d->lead_id,
+                    'lead_product_id'        => null,
+                    'company_name'           => $clientName,
+                    'contact_name'           => $lead?->contact_name ?: '',
+                    'mobile_number'          => $lead?->mobile_number ?: '—',
+                    'product_name'           => '🌐 Domain: ' . $d->domain_name,
+                    'provider'               => $d->registrar ?: 'Domain Registrar',
+                    'renewal_date'           => $dExp->toDateString(),
+                    'renewal_date_formatted' => $dExp->format('d M Y'),
+                    'days_diff'              => $daysDiff,
+                    'value'                  => 0,
+                    'paid'                   => 0,
+                    'pending'                => 0,
+                    'payment_status'         => $daysDiff < 0 ? 'Expired' : ($daysDiff <= 7 ? 'Expiring Soon' : 'Active'),
+                    'assigned_to'            => null,
+                    'assigned_to_name'       => $d->creator?->name ?: 'Customer Success',
+                    'branch_name'            => $lead?->branch?->name ?: 'General',
+                    'lead_url'               => $d->lead_id ? url('/leads/' . $d->lead_id) : '#',
+                    'project_url'            => url('/accounts/domains-hosting/domains/' . $d->id),
+                    'url'                    => url('/accounts/domains-hosting/domains/' . $d->id),
+                    'status'                 => $d->status ?: 'ACTIVE',
+                ];
+
+                if ($dExp->between($cmStart, $cmEnd)) {
+                    $cmrCount++;
+                    $cmrItems[] = $item;
+                    $dhCurrentMonthItems[] = $item;
+                    $dhCurrentMonthDomainsCount++;
+                } elseif ($dExp->between($nmStart, $nmEnd)) {
+                    $nmrCount++;
+                    $nmrItems[] = $item;
+                } elseif ($dExp->between($lmStart, $lmEnd)) {
+                    $lmrCount++;
+                    $lmrItems[] = $item;
+                }
+            }
+
+            foreach ($hostings as $h) {
+                $hRen = Carbon::parse($h->renewal_date);
+                $daysDiff = (int) round($today->diffInDays($hRen, false));
+                $lead = $h->lead;
+                $clientName = $h->client_name ?: ($lead?->company_name ?: ($lead?->contact_name ?: 'N/A'));
+                $amt = (float) ($h->renewal_amount ?? 0);
+
+                $item = [
+                    'id'                     => 'host_' . $h->id,
+                    'type'                   => 'hosting',
+                    'type_badge'             => 'Hosting',
+                    'name'                   => $h->hosting_name ?: 'Web Hosting',
+                    'lead_id'                => $h->lead_id,
+                    'lead_product_id'        => null,
+                    'company_name'           => $clientName,
+                    'contact_name'           => $lead?->contact_name ?: '',
+                    'mobile_number'          => $lead?->mobile_number ?: '—',
+                    'product_name'           => '🖥️ Hosting: ' . ($h->hosting_name ?: 'Hosting'),
+                    'provider'               => $h->provider ?: ($h->server?->server_name ?: 'Hosting Provider'),
+                    'renewal_date'           => $hRen->toDateString(),
+                    'renewal_date_formatted' => $hRen->format('d M Y'),
+                    'days_diff'              => $daysDiff,
+                    'value'                  => $amt,
+                    'paid'                   => 0,
+                    'pending'                => $amt,
+                    'payment_status'         => $daysDiff < 0 ? 'Expired' : ($daysDiff <= 7 ? 'Expiring Soon' : 'Active'),
+                    'assigned_to'            => null,
+                    'assigned_to_name'       => $h->creator?->name ?: 'Customer Success',
+                    'branch_name'            => $lead?->branch?->name ?: 'General',
+                    'lead_url'               => $h->lead_id ? url('/leads/' . $h->lead_id) : '#',
+                    'project_url'            => url('/accounts/domains-hosting/hostings/' . $h->id),
+                    'url'                    => url('/accounts/domains-hosting/hostings/' . $h->id),
+                    'status'                 => $h->status ?: 'ACTIVE',
+                ];
+
+                if ($hRen->between($cmStart, $cmEnd)) {
+                    $cmrCount++;
+                    $cmrValue += $amt;
+                    $cmrItems[] = $item;
+                    $dhCurrentMonthItems[] = $item;
+                    $dhCurrentMonthHostingsCount++;
+                    $dhCurrentMonthValue += $amt;
+                } elseif ($hRen->between($nmStart, $nmEnd)) {
+                    $nmrCount++;
+                    $nmrValue += $amt;
+                    $nmrItems[] = $item;
+                } elseif ($hRen->between($lmStart, $lmEnd)) {
+                    $lmrCount++;
+                    $lmrValue += $amt;
+                    $lmrItems[] = $item;
+                }
+            }
+
+            usort($dhCurrentMonthItems, fn($a, $b) => strcmp($a['renewal_date'], $b['renewal_date']));
 
             // 2. Department & Product wise pending payments
             $pendingRows = LeadProduct::query()
@@ -1374,6 +1499,13 @@ class CustomerSuccessDashboardController extends Controller
                         'pending'  => round($techSeoTotalPending, 2),
                         'items'    => $techSeoItems,
                     ],
+                    'domains_hosting' => [
+                        'count'          => count($dhCurrentMonthItems),
+                        'domains_count'  => $dhCurrentMonthDomainsCount,
+                        'hostings_count' => $dhCurrentMonthHostingsCount,
+                        'value'          => round($dhCurrentMonthValue, 2),
+                        'items'          => $dhCurrentMonthItems,
+                    ],
                 ]
             ]);
 
@@ -1395,6 +1527,7 @@ class CustomerSuccessDashboardController extends Controller
             'cmr'                  => ['count' => 0, 'value' => 0, 'items' => []],
             'cmr_plus'             => ['count' => 0, 'value' => 0, 'items' => []],
             'cmr_minus'            => ['count' => 0, 'value' => 0, 'items' => []],
+            'domains_hosting'      => ['count' => 0, 'domains_count' => 0, 'hostings_count' => 0, 'value' => 0, 'items' => []],
             'campaigns'            => [
                 'expired'        => ['count' => 0, 'value' => 0, 'items' => []],
                 'cm_renewed'     => ['count' => 0, 'value' => 0, 'items' => []],

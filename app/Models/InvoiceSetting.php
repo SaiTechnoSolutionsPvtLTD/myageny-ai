@@ -99,26 +99,30 @@ class InvoiceSetting extends Model
 
     /**
      * Generate sample/formatted invoice number.
+     * Produces standard format like INV-000643/26-27
      */
     public function formatInvoiceNumber(?int $number = null): string
     {
         $num = $number ?? ($this->next_number ?: 1);
-        $padded = str_pad((string) $num, (int) ($this->number_padding ?: 4), '0', STR_PAD_LEFT);
-        $prefix = (string) ($this->invoice_prefix ?? 'INV/');
+        $padding = (int) ($this->number_padding ?: 6);
+        $padded = str_pad((string) $num, $padding, '0', STR_PAD_LEFT);
+        $prefix = (string) ($this->invoice_prefix ?? 'INV-');
 
         $now = Carbon::now();
         $dateTag = '';
 
         switch ($this->date_format) {
             case 'financial_year':
-                $year = $now->year;
-                if ($now->month >= 4) {
-                    $nextYrShort = substr((string) ($year + 1), -2);
-                    $dateTag = $year . '-' . $nextYrShort;
-                } else {
-                    $curYrShort = substr((string) $year, -2);
-                    $dateTag = ($year - 1) . '-' . $curYrShort;
-                }
+            case 'short_financial_year':
+                $startYrShort = substr((string) ($now->month >= 4 ? $now->year : $now->year - 1), -2);
+                $endYrShort   = substr((string) ($now->month >= 4 ? $now->year + 1 : $now->year), -2);
+                $dateTag = $startYrShort . '-' . $endYrShort; // e.g. "26-27"
+                break;
+
+            case 'full_financial_year':
+                $startYr = $now->month >= 4 ? $now->year : $now->year - 1;
+                $endYrShort = substr((string) ($startYr + 1), -2);
+                $dateTag = $startYr . '-' . $endYrShort; // e.g. "2026-27"
                 break;
 
             case 'calendar_year':
@@ -135,20 +139,24 @@ class InvoiceSetting extends Model
                 break;
         }
 
-        $parts = [];
-        if (!empty($prefix)) {
-            $parts[] = rtrim($prefix, '/-');
-        }
-        if (!empty($dateTag)) {
-            $parts[] = $dateTag;
-        }
-        $parts[] = $padded;
-        if (!empty($this->invoice_suffix)) {
-            $parts[] = ltrim($this->invoice_suffix, '/-');
+        $prefixClean = rtrim($prefix, '/');
+        if (str_ends_with($prefixClean, '-')) {
+            $base = $prefixClean . $padded; // e.g. INV-000643
+        } elseif (empty($prefixClean)) {
+            $base = $padded;
+        } else {
+            $base = $prefixClean . '-' . $padded;
         }
 
-        $sep = str_ends_with($prefix, '-') ? '-' : '/';
-        return implode($sep, $parts);
+        if (!empty($dateTag)) {
+            $base .= '/' . $dateTag;
+        }
+
+        if (!empty($this->invoice_suffix)) {
+            $base .= '/' . ltrim($this->invoice_suffix, '/-');
+        }
+
+        return $base;
     }
 
     /**

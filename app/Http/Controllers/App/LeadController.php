@@ -384,6 +384,29 @@ class LeadController extends Controller
             'reminder.priority'    => ['nullable', 'string'],
         ]);
 
+        $mobile = trim((string) ($validated['mobile_number'] ?? ''));
+        if ($mobile !== '') {
+            $duplicates = Lead::findDuplicatesByMobile($mobile, null, $request->user()->company_id);
+            if ($duplicates->isNotEmpty()) {
+                $existing = $duplicates->first();
+                $assignedUser = $existing->assignedTo;
+                $userMobile = $assignedUser?->mobile_number 
+                    ?: ($assignedUser?->employee?->mobile 
+                    ?: ($assignedUser?->employee?->official_mobile 
+                    ?: ($assignedUser?->internJoiningForm?->contact_no ?: 'N/A')));
+                $branchName = $existing->branch?->name ?? 'N/A';
+                $userName = $assignedUser?->name ?? 'Unassigned';
+
+                return response()->json([
+                    'status'  => false,
+                    'message' => "Duplicate Lead: Mobile number {$mobile} is already registered with Lead #{$existing->id} ({$existing->company_name}). Allocated to: {$userName} (Mobile: {$userMobile}), Branch: {$branchName}.",
+                    'errors'  => [
+                        'mobile_number' => ["Duplicate Lead: Already registered with Lead #{$existing->id} (Allocated to: {$userName}, Branch: {$branchName})."],
+                    ],
+                ], 422);
+            }
+        }
+
         $reminderCreated = false;
         $lead = null;
 

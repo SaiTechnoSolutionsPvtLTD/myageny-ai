@@ -774,7 +774,22 @@
             <div class="inv-nav-right">
                 @php
                     $convertedInvoice = $quotation->converted_invoice;
+                    $zohoQuoteRecord = \App\Models\ZohoQuotation::where('migrated_native_quotation_id', $quotation->id)
+                        ->orWhere('estimate_number', $quotation->quotation_no)
+                        ->first();
                 @endphp
+                @if($zohoQuoteRecord)
+                    <a href="{{ route('accounts.zoho.show-quotation', $zohoQuoteRecord->id) }}" target="_blank" class="inv-btn-secondary" style="background:#f0f9ff; border-color:#bae6fd; color:#0284c7; font-weight:700;" title="View Zoho Books Estimate ID: {{ $zohoQuoteRecord->zoho_estimate_id }}">
+                        <i class="bi bi-cloud-check-fill"></i> Synced in Zoho ↗
+                    </a>
+                @else
+                    <form action="{{ request()->routeIs('accounts.*') ? route('accounts.quotations.post-to-zoho', $quotation->id) : route('quotations.post-to-zoho', $quotation->id) }}" method="POST" style="margin:0; display:inline;" onsubmit="return confirm('Manually post Quotation #{{ $quotation->quotation_no }} to Zoho Books?');">
+                        @csrf
+                        <button type="submit" class="inv-btn-secondary" style="background:#fff7ed; border-color:#fed7aa; color:#ea580c; font-weight:700;">
+                            <i class="bi bi-cloud-arrow-up-fill"></i> Post to Zoho
+                        </button>
+                    </form>
+                @endif
                 @if($convertedInvoice)
                     <a href="{{ route('accounts.sales.invoices.show', $convertedInvoice->id) }}" class="inv-btn-secondary" style="background:#ecfdf5; border-color:#a7f3d0; color:#047857; font-weight:700;">
                         <i class="bi bi-receipt-cutoff"></i> View Invoice (#{{ $convertedInvoice->invoice_number }})
@@ -796,6 +811,11 @@
             <div class="inv-title-row">
                 <h1 class="inv-title">Estimate</h1>
                 <span class="inv-num-pill">{{ $quotation->quotation_no }}</span>
+                @if($zohoQuoteRecord)
+                    <span style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px;" title="Zoho Books Estimate ID: {{ $zohoQuoteRecord->zoho_estimate_id }}">
+                        <i class="bi bi-cloud-check-fill"></i> Zoho Synced
+                    </span>
+                @endif
                 @if($convertedInvoice)
                     <a href="{{ route('accounts.sales.invoices.show', $convertedInvoice->id) }}" style="background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="Click to view linked invoice">
                         <i class="bi bi-receipt-cutoff"></i> Invoiced: {{ $convertedInvoice->invoice_number }}
@@ -963,6 +983,11 @@
                                     <td class="meta-label">Estimate Date</td>
                                     <td class="meta-colon">:</td>
                                     <td class="meta-val">{{ \Carbon\Carbon::parse($quotation->quotation_date)->format('d/m/Y') }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="meta-label">Valid Until</td>
+                                    <td class="meta-colon">:</td>
+                                    <td class="meta-val">{{ $quotation->valid_until ? \Carbon\Carbon::parse($quotation->valid_until)->format('d/m/Y') : ($quotation->quotation_date ? \Carbon\Carbon::parse($quotation->quotation_date)->addDays(7)->format('d/m/Y') : '—') }}</td>
                                 </tr>
                             </table>
                         </div>

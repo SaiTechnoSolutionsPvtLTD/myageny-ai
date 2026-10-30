@@ -70,13 +70,10 @@
                 </button>
             </form>
             @if($integration->is_connected)
-            <form action="{{ route('accounts.zoho.quotations.sync') }}" method="POST" style="margin:0;">
-                @csrf
-                <button type="submit" class="acm-btn acm-btn-primary" onclick="this.innerHTML='Syncing...'; this.disabled=true; this.form.submit();">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                    Sync Estimates from Zoho
-                </button>
-            </form>
+            <button type="button" class="acm-btn acm-btn-primary" onclick="openSyncModal()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                Sync Estimates from Zoho
+            </button>
             @endif
         </div>
     </div>
@@ -227,7 +224,17 @@
                                         @endif
                                     </td>
                                     <td>{{ $quotation->estimate_date ? $quotation->estimate_date->format('d M Y') : '—' }}</td>
-                                    <td>{{ $quotation->expiry_date ? $quotation->expiry_date->format('d M Y') : '—' }}</td>
+                                    <td>
+                                        @if($quotation->expiry_date)
+                                            {{ $quotation->expiry_date->format('d M Y') }}
+                                        @elseif($quotation->migratedQuotation && $quotation->migratedQuotation->valid_until)
+                                            {{ $quotation->migratedQuotation->valid_until->format('d M Y') }}
+                                        @elseif($quotation->estimate_date)
+                                            {{ $quotation->estimate_date->copy()->addDays(7)->format('d M Y') }}
+                                        @else
+                                            —
+                                        @endif
+                                    </td>
                                     <td style="text-align:right;">₹{{ number_format((float)$quotation->sub_total, 2) }}</td>
                                     <td style="text-align:right; font-weight:700;">₹{{ number_format((float)$quotation->total, 2) }}</td>
                                     <td style="text-align:center;">
@@ -264,6 +271,39 @@
                 @endif
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Fast Chunked Sync Progress Modal -->
+<div id="syncModalOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); backdrop-filter:blur(3px); z-index:99999; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:16px; width:90%; max-width:520px; padding:28px; box-shadow:0 20px 40px rgba(0,0,0,0.25);">
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
+            <div style="width:40px; height:40px; border-radius:10px; background:#fef3c7; color:#d97706; display:flex; align-items:center; justify-content:center; font-size:20px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            </div>
+            <div>
+                <div style="font-size:16px; font-weight:800; color:#0f172a;">Syncing Estimates from Zoho Books</div>
+                <div style="font-size:12px; color:#64748b;">Fast chunked sync runner (< 2s per request, avoids server timeouts)</div>
+            </div>
+        </div>
+
+        <div style="background:#f1f5f9; border-radius:10px; height:12px; overflow:hidden; margin:18px 0 10px;">
+            <div id="syncProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg,#fe5f04,#f59e0b); transition:width .3s ease;"></div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:#64748b; font-weight:600; margin-bottom:16px;">
+            <span id="syncStatusText">Connecting...</span>
+            <span id="syncProgressPct">0%</span>
+        </div>
+
+        <div id="syncLogBox" style="background:#0f172a; color:#cbd5e1; border-radius:8px; padding:12px; font-size:11px; font-family:monospace; height:120px; overflow-y:auto; margin-bottom:18px; line-height:1.5;">
+            <div>> Initializing Zoho Books Estimates sync runner...</div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button type="button" id="syncCancelBtn" class="acm-btn acm-btn-secondary" onclick="stopSync()">Cancel</button>
+            <button type="button" id="syncCloseBtn" class="acm-btn acm-btn-primary" style="display:none;" onclick="location.reload()">Done / Reload</button>
+        </div>
     </div>
 </div>
 
@@ -308,6 +348,103 @@ function toggleSelectAll(master) {
     });
 }
 
+// ----------------- FAST CHUNKED SYNC RUNNER -----------------
+let isSyncRunning = false;
+let shouldStopSync = false;
+let syncCurrentPage = 1;
+let totalSyncedSoFar = 0;
+
+function openSyncModal() {
+    document.getElementById('syncModalOverlay').style.display = 'flex';
+    document.getElementById('syncProgressBar').style.width = '10%';
+    document.getElementById('syncProgressPct').innerText = 'Starting...';
+    document.getElementById('syncStatusText').innerText = 'Connecting to Zoho Books API...';
+    document.getElementById('syncLogBox').innerHTML = '<div>> Initializing Zoho Books Estimates sync runner...</div>';
+    document.getElementById('syncCancelBtn').style.display = 'inline-flex';
+    document.getElementById('syncCloseBtn').style.display = 'none';
+
+    isSyncRunning = true;
+    shouldStopSync = false;
+    syncCurrentPage = 1;
+    totalSyncedSoFar = 0;
+    runSyncStep(1);
+}
+
+function stopSync() {
+    shouldStopSync = true;
+    document.getElementById('syncModalOverlay').style.display = 'none';
+}
+
+function appendSyncLog(msg) {
+    const box = document.getElementById('syncLogBox');
+    if (!box) return;
+    const line = document.createElement('div');
+    line.innerText = msg;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+}
+
+function runSyncStep(page) {
+    if (shouldStopSync) {
+        appendSyncLog('> Sync cancelled by user.');
+        return;
+    }
+
+    appendSyncLog(`> Fetching page ${page} from Zoho Books API...`);
+    document.getElementById('syncStatusText').innerText = `Fetching page ${page}...`;
+
+    fetch('{{ route('accounts.zoho.quotations.sync') }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ page: page })
+    })
+    .then(async r => {
+        if (!r.ok) {
+            const errData = await r.json().catch(() => ({ message: 'Server returned HTTP ' + r.status }));
+            throw new Error(errData.message || `Server returned HTTP ${r.status}`);
+        }
+        return r.json();
+    })
+    .then(data => {
+        if (!data.success) {
+            appendSyncLog('> ERROR: ' + (data.message || 'Sync failed'));
+            document.getElementById('syncStatusText').innerText = 'Sync encountered an error.';
+            document.getElementById('syncCancelBtn').style.display = 'none';
+            document.getElementById('syncCloseBtn').style.display = 'inline-flex';
+            return;
+        }
+
+        totalSyncedSoFar += (data.total || 0);
+        appendSyncLog(`✓ Page ${page}: Synced ${data.total} quotations (${data.synced_new} new, ${data.updated} updated).`);
+
+        if (data.has_more) {
+            document.getElementById('syncProgressBar').style.width = '60%';
+            document.getElementById('syncProgressPct').innerText = `Page ${page} done`;
+            document.getElementById('syncStatusText').innerText = `Total synced: ${totalSyncedSoFar} quotations. Fetching next page...`;
+            setTimeout(() => runSyncStep(page + 1), 400);
+        } else {
+            appendSyncLog(`> All pages synced! Total: ${totalSyncedSoFar} quotations processed.`);
+            document.getElementById('syncStatusText').innerText = `Sync Complete! ${totalSyncedSoFar} quotations synced.`;
+            document.getElementById('syncProgressBar').style.width = '100%';
+            document.getElementById('syncProgressPct').innerText = '100%';
+            document.getElementById('syncCancelBtn').style.display = 'none';
+            document.getElementById('syncCloseBtn').style.display = 'inline-flex';
+            isSyncRunning = false;
+        }
+    })
+    .catch(err => {
+        appendSyncLog('> Network or Server error: ' + err.message);
+        document.getElementById('syncStatusText').innerText = 'Sync Error';
+        document.getElementById('syncCancelBtn').style.display = 'none';
+        document.getElementById('syncCloseBtn').style.display = 'inline-flex';
+    });
+}
+
+// ----------------- BATCH MIGRATION RUNNER -----------------
 let isBatchRunning = false;
 let shouldStopBatch = false;
 
@@ -352,7 +489,7 @@ function runBatchStep() {
             'X-CSRF-TOKEN': '{{ csrf_token() }}',
             'Accept': 'application/json'
         },
-        body: JSON.stringify({ limit: 10 })
+        body: JSON.stringify({ limit: 5 })
     })
     .then(async r => {
         if (!r.ok) {
@@ -390,7 +527,7 @@ function runBatchStep() {
             document.getElementById('batchCloseBtn').style.display = 'inline-flex';
             isBatchRunning = false;
         } else {
-            setTimeout(runBatchStep, 600);
+            setTimeout(runBatchStep, 500);
         }
     })
     .catch(err => {

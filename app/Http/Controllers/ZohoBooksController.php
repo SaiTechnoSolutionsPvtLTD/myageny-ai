@@ -1050,9 +1050,14 @@ class ZohoBooksController extends Controller
 
     /**
      * Sync Quotations / Estimates from Zoho Books API.
+     * Supports both single-page AJAX chunked mode (?page=1) and full fast-sync mode.
      */
     public function syncQuotations(Request $request): RedirectResponse|JsonResponse
     {
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+        @ini_set('memory_limit', '512M');
+
         $integration = ZohoIntegration::current();
         if (! $integration->is_connected) {
             if ($request->wantsJson()) {
@@ -1063,7 +1068,24 @@ class ZohoBooksController extends Controller
         }
 
         try {
-            $result = $this->zohoService->syncAllEstimates($integration, true);
+            // Chunked AJAX mode: sync a single page at a time (< 1.5s per request)
+            if ($request->has('page')) {
+                $page = max(1, (int) $request->input('page', 1));
+                $result = $this->zohoService->syncEstimatesPage($integration, $page, 200);
+
+                return response()->json([
+                    'success'    => true,
+                    'page'       => $result['page'],
+                    'has_more'   => $result['has_more'],
+                    'synced_new' => $result['synced_new'],
+                    'updated'    => $result['updated'],
+                    'total'      => $result['total'],
+                    'message'    => "Page {$page} synced: {$result['total']} quotations ({$result['synced_new']} new, {$result['updated']} updated).",
+                ]);
+            }
+
+            // Fast full sync (bulk-optimized queries)
+            $result = $this->zohoService->syncAllEstimates($integration, false);
 
             $msg = "Synced {$result['total']} quotations from Zoho Books ({$result['synced_new']} new, {$result['updated']} updated).";
 
@@ -1120,6 +1142,10 @@ class ZohoBooksController extends Controller
             return redirect()->back()->with('error', 'No quotations were selected for migration.');
         }
 
+        if (count($ids) > 15) {
+            return redirect()->back()->with('error', 'To prevent Webuzo server timeout, bulk migration is limited to 15 records at a time. Please select up to 15 quotations or use "Batch Migrate All (Auto Runner)" for unlimited automatic background migration.');
+        }
+
         $quotations = ZohoQuotation::whereIn('id', $ids)->get();
         $migrated = 0;
         $failed = 0;
@@ -1151,8 +1177,8 @@ class ZohoBooksController extends Controller
         @ini_set('max_execution_time', '180');
         @ini_set('memory_limit', '512M');
 
-        // Smaller, highly optimized batch size (default 10) to complete in < 3s and avoid any 50X timeout
-        $limit = max(5, min(25, (int) $request->input('limit', 10)));
+        // Smaller, highly optimized batch size (default 5) to complete in < 2s and avoid any 50X timeout
+        $limit = max(3, min(15, (int) $request->input('limit', 5)));
 
         $totalUnmigrated = ZohoQuotation::where('is_migrated_to_native', false)->count();
         $totalAll = ZohoQuotation::count();

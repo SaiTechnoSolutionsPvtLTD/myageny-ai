@@ -118,6 +118,32 @@ class StoreLeadRequest extends FormRequest
         return $messages;
     }
 
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $mobile = trim((string) $this->input('mobile_number'));
+            if ($mobile !== '') {
+                $companyId = auth()->user()?->company_id;
+                $duplicates = Lead::findDuplicatesByMobile($mobile, null, $companyId);
+                if ($duplicates->isNotEmpty()) {
+                    $existing = $duplicates->first();
+                    $user = $existing->assignedTo;
+                    $userMobile = $user?->mobile_number 
+                        ?: ($user?->employee?->mobile 
+                        ?: ($user?->employee?->official_mobile 
+                        ?: ($user?->internJoiningForm?->contact_no ?: 'N/A')));
+                    $branchName = $existing->branch?->name ?? 'N/A';
+                    $userName = $user?->name ?? 'Unassigned';
+
+                    $validator->errors()->add(
+                        'mobile_number',
+                        "Duplicate Lead: Mobile number {$mobile} is already registered with Lead #{$existing->id} ({$existing->company_name}). Allocated to: {$userName} (Mobile: {$userMobile}), Branch: {$branchName}."
+                    );
+                }
+            }
+        });
+    }
+
     protected function activeCustomFields()
     {
         $branchId = $this->input('branch_id');

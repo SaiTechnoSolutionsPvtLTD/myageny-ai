@@ -101,6 +101,14 @@ class User extends Authenticatable
         return $this->attributes['designation'] ?? null;
     }
 
+    public function getMobileNumberAttribute(): ?string
+    {
+        return $this->employee?->official_mobile
+            ?: ($this->employee?->mobile
+            ?: ($this->internJoiningForm?->contact_no
+            ?: null));
+    }
+
     public function setAvatarAttribute($value): void
     {
         $this->attributes['photo'] = $value;

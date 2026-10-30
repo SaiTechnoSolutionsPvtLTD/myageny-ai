@@ -150,16 +150,19 @@
                                 <div class="form-group">
                                     <label class="form-label">Invoice Prefix <span style="color:#dc2626;">*</span></label>
                                     <input type="text" name="invoice_prefix" id="inputPrefix" class="form-input"
-                                           value="{{ old('invoice_prefix', $setting->invoice_prefix ?? 'INV/') }}"
-                                           placeholder="e.g. INV/ or INV- or AG/" required oninput="updateInvoicePreview()">
+                                           value="{{ old('invoice_prefix', $setting->invoice_prefix ?? 'INV-') }}"
+                                           placeholder="e.g. INV- or INV/ or AG-" required oninput="updateInvoicePreview()">
                                     <span class="form-hint">Appears at the beginning of the invoice number</span>
                                 </div>
 
                                 <div class="form-group">
                                     <label class="form-label">Date Format Inclusion <span style="color:#dc2626;">*</span></label>
                                     <select name="date_format" id="inputDateFormat" class="form-input" onchange="updateInvoicePreview()">
-                                        <option value="financial_year" {{ old('date_format', $setting->date_format ?? 'financial_year') === 'financial_year' ? 'selected' : '' }}>
-                                            Financial Year (e.g. {{ date('m') >= 4 ? date('Y') . '-' . substr(date('Y') + 1, -2) : (date('Y') - 1) . '-' . substr(date('Y'), -2) }})
+                                        <option value="financial_year" {{ in_array(old('date_format', $setting->date_format ?? 'financial_year'), ['financial_year', 'short_financial_year']) ? 'selected' : '' }}>
+                                            Financial Year Short (e.g. {{ date('m') >= 4 ? substr(date('Y'), -2) . '-' . substr(date('Y') + 1, -2) : substr(date('Y') - 1, -2) . '-' . substr(date('Y'), -2) }}) [INV-000643/26-27]
+                                        </option>
+                                        <option value="full_financial_year" {{ old('date_format', $setting->date_format) === 'full_financial_year' ? 'selected' : '' }}>
+                                            Financial Year Full (e.g. {{ date('m') >= 4 ? date('Y') . '-' . substr(date('Y') + 1, -2) : (date('Y') - 1) . '-' . substr(date('Y'), -2) }}) [INV-000643/2026-27]
                                         </option>
                                         <option value="calendar_year" {{ old('date_format', $setting->date_format) === 'calendar_year' ? 'selected' : '' }}>
                                             Calendar Year (e.g. {{ date('Y') }})
@@ -171,7 +174,7 @@
                                             None (No date tag)
                                         </option>
                                     </select>
-                                    <span class="form-hint">Appended after prefix</span>
+                                    <span class="form-hint">Appended after number with '/'</span>
                                 </div>
                             </div>
 
@@ -187,9 +190,9 @@
                                     <label class="form-label">Number Digits (Padding) <span style="color:#dc2626;">*</span></label>
                                     <select name="number_padding" id="inputNumberPadding" class="form-input" onchange="updateInvoicePreview()">
                                         <option value="3" {{ old('number_padding', $setting->number_padding) == 3 ? 'selected' : '' }}>3 digits (e.g. 001)</option>
-                                        <option value="4" {{ old('number_padding', $setting->number_padding ?? 4) == 4 ? 'selected' : '' }}>4 digits (e.g. 0001)</option>
+                                        <option value="4" {{ old('number_padding', $setting->number_padding) == 4 ? 'selected' : '' }}>4 digits (e.g. 0001)</option>
                                         <option value="5" {{ old('number_padding', $setting->number_padding) == 5 ? 'selected' : '' }}>5 digits (e.g. 00001)</option>
-                                        <option value="6" {{ old('number_padding', $setting->number_padding) == 6 ? 'selected' : '' }}>6 digits (e.g. 000001)</option>
+                                        <option value="6" {{ old('number_padding', $setting->number_padding ?? 6) == 6 ? 'selected' : '' }}>6 digits (e.g. 000001)</option>
                                     </select>
                                     <span class="form-hint">Zero-padded width</span>
                                 </div>
@@ -553,7 +556,7 @@ function updateInvoicePreview() {
     const prefix = document.getElementById('inputPrefix').value || '';
     const dateFormat = document.getElementById('inputDateFormat').value;
     const nextNum = parseInt(document.getElementById('inputNextNumber').value, 10) || 1;
-    const padding = parseInt(document.getElementById('inputNumberPadding').value, 10) || 4;
+    const padding = parseInt(document.getElementById('inputNumberPadding').value, 10) || 6;
     const suffix = document.getElementById('inputSuffix').value || '';
 
     // Calculate padded number
@@ -565,7 +568,17 @@ function updateInvoicePreview() {
     const currentMonth = now.getMonth() + 1; // 1-12
     let dateTag = '';
 
-    if (dateFormat === 'financial_year') {
+    if (dateFormat === 'financial_year' || dateFormat === 'short_financial_year') {
+        if (currentMonth >= 4) {
+            const curYrShort = String(currentYear).slice(-2);
+            const nextYrShort = String(currentYear + 1).slice(-2);
+            dateTag = `${curYrShort}-${nextYrShort}`;
+        } else {
+            const prevYrShort = String(currentYear - 1).slice(-2);
+            const curYrShort = String(currentYear).slice(-2);
+            dateTag = `${prevYrShort}-${curYrShort}`;
+        }
+    } else if (dateFormat === 'full_financial_year') {
         if (currentMonth >= 4) {
             const nextYrShort = String(currentYear + 1).slice(-2);
             dateTag = `${currentYear}-${nextYrShort}`;
@@ -580,16 +593,25 @@ function updateInvoicePreview() {
         dateTag = `${currentYear}-${monthPad}`;
     }
 
-    const parts = [];
-    if (prefix) parts.push(prefix.replace(/[\/\-]+$/, ''));
-    if (dateTag) parts.push(dateTag);
-    parts.push(padded);
-    if (suffix) parts.push(suffix.replace(/^[\/\-]+/, ''));
+    let prefixClean = prefix.replace(/\/+$/, '');
+    let base = '';
+    if (prefixClean.endsWith('-')) {
+        base = prefixClean + padded;
+    } else if (!prefixClean) {
+        base = padded;
+    } else {
+        base = prefixClean + '-' + padded;
+    }
 
-    const sep = prefix.endsWith('-') ? '-' : '/';
-    const finalNumber = parts.join(sep);
+    if (dateTag) {
+        base += '/' + dateTag;
+    }
 
-    document.getElementById('previewInvoiceNum').textContent = finalNumber;
+    if (suffix) {
+        base += '/' + suffix.replace(/^[\/\-]+/, '');
+    }
+
+    document.getElementById('previewInvoiceNum').textContent = base;
 }
 
 // Preview uploaded images before form submit

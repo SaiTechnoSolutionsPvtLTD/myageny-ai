@@ -436,6 +436,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/{quotation}', [App\Http\Controllers\QuotationController::class, 'show'])->middleware('can:quotations.view')->name('show');
             Route::patch('/{quotation}/map-lead', [App\Http\Controllers\QuotationController::class, 'mapLead'])->middleware('can:quotations.create')->name('map-lead');
             Route::post('/{quotation}/convert-to-invoice', [App\Http\Controllers\QuotationController::class, 'convertToInvoice'])->middleware('can:accounts_invoices.create')->name('convert-to-invoice');
+            Route::post('/{quotation}/post-to-zoho', [App\Http\Controllers\QuotationController::class, 'postToZoho'])->middleware('can:quotations.create')->name('post-to-zoho');
         });
 
         // Accounts Sales Group (Invoices)
@@ -458,6 +459,7 @@ Route::middleware(['auth'])->group(function () {
                 Route::post('/{invoice}/payments', [App\Http\Controllers\InvoicePaymentController::class, 'store'])->middleware('can:accounts_payments.create')->name('payments.store');
                 Route::delete('/{invoice}/payments/{payment}', [App\Http\Controllers\InvoicePaymentController::class, 'destroy'])->middleware('can:accounts_payments.delete')->name('payments.destroy');
                 Route::post('/{invoice}/credit-notes', [App\Http\Controllers\CreditNoteController::class, 'storeForInvoice'])->middleware('can:accounts_credit_notes.create')->name('credit-notes.store');
+                Route::post('/{invoice}/post-to-zoho', [App\Http\Controllers\InvoiceController::class, 'postToZoho'])->middleware('can:accounts_invoices.edit')->name('post-to-zoho');
             });
 
             // Sales Payments Received against Invoices
@@ -1025,6 +1027,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/create',      [LeadController::class, 'create'])->middleware('can:leads.create')->name('create');
         Route::get('/call-updates',[LeadCallUpdateController::class, 'index'])->middleware('can:call_updates.view')->name('calls.index');
         Route::post('/',           [LeadController::class, 'store'])->middleware('can:leads.create')->name('store');
+        Route::get('/check-duplicate', [LeadController::class, 'checkDuplicateApi'])->name('check-duplicate');
         Route::get('/{lead}',      [LeadController::class, 'show'])->middleware('can:leads.view')->name('show');
         Route::get('/{lead}/edit', [LeadController::class, 'edit'])->middleware('can:leads.edit')->name('edit');
         Route::put('/{lead}',      [LeadController::class, 'update'])->middleware('can:leads.edit')->name('update');
@@ -1284,6 +1287,7 @@ Route::post('/facebook-integration/update-token', [FacebookIntegrationController
     Route::post('/quotations/{quotation}/send-email', [QuotationController::class, 'sendEmail'])->middleware('can:quotations.view')->name('quotations.send-email');
     Route::post('/quotations/{quotation}/convert-to-invoice', [QuotationController::class, 'convertToInvoice'])->name('quotations.convert-to-invoice');
     Route::patch('/quotations/{quotation}/map-lead', [QuotationController::class, 'mapLead'])->middleware('can:quotations.create')->name('quotations.map-lead');
+    Route::post('/quotations/{quotation}/post-to-zoho', [QuotationController::class, 'postToZoho'])->middleware('can:quotations.create')->name('quotations.post-to-zoho');
     Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->middleware('can:quotations.delete')->name('quotations.destroy');
 
 

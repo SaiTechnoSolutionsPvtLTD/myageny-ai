@@ -421,6 +421,83 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
         @endif
 
+        {{-- Duplicate Lead Alert Notification --}}
+        @php
+            $dups = $duplicateLeads ?? ($lead->duplicateLeads() ?? collect());
+        @endphp
+        @if(!empty($dups) && $dups->isNotEmpty())
+        <div style="padding:14px 28px 0;">
+            <div style="background:#fff1f2; border:1px solid #fecdd3; border-left:5px solid #e11d48; border-radius:12px; padding:16px 20px; box-shadow:0 4px 14px rgba(225,29,72,0.08);">
+                <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:40px; height:40px; border-radius:10px; background:#ffe4e6; color:#e11d48; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                        </div>
+                        <div>
+                            <div style="font-size:15px; font-weight:800; color:#9f1239; display:flex; align-items:center; gap:8px;">
+                                <span>Duplicate Lead Detected</span>
+                                <span style="font-size:11px; font-weight:700; background:#e11d48; color:#fff; padding:2px 8px; border-radius:12px;">
+                                    {{ $dups->count() }} {{ \Illuminate\Support\Str::plural('Duplicate', $dups->count()) }} Found
+                                </span>
+                            </div>
+                            <div style="font-size:13px; color:#be123c; margin-top:3px;">
+                                Another lead exists in the system with the same mobile number: <strong style="color:#9f1239; font-weight:800;">{{ $lead->mobile_number }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top:14px; display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:12px;">
+                    @foreach($dups as $dup)
+                    @php
+                        $dupUser = $dup->assignedTo;
+                        $dupUserMobile = $dupUser?->mobile_number 
+                            ?: ($dupUser?->employee?->mobile 
+                            ?: ($dupUser?->employee?->official_mobile 
+                            ?: ($dupUser?->internJoiningForm?->contact_no ?: 'N/A')));
+                    @endphp
+                    <div style="background:#ffffff; border:1px solid #fbcfe8; border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:8px; box-shadow:0 2px 6px rgba(0,0,0,0.02);">
+                        <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #fdf2f8; padding-bottom:8px;">
+                            <a href="{{ route('leads.show', $dup->id) }}" target="_blank" style="font-size:14px; font-weight:800; color:#be185d; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+                                <span>#{{ $dup->id }} - {{ $dup->company_name ?: $dup->contact_name }}</span>
+                                <i class="bi bi-box-arrow-up-right" style="font-size:11px;"></i>
+                            </a>
+                            <span style="font-size:11px; font-weight:700; color:#475569; background:#f1f5f9; padding:2px 8px; border-radius:6px;">
+                                {{ $dup->leadStatus?->name ?? 'Lead' }}
+                            </span>
+                        </div>
+
+                        <div style="font-size:12.5px; color:#334155; display:grid; grid-template-columns:auto 1fr; gap:6px 12px;">
+                            <span style="color:#64748b; font-weight:600;">Contact Name:</span>
+                            <span style="font-weight:700; color:#0f172a;">{{ $dup->contact_name ?: '—' }}</span>
+
+                            <span style="color:#64748b; font-weight:600;">Allocated User:</span>
+                            <span style="font-weight:700; color:#0f172a;">{{ $dupUser?->name ?? 'Unassigned' }}</span>
+
+                            <span style="color:#64748b; font-weight:600;">User Mobile:</span>
+                            <span>
+                                @if($dupUserMobile && $dupUserMobile !== 'N/A')
+                                    <a href="tel:{{ $dupUserMobile }}" style="font-weight:700; color:#0284c7; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                                        <i class="bi bi-telephone-fill" style="font-size:10px;"></i> {{ $dupUserMobile }}
+                                    </a>
+                                @else
+                                    <span style="color:#94a3b8; font-weight:500;">N/A</span>
+                                @endif
+                            </span>
+
+                            <span style="color:#64748b; font-weight:600;">Allocated Branch:</span>
+                            <span style="font-weight:700; color:#0f172a;">{{ $dup->branch?->name ?? 'N/A' }}</span>
+
+                            <span style="color:#64748b; font-weight:600;">Lead Date:</span>
+                            <span style="color:#475569;">{{ $dup->lead_date ? $dup->lead_date->format('d M Y') : ($dup->created_at ? $dup->created_at->format('d M Y') : '—') }}</span>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+        @endif
+
         {{-- ════════════════════════════════════════
              TAB 1 — LEAD INFO
         ════════════════════════════════════════ --}}
@@ -436,7 +513,17 @@ tbody tr:last-child td { border-bottom: none; }
                             <div class="lsp-info-grid">
                                 <div class="lsp-info-item"><div class="lsp-il">Company</div><div class="lsp-iv">{{ $lead->company_name }}</div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Contact Person</div><div class="lsp-iv">{{ $lead->contact_name }}</div></div>
-                                <div class="lsp-info-item"><div class="lsp-il">Mobile</div><div class="lsp-iv"><a href="tel:{{ $lead->mobile_number }}">{{ $lead->mobile_number }}</a></div></div>
+                                <div class="lsp-info-item">
+                                    <div class="lsp-il">Mobile</div>
+                                    <div class="lsp-iv">
+                                        <a href="tel:{{ $lead->mobile_number }}">{{ $lead->mobile_number }}</a>
+                                        @if(!empty($dups) && $dups->isNotEmpty())
+                                            <span style="display:inline-block; margin-left:6px; background:#ffe4e6; color:#e11d48; border:1px solid #fecdd3; padding:1px 6px; border-radius:4px; font-size:10.5px; font-weight:800;">
+                                                ⚠️ DUPLICATE ({{ $dups->count() }})
+                                            </span>
+                                        @endif
+                                    </div>
+                                </div>
                                 <div class="lsp-info-item"><div class="lsp-il">Email</div><div class="lsp-iv">{!! $lead->email ? '<a href="mailto:'.$lead->email.'">'.$lead->email.'</a>' : '—' !!}</div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Lead Date</div><div class="lsp-iv">{{ $lead->lead_date->format('d M Y') }}</div></div>
                                 <div class="lsp-info-item"><div class="lsp-il">Product</div><div class="lsp-iv">{{ $lead->product_name ?? '—' }}</div></div>
@@ -1325,8 +1412,8 @@ tbody tr:last-child td { border-bottom: none; }
                             <td>{{ $q->lead?->contact_name ?? '—' }}<br>
                                 <small style="color:#9e9e9e">{{ $q->lead->company_name ?? '' }}</small>
                             </td>
-                            <td>{{ $q->quotation_date->format('d M Y') }}</td>
-                            <td>{{ $q->valid_until->format('d M Y') }}</td>
+                            <td>{{ $q->quotation_date ? $q->quotation_date->format('d M Y') : '—' }}</td>
+                            <td>{{ $q->valid_until ? $q->valid_until->format('d M Y') : ($q->quotation_date ? $q->quotation_date->copy()->addDays(7)->format('d M Y') : '—') }}</td>
                             <td><strong>₹{{ number_format($q->total_amount, 2) }}</strong></td>
                             {{--  <td>
                                 @if($q->is_approved)

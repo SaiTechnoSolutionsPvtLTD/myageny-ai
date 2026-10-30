@@ -863,6 +863,7 @@ class LeadController extends Controller
 
         $salesExecutives = $this->visibility->visibleAssignableUsers();
         $invoices = $lead->invoices;
+        $duplicateLeads = $lead->duplicateLeads();
 
         return view('pages.leads.show', compact(
             'lead',
@@ -875,8 +876,52 @@ class LeadController extends Controller
             'escalationOnlyCount',
             'convertedProducts',
             'salesExecutives',
-            'invoices'
+            'invoices',
+            'duplicateLeads'
         ));
+    }
+
+    /**
+     * Check if a mobile number is already registered with another lead (AJAX).
+     */
+    public function checkDuplicateApi(Request $request): JsonResponse
+    {
+        $mobile = trim((string) $request->input('mobile'));
+        $excludeId = $request->input('exclude_id') ? (int) $request->input('exclude_id') : null;
+        $companyId = auth()->user()?->company_id;
+
+        $duplicates = Lead::findDuplicatesByMobile($mobile, $excludeId, $companyId);
+
+        if ($duplicates->isEmpty()) {
+            return response()->json(['is_duplicate' => false]);
+        }
+
+        $formatted = $duplicates->map(function ($d) {
+            $user = $d->assignedTo;
+            $userMobile = $user?->mobile_number 
+                ?: ($user?->employee?->mobile 
+                ?: ($user?->employee?->official_mobile ?: 'N/A'));
+
+            return [
+                'id'           => $d->id,
+                'company_name' => $d->company_name,
+                'contact_name' => $d->contact_name,
+                'mobile_number'=> $d->mobile_number,
+                'assigned_user'=> $user?->name ?? 'Unassigned',
+                'user_mobile'  => $userMobile,
+                'branch_name'  => $d->branch?->name ?? 'N/A',
+                'status'       => $d->leadStatus?->name ?? 'Lead',
+                'lead_date'    => $d->lead_date ? $d->lead_date->format('d M Y') : '—',
+                'url'          => route('leads.show', $d->id),
+            ];
+        });
+
+        return response()->json([
+            'is_duplicate' => true,
+            'count'        => $duplicates->count(),
+            'leads'        => $formatted,
+            'primary'      => $formatted->first(),
+        ]);
     }
 
     /**

@@ -190,15 +190,7 @@
             </div>
         </div>
 
-        <div class="acc-stat-card">
-            <div class="acc-stat-icon" style="background:#e0e7ff; color:#4338ca;">
-                <i class="bi bi-pin-angle"></i>
-            </div>
-            <div>
-                <div class="acc-stat-label">Fixed Expenses</div>
-                <div class="acc-stat-val">₹{{ number_format($fixedAmount, 2) }}</div>
-            </div>
-        </div>
+
 
         <div class="acc-stat-card">
             <div class="acc-stat-icon" style="background:#fef3c7; color:#d97706;">
@@ -796,10 +788,10 @@ function viewExpense(id) {
                 <div class="detail-item">
                     <div class="detail-label">Recurring Setting</div>
                     <div class="detail-val">
-                        ${exp.is_recurring 
-                            ? `<span style="color:#15803d; font-weight:800;"><i class="bi bi-arrow-repeat"></i> Auto-generates Monthly (Day ${exp.recurring_day_of_month || '1'})</span>` 
-                            : (exp.auto_generated 
-                                ? `<span style="color:#6d28d9; font-weight:700;"><i class="bi bi-robot"></i> Auto-generated Monthly Record</span>` 
+                        ${exp.is_recurring
+                            ? `<span style="color:#15803d; font-weight:800;"><i class="bi bi-arrow-repeat"></i> Auto-generates Monthly (Day ${exp.recurring_day_of_month || '1'})</span>`
+                            : (exp.auto_generated
+                                ? `<span style="color:#6d28d9; font-weight:700;"><i class="bi bi-robot"></i> Auto-generated Monthly Record</span>`
                                 : '<span style="color:#64748b; font-weight:normal;">One-off / Non-recurring</span>')}
                     </div>
                 </div>
