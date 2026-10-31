@@ -357,24 +357,30 @@
             <tr>
                 <td>Basic Salary</td>
                 <td class="text-right">{{ number_format((float) $item->earned_basic_salary, 2) }}</td>
-                <td>Provident Fund (PF {{ number_format((float) $item->pf_employee_percentage, 0) }}%)</td>
+                <td>Provident Fund (PF Emp {{ number_format((float) $item->pf_employee_percentage, 0) }}%)</td>
                 <td class="text-right">{{ number_format((float) $item->pf_employee_contribution, 2) }}</td>
             </tr>
             <tr>
                 <td>House Rent Allowance (HRA)</td>
                 <td class="text-right">{{ number_format((float) $item->earned_hra, 2) }}</td>
-                <td>Employee State Insurance (ESI {{ number_format((float) $item->esi_employee_percentage, 0) }}%)</td>
-                <td class="text-right">{{ number_format((float) $item->esi_employee_contribution, 2) }}</td>
+                <td>Employer PF ({{ number_format((float) $item->pf_employer_percentage, 0) }}%)</td>
+                <td class="text-right">{{ number_format((float) $item->pf_employer_contribution, 2) }}</td>
             </tr>
             <tr>
                 <td>Travel Allowance</td>
                 <td class="text-right">{{ number_format((float) $item->earned_travel_allowance, 2) }}</td>
-                <td>Professional Tax (PT)</td>
-                <td class="text-right">{{ number_format((float) $item->professional_tax, 2) }}</td>
+                <td>Employee State Insurance (ESI {{ number_format((float) $item->esi_employee_percentage, 0) }}%)</td>
+                <td class="text-right">{{ number_format((float) $item->esi_employee_contribution, 2) }}</td>
             </tr>
             <tr>
                 <td>Special / Other Allowance</td>
                 <td class="text-right">{{ number_format((float) $item->earned_other_allowance, 2) }}</td>
+                <td>Professional Tax (PT)</td>
+                <td class="text-right">{{ number_format((float) $item->professional_tax, 2) }}</td>
+            </tr>
+            <tr>
+                <td></td>
+                <td class="text-right"></td>
                 <td>Tax Deducted at Source (TDS)</td>
                 <td class="text-right">{{ number_format((float) $item->tds_amount, 2) }}</td>
             </tr>
@@ -420,6 +426,11 @@
                 <div class="net-pay-card">
                     <div class="net-pay-label">Net Take-Home Salary</div>
                     <div class="net-pay-amount">₹ {{ number_format((float) $item->net_salary, 2) }}</div>
+                    @if(function_exists('amount_in_words'))
+                        <div style="font-size:9px;color:#7c2d12;margin-top:4px;font-weight:700;text-transform:capitalize;">
+                            {{ amount_in_words($item->net_salary) }}
+                        </div>
+                    @endif
                 </div>
             </td>
         </tr>

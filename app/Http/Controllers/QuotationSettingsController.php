@@ -38,6 +38,7 @@ class QuotationSettingsController extends Controller
             'secondary_color'  => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'header_text_color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'prefix'           => ['nullable', 'string', 'max:10', 'alpha_dash'],
+            'next_number'      => ['nullable', 'integer', 'min:1'],
             'number_padding'   => ['nullable', 'integer', 'min:3', 'max:10'],
             'terms'            => ['nullable', 'string'],
             'company_address'  => ['nullable', 'string', 'max:500'],

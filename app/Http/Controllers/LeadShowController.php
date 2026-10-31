@@ -530,18 +530,6 @@ class LeadShowController extends Controller
 
         $quotation->refresh()->recalculateTotals();
 
-        // Auto-create / sync quotation in Zoho Books if connected
-        try {
-            $companyId = $lead->company_id ?: auth()->user()?->company_id;
-            $zohoIntegration = ZohoIntegration::current($companyId);
-            if ($zohoIntegration && $zohoIntegration->is_connected) {
-                $zohoService = app(ZohoBooksService::class);
-                $zohoService->createEstimateInZoho($quotation, $zohoIntegration);
-            }
-        } catch (\Throwable $ze) {
-            Log::warning('Zoho Books auto-sync estimate from lead failed: ' . $ze->getMessage());
-        }
-
         return back()->with('success', "Quotation <strong>{$quotation->quotation_number}</strong> created.");
     }
 

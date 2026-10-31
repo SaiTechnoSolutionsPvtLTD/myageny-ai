@@ -695,21 +695,29 @@
                         <span class="section-toggle open bi bi-chevron-down"></span>
                     </div>
                     <div class="section-body">
-                        <div class="grid-2">
+                        <div class="grid-3">
                             <div class="form-group">
                                 <label class="form-label">Number Prefix <span>*</span></label>
                                 <input type="text" name="prefix" id="prefixInput" class="form-input"
-                                       value="{{ $data['prefix'] ?? 'QUO-' }}"
-                                       placeholder="QUO-" maxlength="10"
+                                       value="{{ $data['prefix'] ?? 'QT-' }}"
+                                       placeholder="QT-" maxlength="10"
                                        oninput="updateNumberPreview()">
-                                <div class="form-hint">Examples: QUO-, EST-, INV-, PRO-</div>
+                                <div class="form-hint">Examples: QT-, QUO-, EST-</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Next Quotation Number <span>*</span></label>
+                                <input type="number" name="next_number" id="nextNumberInput" class="form-input"
+                                       value="{{ $data['next_number'] ?? 1805 }}"
+                                       min="1"
+                                       oninput="updateNumberPreview()">
+                                <div class="form-hint">Continuous sequence counter (e.g. 1805)</div>
                             </div>
                             <div class="form-group">
                                 <label class="form-label">Number Padding</label>
                                 <input type="number" name="number_padding" id="paddingInput" class="form-input"
-                                       value="{{ $data['number_padding'] ?? 5 }}"
+                                       value="{{ $data['number_padding'] ?? 6 }}"
                                        min="3" max="10" oninput="updateNumberPreview()">
-                                <div class="form-hint">Total digits: 5 → QUO-00001</div>
+                                <div class="form-hint">Total digits: 6 → QT-001805</div>
                             </div>
                         </div>
 
@@ -718,11 +726,11 @@
                             <div class="form-label">Preview</div>
                             <div class="number-preview">
                                 <span class="preview-label">Next number:</span>
-                                <span id="numberPreview">{{ ($data['prefix'] ?? 'QUO-') . str_pad($data['next_number'] ?? 1, $data['number_padding'] ?? 5, '0', STR_PAD_LEFT) }}</span>
+                                <span id="numberPreview">{{ ($data['prefix'] ?? 'QT-') . str_pad($data['next_number'] ?? 1805, $data['number_padding'] ?? 6, '0', STR_PAD_LEFT) }}</span>
                             </div>
                         </div>
                         <div class="form-hint" style="margin-top:8px;">
-                            ⚠️ Changing the prefix only affects future quotations. Existing quotation numbers remain unchanged.
+                            ⚠️ Changing the prefix or next number only affects future quotations. Existing quotation numbers remain unchanged.
                         </div>
                     </div>
                 </div>
@@ -992,9 +1000,10 @@ input:checked + .toggle-slider:before { transform:translateX(20px); }
 
     // ─── Number Preview ───────────────────────────────────────
     function updateNumberPreview() {
-        const prefix  = document.getElementById('prefixInput').value || 'QUO-';
-        const padding = parseInt(document.getElementById('paddingInput').value) || 5;
-        const num     = String({{ $data['next_number'] ?? 1 }}).padStart(padding, '0');
+        const prefix  = document.getElementById('prefixInput').value || 'QT-';
+        const padding = parseInt(document.getElementById('paddingInput').value) || 6;
+        const nextNum = parseInt(document.getElementById('nextNumberInput')?.value) || 1805;
+        const num     = String(nextNum).padStart(padding, '0');
         document.getElementById('numberPreview').textContent = prefix + num;
     }
 
@@ -1096,9 +1105,10 @@ input:checked + .toggle-slider:before { transform:translateX(20px); }
 
         const color           = document.getElementById('colorHex').value || '#fe5f04';
         const headerTextColor = document.getElementById('colorHex3').value || '#ffffff';
-        const prefix          = document.getElementById('prefixInput').value || 'QUO-';
-        const padding         = parseInt(document.getElementById('paddingInput').value) || 5;
-        const qNo             = prefix + String({{ $data['next_number'] ?? 1 }}).padStart(padding, '0');
+        const prefix          = document.getElementById('prefixInput').value || 'QT-';
+        const padding         = parseInt(document.getElementById('paddingInput').value) || 6;
+        const nextNum         = parseInt(document.getElementById('nextNumberInput')?.value) || 1805;
+        const qNo             = prefix + String(nextNum).padStart(padding, '0');
         const logoEl          = document.getElementById('logoImg');
         const logoSrc         = logoEl ? logoEl.src : '';
         const sigEl           = document.getElementById('sigImg');

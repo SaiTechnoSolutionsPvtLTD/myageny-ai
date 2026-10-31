@@ -3793,17 +3793,6 @@ class AccountsApiController extends Controller
 
             \Illuminate\Support\Facades\DB::commit();
 
-            // Auto-sync Invoice to Zoho Books if connected
-            try {
-                $zohoIntegration = ZohoIntegration::current($companyId);
-                if ($zohoIntegration && $zohoIntegration->is_connected) {
-                    $zohoService = app(ZohoBooksService::class);
-                    $zohoService->createInvoiceInZoho($invoice, $zohoIntegration);
-                }
-            } catch (\Throwable $ze) {
-                Log::warning('Mobile API Zoho Books invoice auto-sync failed: ' . $ze->getMessage());
-            }
-
             $invoice->load(['items', 'customer', 'salesPerson']);
 
             return response()->json([
@@ -3909,17 +3898,6 @@ class AccountsApiController extends Controller
             $invoice->recalculatePaymentStatus();
 
             \Illuminate\Support\Facades\DB::commit();
-
-            // Auto-sync Invoice to Zoho Books if connected
-            try {
-                $zohoIntegration = ZohoIntegration::current($companyId);
-                if ($zohoIntegration && $zohoIntegration->is_connected) {
-                    $zohoService = app(ZohoBooksService::class);
-                    $zohoService->createInvoiceInZoho($invoice, $zohoIntegration);
-                }
-            } catch (\Throwable $ze) {
-                Log::warning('Mobile API Zoho Books invoice auto-sync failed: ' . $ze->getMessage());
-            }
 
             $invoice->load(['items', 'customer', 'salesPerson']);
 

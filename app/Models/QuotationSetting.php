@@ -36,9 +36,9 @@ class QuotationSetting extends Model
         'terms'             => '',
         'signature'         => '',
         'company_address'   => '',
-        'prefix'            => 'QUO-',
-        'next_number'       => 1,
-        'number_padding'    => 5,
+        'prefix'            => 'QT-',
+        'next_number'       => 1805,
+        'number_padding'    => 6,
         'company_name'      => '',
         'company_phone'     => '',
         'company_email'     => '',
@@ -202,17 +202,7 @@ class QuotationSetting extends Model
     // ─── Generate next quotation number ──────────────────────
     public static function generateQuotationNumber(?int $branchId = null): string
     {
-        $settings = static::allSettings($branchId);
-        $prefix    = $settings['prefix'] ?? 'QUO-';
-        $next      = (int)($settings['next_number'] ?? 1);
-        $padding   = (int)($settings['number_padding'] ?? 5);
-
-        $number = $prefix . str_pad($next, $padding, '0', STR_PAD_LEFT);
-
-        // Increment next_number
-        static::set('next_number', $next + 1, $branchId);
-
-        return $number;
+        return Quotation::generateQuotationNo(null, $branchId);
     }
 
     public function branch()

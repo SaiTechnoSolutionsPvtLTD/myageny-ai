@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\EmployeeOnboarding;
+use App\Models\PayrollSetting;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserMapping;
@@ -172,6 +173,7 @@ class EmployeeOnboardingController extends Controller
             'departments' => Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
             'branches' => Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
             'tlUsers' => $this->teamLeadUsers($companyId),
+            'payrollSettings' => PayrollSetting::forCompany($companyId),
         ]);
     }
 
@@ -276,6 +278,7 @@ class EmployeeOnboardingController extends Controller
             'departments' => Department::when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
             'branches' => Branch::where('is_active', true)->when($companyId, fn ($q) => $q->where('company_id', $companyId))->orderBy('name')->get(),
             'tlUsers' => $this->teamLeadUsers($companyId),
+            'payrollSettings' => PayrollSetting::forCompany($companyId),
         ]);
     }
 
@@ -399,19 +402,28 @@ class EmployeeOnboardingController extends Controller
         $pfEnabled = (bool) ($attributes['pf_enabled'] ?? false);
         $esiEnabled = (bool) ($attributes['esi_enabled'] ?? false);
 
-        $pfBaseAmount = $grossSalary > self::PF_GROSS_SALARY_THRESHOLD
-            ? self::PF_BASIC_SALARY_CAP
+        $companyId = auth()->user()?->company_id;
+        $payrollSettings = PayrollSetting::forCompany($companyId);
+        $pfThreshold = (float) ($payrollSettings->pf_gross_threshold ?? self::PF_GROSS_SALARY_THRESHOLD);
+        $pfCap       = (float) ($payrollSettings->pf_basic_cap ?? self::PF_BASIC_SALARY_CAP);
+        $pfEmpRate   = ((float) ($payrollSettings->pf_employee_percentage ?? 12)) / 100;
+        $pfEmprRate  = ((float) ($payrollSettings->pf_employer_percentage ?? 13)) / 100;
+        $esiEmpRate  = ((float) ($payrollSettings->esi_employee_percentage ?? 4)) / 100;
+        $esiEmprRate = ((float) ($payrollSettings->esi_employer_percentage ?? 0)) / 100;
+
+        $pfBaseAmount = $grossSalary > $pfThreshold
+            ? $pfCap
             : ($basicSalary + $specialAllowance + $otherAllowance);
-        $pfEmployeeContribution = $pfEnabled ? round($pfBaseAmount * self::PF_EMPLOYEE_RATE, 2) : 0;
-        $pfEmployerContribution = $pfEnabled ? round($pfBaseAmount * self::PF_EMPLOYER_RATE, 2) : 0;
-        $esiEmployeeContribution = $esiEnabled ? round($grossSalary * self::ESI_EMPLOYEE_RATE, 2) : 0;
-        $esiEmployerContribution = $esiEnabled ? round($grossSalary * self::ESI_EMPLOYER_RATE, 2) : 0;
+        $pfEmployeeContribution = $pfEnabled ? round($pfBaseAmount * $pfEmpRate, 2) : 0;
+        $pfEmployerContribution = $pfEnabled ? round($pfBaseAmount * $pfEmprRate, 2) : 0;
+        $esiEmployeeContribution = $esiEnabled ? round($grossSalary * $esiEmpRate, 2) : 0;
+        $esiEmployerContribution = $esiEnabled ? round($grossSalary * $esiEmprRate, 2) : 0;
 
         $professionalTax = round((float) ($attributes['professional_tax'] ?? 0), 2);
         $tdsAmount = round((float) ($attributes['tds_amount'] ?? 0), 2);
         $loanDeduction = round((float) ($attributes['loan_deduction'] ?? 0), 2);
         $otherDeduction = round((float) ($attributes['other_deduction'] ?? 0), 2);
-        $totalDeduction = round($pfEmployeeContribution + $esiEmployeeContribution + $professionalTax + $tdsAmount + $loanDeduction + $otherDeduction, 2);
+        $totalDeduction = round($pfEmployeeContribution + $pfEmployerContribution + $esiEmployeeContribution + $professionalTax + $tdsAmount + $loanDeduction + $otherDeduction, 2);
         $netSalary = round(max($grossSalary - $totalDeduction, 0), 2);
 
         $attributes['basic_salary'] = $basicSalary;
@@ -715,7 +727,7 @@ class EmployeeOnboardingController extends Controller
         }
 
         return User::withoutGlobalScopes()
-            ->with(['roles.roleMapping', 'branch'])
+            ->with(['roles.roleMapping', 'branch', 'branches'])
             ->where('is_active', true)
             ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
             ->orderBy('name')
@@ -727,12 +739,15 @@ class EmployeeOnboardingController extends Controller
                 $isSuperAdmin = $user->isSuperAdmin() || (int) $user->id === (int) $companySuperAdminId;
                 $isCompanyAdmin = $user->isCompanyAdmin() || $isSuperAdmin || $user->hasRole('company_admin') || Str::contains($user->roles->pluck('name')->implode(','), 'company_admin');
                 $isExecutive = $isCompanyAdmin || $isSuperAdmin || $this->isExecutiveUser($user);
+                $isBranchAdminOrManager = $this->isBranchAdminOrManager($user);
+                $branchIds = array_values(array_unique(array_filter(array_map('strval', $user->getMyBranchIds()))));
 
                 return [
                     'id' => (string) $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
                     'branch_id' => (string) ($user->branch_id ?? ''),
+                    'branch_ids' => $branchIds,
                     'branch_name' => $user->branch?->name,
                     'department_ids' => $displayRoles
                         ->map(fn (Role $role) => (string) ($role->department_id ?? ''))
@@ -748,11 +763,11 @@ class EmployeeOnboardingController extends Controller
                         ->map(fn (Role $role) => $this->roleLabel($role))
                         ->filter()
                         ->unique()
-                        ->implode(', ') ?: ($isSuperAdmin ? 'Super Admin' : ($isCompanyAdmin ? 'Company Admin' : 'Team Lead')),
+                        ->implode(', ') ?: ($isSuperAdmin ? 'Super Admin' : ($isCompanyAdmin ? 'Company Admin' : ($isBranchAdminOrManager ? 'Branch Manager' : 'Team Lead'))),
                     'is_super_admin' => $isSuperAdmin,
                     'is_company_admin' => $isCompanyAdmin,
                     'is_executive' => $isExecutive,
-                    'is_branch_admin_or_manager' => $this->isBranchAdminOrManager($user),
+                    'is_branch_admin_or_manager' => $isBranchAdminOrManager,
                 ];
             })
             ->values();
@@ -814,7 +829,7 @@ class EmployeeOnboardingController extends Controller
             'chief_business_officer',
         ];
 
-        return $user->roles->contains(function (Role $role) use ($adminOrManagerKeys) {
+        $hasManagerRole = $user->roles->contains(function (Role $role) use ($adminOrManagerKeys) {
             $roleKeys = collect([$role->name, $role->display_name])
                 ->filter()
                 ->flatMap(function (string $roleName) {
@@ -826,6 +841,12 @@ class EmployeeOnboardingController extends Controller
 
             return $roleKeys->intersect($adminOrManagerKeys)->isNotEmpty();
         });
+
+        if ($hasManagerRole) {
+            return true;
+        }
+
+        return Branch::withoutGlobalScopes()->where('manager_id', $user->id)->exists();
     }
 
     private function userHasTeamLeadRole(User $user): bool

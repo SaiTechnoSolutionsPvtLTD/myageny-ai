@@ -591,24 +591,6 @@ class InvoiceController extends Controller
 
             DB::commit();
 
-            // Auto-create / sync Invoice in Zoho Books if connected
-            $zohoSyncMsg = null;
-            try {
-                $zohoIntegration = ZohoIntegration::current($companyId);
-                if ($zohoIntegration && $zohoIntegration->is_connected) {
-                    $zohoService = app(ZohoBooksService::class);
-                    $zohoInvResult = $zohoService->createInvoiceInZoho($invoice, $zohoIntegration);
-                    if ($zohoInvResult) {
-                        $zohoSyncMsg = ' & synced to Zoho Books';
-                    }
-                }
-            } catch (\Throwable $ze) {
-                Log::warning('Zoho Books auto-sync invoice failed: ' . $ze->getMessage(), [
-                    'invoice_id'     => $invoice->id,
-                    'invoice_number' => $invoice->invoice_number,
-                ]);
-            }
-
             // Handle email dispatch if requested by user
             $mailSent = false;
             $mailError = null;
@@ -675,16 +657,16 @@ class InvoiceController extends Controller
 
             if ($mailSent) {
                 return redirect()->route('accounts.sales.invoices.show', $invoice->id)
-                                 ->with('success', "Invoice #{$invoice->invoice_number} created" . ($zohoSyncMsg ?? '') . " and email successfully sent to {$invoice->customer_email}!");
+                                 ->with('success', "Invoice #{$invoice->invoice_number} created and email successfully sent to {$invoice->customer_email}!");
             }
 
             if ($mailError && $request->boolean('send_email')) {
                 return redirect()->route('accounts.sales.invoices.show', $invoice->id)
-                                 ->with('success', "Invoice #{$invoice->invoice_number} created" . ($zohoSyncMsg ?? '') . " successfully, but mail could not be sent: {$mailError}");
+                                 ->with('success', "Invoice #{$invoice->invoice_number} created successfully, but mail could not be sent: {$mailError}");
             }
 
             return redirect()->route('accounts.sales.invoices.show', $invoice->id)
-                             ->with('success', "Invoice #{$invoice->invoice_number} created" . ($zohoSyncMsg ?? '') . " successfully!");
+                             ->with('success', "Invoice #{$invoice->invoice_number} created successfully!");
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()->withInput()->with('error', 'Failed to create invoice: ' . $e->getMessage());

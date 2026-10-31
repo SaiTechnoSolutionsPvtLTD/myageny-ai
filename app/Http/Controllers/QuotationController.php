@@ -244,31 +244,12 @@ class QuotationController extends Controller
             return $quotation;
         });
 
-        // Auto-create / sync quotation (estimate) in Zoho Books if connected
-        $zohoSyncMessage = null;
-        try {
-            $companyId = $quotation->company_id ?: auth()->user()?->company_id;
-            $zohoIntegration = ZohoIntegration::current($companyId);
-            if ($zohoIntegration && $zohoIntegration->is_connected) {
-                $zohoService = app(ZohoBooksService::class);
-                $zohoResult = $zohoService->createEstimateInZoho($quotation, $zohoIntegration);
-                if ($zohoResult) {
-                    $zohoSyncMessage = ' & synced to Zoho Books';
-                }
-            }
-        } catch (\Throwable $ze) {
-            Log::warning('Zoho Books auto-sync estimate failed: ' . $ze->getMessage(), [
-                'quotation_id' => $quotation->id,
-                'quotation_no' => $quotation->quotation_no,
-            ]);
-        }
-
         // API Response
         if ($request->expectsJson() || $request->is('api/*')) {
 
             return response()->json([
                 'status' => true,
-                'message' => 'Quotation created' . ($zohoSyncMessage ?? '') . ' successfully.',
+                'message' => 'Quotation created successfully.',
                 'data' => $quotation->load('items')
             ], 201);
         }
@@ -276,7 +257,7 @@ class QuotationController extends Controller
         // Web Response
         return redirect()
             ->route('quotations.index')
-            ->with('success', 'Quotation created' . ($zohoSyncMessage ?? '') . ' successfully.');
+            ->with('success', 'Quotation created successfully.');
     }
 
     // ── Show ──────────────────────────────────────────────────────────────────
@@ -623,26 +604,8 @@ class QuotationController extends Controller
 
             DB::commit();
 
-            // Auto-sync converted Invoice to Zoho Books if connected
-            $zohoSyncMsg = null;
-            try {
-                $zohoIntegration = ZohoIntegration::current($companyId);
-                if ($zohoIntegration && $zohoIntegration->is_connected) {
-                    $zohoService = app(ZohoBooksService::class);
-                    $zohoInvResult = $zohoService->createInvoiceInZoho($invoice, $zohoIntegration);
-                    if ($zohoInvResult) {
-                        $zohoSyncMsg = ' & synced to Zoho Books';
-                    }
-                }
-            } catch (\Throwable $ze) {
-                Log::warning('Zoho Books auto-sync converted invoice failed: ' . $ze->getMessage(), [
-                    'invoice_id'     => $invoice->id,
-                    'invoice_number' => $invoice->invoice_number,
-                ]);
-            }
-
             return redirect()->route('accounts.sales.invoices.show', $invoice->id)
-                ->with('success', "Quotation #{$quotation->quotation_no} was successfully converted to Invoice #{$invoice->invoice_number}" . ($zohoSyncMsg ?? '') . "!");
+                ->with('success', "Quotation #{$quotation->quotation_no} was successfully converted to Invoice #{$invoice->invoice_number}!");
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error("Failed to convert quotation #{$quotation->id} to invoice: " . $e->getMessage(), [

@@ -21,6 +21,8 @@ class PayrollSettingController extends Controller
         $validated = $request->validate([
             'pf_employee_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
             'pf_employer_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
+            'pf_gross_threshold'     => ['required', 'numeric', 'min:0'],
+            'pf_basic_cap'           => ['required', 'numeric', 'min:0'],
             'esi_employee_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
             'esi_employer_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
             'esi_salary_limit' => ['required', 'numeric', 'min:0'],
