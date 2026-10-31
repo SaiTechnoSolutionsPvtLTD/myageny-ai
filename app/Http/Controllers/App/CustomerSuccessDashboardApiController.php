@@ -10,6 +10,8 @@ use App\Models\User;
 use App\Models\Product;
 use App\Models\ProductionInitiation;
 use App\Models\CustomerCampaign;
+use App\Models\DomainRecord;
+use App\Models\HostingRecord;
 use App\Models\SmmSheet;
 use App\Services\DataVisibilityService;
 use Carbon\Carbon;
@@ -110,7 +112,7 @@ class CustomerSuccessDashboardApiController extends Controller
             $toDate   = !empty($filters['to_date'])   ? Carbon::parse($filters['to_date'])->endOfDay()   : null;
 
             // 1. Renewals Data (CMR / CMR+1 / CMR-1)
-            $renewals = $this->getRenewalsData($filters, $applySupportScope);
+            $renewals = $this->getRenewalsData($filters, $applySupportScope, '', $currentUser);
 
             // 2. Department & Product Wise Pending Payments
             $deptProductAll = $this->getDeptProductPendingData($filters, $applySupportScope);
@@ -162,6 +164,9 @@ class CustomerSuccessDashboardApiController extends Controller
 
             // 10. Development Ongoing Projects (Top 5 preview)
             $devOngoingData = $this->getDevOngoingData($filters, $applySupportScope, 1, 5);
+
+            // 11. Technical SEO Projects (Current Month / Date Filtered)
+            $techSeoData = $this->getTechnicalSeoData($filters, $applySupportScope, $fromDate, $toDate);
 
             return response()->json([
                 'success' => true,
@@ -249,6 +254,22 @@ class CustomerSuccessDashboardApiController extends Controller
                         'items'         => $devOngoingData['items'],
                         'has_more'      => $devOngoingData['has_more'],
                     ],
+                    'technical_seo' => [
+                        'count'    => $techSeoData['count'],
+                        'value'    => $techSeoData['value'],
+                        'received' => $techSeoData['received'],
+                        'pending'  => $techSeoData['pending'],
+                        'items'    => array_slice($techSeoData['items'], 0, 5),
+                        'has_more' => $techSeoData['count'] > 5,
+                    ],
+                    'domains_hosting' => [
+                        'count'          => $renewals['dh_current_month']['count'],
+                        'domains_count'  => $renewals['dh_current_month']['domains_count'],
+                        'hostings_count' => $renewals['dh_current_month']['hostings_count'],
+                        'value'          => $renewals['dh_current_month']['value'],
+                        'items'          => array_slice($renewals['dh_current_month']['items'], 0, 5),
+                        'has_more'       => $renewals['dh_current_month']['count'] > 5,
+                    ],
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -300,7 +321,7 @@ class CustomerSuccessDashboardApiController extends Controller
 
             switch ($section) {
                 case 'renewals':
-                    $renewals = $this->getRenewalsData($filters, $applySupportScope, $search);
+                    $renewals = $this->getRenewalsData($filters, $applySupportScope, $search, $currentUser);
                     $targetBucket = in_array($bucket, ['cmr', 'cmr_plus', 'cmr_minus', 'nmr', 'lmr'], true) ? $bucket : 'cmr';
                     if ($targetBucket === 'nmr') $targetBucket = 'cmr_plus';
                     if ($targetBucket === 'lmr') $targetBucket = 'cmr_minus';
@@ -451,6 +472,59 @@ class CustomerSuccessDashboardApiController extends Controller
                         ],
                     ]);
 
+                case 'domains_hosting':
+                    $renewals = $this->getRenewalsData($filters, $applySupportScope, $search, $currentUser);
+                    $dhData = $renewals['dh_current_month'];
+                    $allItems = $dhData['items'];
+
+                    $tab = strtolower(trim((string) ($request->query('tab') ?? $request->query('type', 'all'))));
+                    if ($tab === 'domain' || $tab === 'domains') {
+                        $allItems = array_values(array_filter($allItems, fn($item) => $item['type'] === 'domain'));
+                    } elseif ($tab === 'hosting' || $tab === 'hostings') {
+                        $allItems = array_values(array_filter($allItems, fn($item) => $item['type'] === 'hosting'));
+                    }
+
+                    $total = count($allItems);
+                    $offset = ($page - 1) * $perPage;
+                    $pageItems = array_slice($allItems, $offset, $perPage);
+
+                    return response()->json([
+                        'success' => true,
+                        'section' => 'domains_hosting',
+                        'data'    => [
+                            'items'          => $pageItems,
+                            'current_page'   => $page,
+                            'per_page'       => $perPage,
+                            'total'          => $total,
+                            'domains_count'  => $dhData['domains_count'],
+                            'hostings_count' => $dhData['hostings_count'],
+                            'has_more'       => ($offset + count($pageItems)) < $total,
+                            'tab'            => $tab,
+                        ],
+                    ]);
+
+                case 'technical_seo':
+                    $techSeo = $this->getTechnicalSeoData($filters, $applySupportScope, $fromDate, $toDate, $search);
+                    $allItems = $techSeo['items'];
+                    $total = count($allItems);
+                    $offset = ($page - 1) * $perPage;
+                    $pageItems = array_slice($allItems, $offset, $perPage);
+
+                    return response()->json([
+                        'success' => true,
+                        'section' => 'technical_seo',
+                        'data'    => [
+                            'items'        => $pageItems,
+                            'current_page' => $page,
+                            'per_page'     => $perPage,
+                            'total'        => $total,
+                            'value'        => $techSeo['value'],
+                            'received'     => $techSeo['received'],
+                            'pending'      => $techSeo['pending'],
+                            'has_more'     => ($offset + count($pageItems)) < $total,
+                        ],
+                    ]);
+
                 default:
                     return response()->json([
                         'success' => false,
@@ -496,12 +570,13 @@ class CustomerSuccessDashboardApiController extends Controller
         };
     }
 
-    private function getRenewalsData(array $filters, \Closure $applySupportScope, string $search = ''): array
+    private function getRenewalsData(array $filters, \Closure $applySupportScope, string $search = '', ?User $currentUser = null): array
     {
         $initiations = ProductionInitiation::query()
             ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
             ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
             ->join('products', 'products.id', '=', 'production_initiations.product_id')
+            ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
             ->select([
                 'production_initiations.id',
                 'production_initiations.lead_id',
@@ -515,6 +590,7 @@ class CustomerSuccessDashboardApiController extends Controller
                 'leads.contact_name',
                 'leads.mobile_number',
                 'leads.branch_id',
+                'branches.name as branch_name',
                 'leads.customer_support_tl_id',
                 'leads.customer_support_executive_id',
                 'products.is_this_renewal_product',
@@ -555,18 +631,24 @@ class CustomerSuccessDashboardApiController extends Controller
             $paid  = (float) $pi->amount_paid;
 
             $item = [
-                'id'             => $pi->id,
-                'lead_id'        => $pi->lead_id,
-                'company_name'   => $pi->company_name ?: ($pi->contact_name ?: 'N/A'),
-                'contact_name'   => $pi->contact_name ?: '',
-                'mobile_number'  => $pi->mobile_number ?: '',
-                'product_name'   => $pi->product_name,
-                'renewal_date'   => $rDateStr,
-                'value'          => $price,
-                'paid'           => $paid,
-                'pending'        => max(0, $price - $paid),
-                'payment_status' => $pi->payment_status ?: ($paid >= $price ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid')),
-                'assigned_to'    => $pi->customer_support_executive_id ?: $pi->customer_support_tl_id,
+                'id'                     => $pi->id,
+                'record_id'              => $pi->id,
+                'type'                   => 'project',
+                'type_badge'             => 'Project',
+                'lead_id'                => $pi->lead_id,
+                'company_name'           => $pi->company_name ?: ($pi->contact_name ?: 'N/A'),
+                'contact_name'           => $pi->contact_name ?: '',
+                'mobile_number'          => $pi->mobile_number ?: '',
+                'branch_name'            => $pi->branch_name ?: 'General',
+                'product_name'           => $pi->product_name,
+                'renewal_date'           => $rDateStr,
+                'renewal_date_formatted' => $rDate->format('d M Y'),
+                'value'                  => $price,
+                'paid'                   => $paid,
+                'pending'                => max(0, $price - $paid),
+                'payment_status'         => $pi->payment_status ?: ($paid >= $price ? 'paid' : ($paid > 0 ? 'partial' : 'unpaid')),
+                'assigned_to'            => $pi->customer_support_executive_id ?: $pi->customer_support_tl_id,
+                'assigned_to_name'       => '',
             ];
 
             if ($rDate->between($cmStart, $cmEnd)) {
@@ -578,10 +660,285 @@ class CustomerSuccessDashboardApiController extends Controller
             }
         }
 
+        // Fetch Domains & Hostings for renewals & expiry tracking
+        $domains = DomainRecord::query()
+            ->with(['lead.branch', 'creator'])
+            ->when($currentUser && $currentUser->company_id, fn($q) => $q->where('company_id', $currentUser->company_id))
+            ->whereNotNull('expires_at')
+            ->whereBetween('expires_at', [$lmStart->toDateString(), $nmEnd->toDateString()])
+            ->when(!empty($filters['branch_id']), fn($q) => $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $filters['branch_id'])))
+            ->when(!empty($search), function ($q) use ($search) {
+                $q->where(function ($sq) use ($search) {
+                    $sq->where('domain_name', 'like', "%{$search}%")
+                       ->orWhere('registrar', 'like', "%{$search}%")
+                       ->orWhere('client_name', 'like', "%{$search}%")
+                       ->orWhereHas('lead', function ($lq) use ($search) {
+                           $lq->where('company_name', 'like', "%{$search}%")
+                              ->orWhere('contact_name', 'like', "%{$search}%")
+                              ->orWhere('mobile_number', 'like', "%{$search}%");
+                       });
+                });
+            })
+            ->get();
+
+        $hostings = HostingRecord::query()
+            ->with(['lead.branch', 'server', 'creator'])
+            ->when($currentUser && $currentUser->company_id, fn($q) => $q->where('company_id', $currentUser->company_id))
+            ->whereNotNull('renewal_date')
+            ->whereBetween('renewal_date', [$lmStart->toDateString(), $nmEnd->toDateString()])
+            ->when(!empty($filters['branch_id']), fn($q) => $q->whereHas('lead', fn($lq) => $lq->where('branch_id', $filters['branch_id'])))
+            ->when(!empty($search), function ($q) use ($search) {
+                $q->where(function ($sq) use ($search) {
+                    $sq->where('hosting_name', 'like', "%{$search}%")
+                       ->orWhere('provider', 'like', "%{$search}%")
+                       ->orWhere('client_name', 'like', "%{$search}%")
+                       ->orWhereHas('lead', function ($lq) use ($search) {
+                           $lq->where('company_name', 'like', "%{$search}%")
+                              ->orWhere('contact_name', 'like', "%{$search}%")
+                              ->orWhere('mobile_number', 'like', "%{$search}%");
+                       });
+                });
+            })
+            ->get();
+
+        $dhCurrentMonthItems = [];
+        $dhCurrentMonthDomainsCount = 0;
+        $dhCurrentMonthHostingsCount = 0;
+        $dhCurrentMonthValue = 0;
+
+        foreach ($domains as $d) {
+            $dExp = Carbon::parse($d->expires_at);
+            $daysDiff = (int) round($today->diffInDays($dExp, false));
+            $lead = $d->lead;
+            $clientName = $d->client_name ?: ($lead?->company_name ?: ($lead?->contact_name ?: 'N/A'));
+
+            $item = [
+                'id'                     => 'dom_' . $d->id,
+                'record_id'              => $d->id,
+                'type'                   => 'domain',
+                'type_badge'             => 'Domain',
+                'name'                   => $d->domain_name,
+                'lead_id'                => $d->lead_id,
+                'lead_product_id'        => null,
+                'company_name'           => $clientName,
+                'contact_name'           => $lead?->contact_name ?: '',
+                'mobile_number'          => $lead?->mobile_number ?: '—',
+                'product_name'           => '🌐 Domain: ' . $d->domain_name,
+                'provider'               => $d->registrar ?: 'Domain Registrar',
+                'renewal_date'           => $dExp->toDateString(),
+                'renewal_date_formatted' => $dExp->format('d M Y'),
+                'days_diff'              => $daysDiff,
+                'value'                  => 0,
+                'paid'                   => 0,
+                'pending'                => 0,
+                'payment_status'         => $daysDiff < 0 ? 'Expired' : ($daysDiff <= 7 ? 'Expiring Soon' : 'Active'),
+                'assigned_to'            => null,
+                'assigned_to_name'       => $d->creator?->name ?: 'Customer Success',
+                'branch_name'            => $lead?->branch?->name ?: 'General',
+                'lead_url'               => $d->lead_id ? url('/leads/' . $d->lead_id) : '#',
+                'project_url'            => url('/accounts/domains-hosting/domains/' . $d->id),
+                'url'                    => url('/accounts/domains-hosting/domains/' . $d->id),
+                'status'                 => $d->status ?: 'ACTIVE',
+            ];
+
+            if ($dExp->between($cmStart, $cmEnd)) {
+                $cmrCount++;
+                $cmrItems[] = $item;
+                $dhCurrentMonthItems[] = $item;
+                $dhCurrentMonthDomainsCount++;
+            } elseif ($dExp->between($nmStart, $nmEnd)) {
+                $nmrCount++;
+                $nmrItems[] = $item;
+            } elseif ($dExp->between($lmStart, $lmEnd)) {
+                $lmrCount++;
+                $lmrItems[] = $item;
+            }
+        }
+
+        foreach ($hostings as $h) {
+            $hRen = Carbon::parse($h->renewal_date);
+            $daysDiff = (int) round($today->diffInDays($hRen, false));
+            $lead = $h->lead;
+            $clientName = $h->client_name ?: ($lead?->company_name ?: ($lead?->contact_name ?: 'N/A'));
+            $amt = (float) ($h->renewal_amount ?? 0);
+
+            $item = [
+                'id'                     => 'host_' . $h->id,
+                'record_id'              => $h->id,
+                'type'                   => 'hosting',
+                'type_badge'             => 'Hosting',
+                'name'                   => $h->hosting_name ?: 'Web Hosting',
+                'lead_id'                => $h->lead_id,
+                'lead_product_id'        => null,
+                'company_name'           => $clientName,
+                'contact_name'           => $lead?->contact_name ?: '',
+                'mobile_number'          => $lead?->mobile_number ?: '—',
+                'product_name'           => '🖥️ Hosting: ' . ($h->hosting_name ?: 'Hosting'),
+                'provider'               => $h->provider ?: ($h->server?->server_name ?: 'Hosting Provider'),
+                'renewal_date'           => $hRen->toDateString(),
+                'renewal_date_formatted' => $hRen->format('d M Y'),
+                'days_diff'              => $daysDiff,
+                'value'                  => $amt,
+                'paid'                   => 0,
+                'pending'                => $amt,
+                'payment_status'         => $daysDiff < 0 ? 'Expired' : ($daysDiff <= 7 ? 'Expiring Soon' : 'Active'),
+                'assigned_to'            => null,
+                'assigned_to_name'       => $h->creator?->name ?: 'Customer Success',
+                'branch_name'            => $lead?->branch?->name ?: 'General',
+                'lead_url'               => $h->lead_id ? url('/leads/' . $h->lead_id) : '#',
+                'project_url'            => url('/accounts/domains-hosting/hostings/' . $h->id),
+                'url'                    => url('/accounts/domains-hosting/hostings/' . $h->id),
+                'status'                 => $h->status ?: 'ACTIVE',
+            ];
+
+            if ($hRen->between($cmStart, $cmEnd)) {
+                $cmrCount++;
+                $cmrValue += $amt;
+                $cmrItems[] = $item;
+                $dhCurrentMonthItems[] = $item;
+                $dhCurrentMonthHostingsCount++;
+                $dhCurrentMonthValue += $amt;
+            } elseif ($hRen->between($nmStart, $nmEnd)) {
+                $nmrCount++;
+                $nmrValue += $amt;
+                $nmrItems[] = $item;
+            } elseif ($hRen->between($lmStart, $lmEnd)) {
+                $lmrCount++;
+                $lmrValue += $amt;
+                $lmrItems[] = $item;
+            }
+        }
+
+        usort($dhCurrentMonthItems, fn($a, $b) => strcmp($a['renewal_date'], $b['renewal_date']));
+
         return [
-            'cmr'      => ['count' => $cmrCount, 'value' => round($cmrValue, 2), 'items' => $cmrItems],
-            'cmr_plus' => ['count' => $nmrCount, 'value' => round($nmrValue, 2), 'items' => $nmrItems],
-            'cmr_minus'=> ['count' => $lmrCount, 'value' => round($lmrValue, 2), 'items' => $lmrItems],
+            'cmr'              => ['count' => $cmrCount, 'value' => round($cmrValue, 2), 'items' => $cmrItems],
+            'cmr_plus'         => ['count' => $nmrCount, 'value' => round($nmrValue, 2), 'items' => $nmrItems],
+            'cmr_minus'        => ['count' => $lmrCount, 'value' => round($lmrValue, 2), 'items' => $lmrItems],
+            'dh_current_month' => [
+                'count'          => count($dhCurrentMonthItems),
+                'domains_count'  => $dhCurrentMonthDomainsCount,
+                'hostings_count' => $dhCurrentMonthHostingsCount,
+                'value'          => round($dhCurrentMonthValue, 2),
+                'items'          => $dhCurrentMonthItems,
+            ],
+        ];
+    }
+
+    private function getTechnicalSeoData(array $filters, \Closure $applySupportScope, ?Carbon $fromDate = null, ?Carbon $toDate = null, string $search = ''): array
+    {
+        $techSeoQuery = ProductionInitiation::query()
+            ->join('leads', 'leads.id', '=', 'production_initiations.lead_id')
+            ->join('lead_products', 'lead_products.id', '=', 'production_initiations.lead_product_id')
+            ->leftJoin('departments', 'departments.id', '=', 'production_initiations.department_id')
+            ->leftJoin('branches', 'branches.id', '=', 'leads.branch_id')
+            ->select([
+                'production_initiations.id',
+                'production_initiations.lead_id',
+                'production_initiations.product_name',
+                'production_initiations.project_delivery_date',
+                'production_initiations.project_execution_status',
+                'production_initiations.project_allocated_employee_user_ids',
+                'production_initiations.project_allocated_tl_user_ids',
+                'production_initiations.created_at as initiation_created_at',
+                'lead_products.total_price',
+                'lead_products.amount_paid',
+                'lead_products.payment_status',
+                'leads.company_name',
+                'leads.contact_name',
+                'leads.mobile_number',
+                'leads.branch_id',
+                'branches.name as branch_name',
+                'departments.name as department_name'
+            ])
+            ->whereIn('production_initiations.production_approval_status', ['approval', 'approved'])
+            ->where(function ($q) {
+                $q->where('production_initiations.product_name', 'Technical SEO')
+                  ->orWhere('production_initiations.product_name', 'LIKE', '%Technical SEO%');
+            })
+            ->whereNotIn('production_initiations.project_execution_status', ['cancelled'])
+            ->where($applySupportScope)
+            ->tap(fn($q) => $this->applyBranchScope($q, $filters, null, 'leads.branch_id'))
+            ->when(!empty($filters['product_id']), fn($q) => $q->where('production_initiations.product_id', $filters['product_id']))
+            ->when(!empty($filters['source']), fn($q) => $q->where('leads.lead_source', $filters['source']))
+            ->when(!empty($search), function ($q) use ($search) {
+                $q->where(function ($sq) use ($search) {
+                    $sq->where('leads.company_name', 'like', "%{$search}%")
+                       ->orWhere('leads.contact_name', 'like', "%{$search}%")
+                       ->orWhere('leads.mobile_number', 'like', "%{$search}%")
+                       ->orWhere('production_initiations.product_name', 'like', "%{$search}%");
+                });
+            })
+            ->orderByDesc('production_initiations.id')
+            ->get();
+
+        $techSeoItems = [];
+        $techSeoTotalValue = 0;
+        $techSeoTotalReceived = 0;
+        $techSeoTotalPending = 0;
+
+        $fromDateStr = $fromDate ? $fromDate->toDateString() : null;
+        $toDateStr = $toDate ? $toDate->toDateString() : null;
+
+        foreach ($techSeoQuery as $tp) {
+            $deliveryDateStr = $tp->project_delivery_date ? Carbon::parse($tp->project_delivery_date)->toDateString() : null;
+            $createdAtStr = $tp->initiation_created_at ? Carbon::parse($tp->initiation_created_at)->toDateString() : null;
+
+            if ($fromDateStr && $toDateStr) {
+                $inRange = ($deliveryDateStr && $deliveryDateStr >= $fromDateStr && $deliveryDateStr <= $toDateStr)
+                    || ($createdAtStr && $createdAtStr >= $fromDateStr && $createdAtStr <= $toDateStr);
+                if (!$inRange) {
+                    continue;
+                }
+            }
+
+            $price = (float) $tp->total_price;
+            $paid  = (float) $tp->amount_paid;
+            $pending = max(0, $price - $paid);
+
+            $techSeoTotalValue += $price;
+            $techSeoTotalReceived += $paid;
+            $techSeoTotalPending += $pending;
+
+            $rawStatus = strtolower(trim((string) ($tp->project_execution_status ?: 'ontrack')));
+            $statusLabels = [
+                'ontrack'     => 'Onboard',
+                'onboard'     => 'Onboard',
+                'hold'        => 'Hold',
+                'in_progress' => 'In Progress',
+                'in progress' => 'In Progress',
+                'delivered'   => 'Delivered',
+                'completed'   => 'Delivered',
+            ];
+            $statusLabel = $statusLabels[$rawStatus] ?? ucfirst($rawStatus);
+
+            $compName = $tp->company_name ?: ($tp->contact_name ?: 'N/A');
+
+            $techSeoItems[] = [
+                'id'                     => $tp->id,
+                'lead_id'                => $tp->lead_id,
+                'company_name'           => $compName,
+                'contact_name'           => $tp->contact_name ?: '',
+                'mobile_number'          => $tp->mobile_number ?: '—',
+                'product_name'           => $tp->product_name ?: 'Technical SEO',
+                'branch_name'            => $tp->branch_name ?: 'General',
+                'delivery_date'          => $deliveryDateStr ? Carbon::parse($deliveryDateStr)->format('d M Y') : '—',
+                'status'                 => $rawStatus,
+                'status_label'           => $statusLabel,
+                'total_value'            => $price,
+                'received_amount'        => $paid,
+                'pending_amount'         => $pending,
+                'lead_url'               => $tp->lead_id ? url('/projects/technicalseo/' . $tp->lead_id) : url('/projects-details/' . $tp->id),
+                'project_url'            => url('/projects-details/' . $tp->id),
+            ];
+        }
+
+        return [
+            'count'    => count($techSeoItems),
+            'value'    => round($techSeoTotalValue, 2),
+            'received' => round($techSeoTotalReceived, 2),
+            'pending'  => round($techSeoTotalPending, 2),
+            'items'    => $techSeoItems,
         ];
     }
 
@@ -1499,6 +1856,22 @@ class CustomerSuccessDashboardApiController extends Controller
                 'hold_count'    => 0,
                 'items'         => [],
                 'has_more'      => false,
+            ],
+            'technical_seo'        => [
+                'count'    => 0,
+                'value'    => 0,
+                'received' => 0,
+                'pending'  => 0,
+                'items'    => [],
+                'has_more' => false,
+            ],
+            'domains_hosting'      => [
+                'count'          => 0,
+                'domains_count'  => 0,
+                'hostings_count' => 0,
+                'value'          => 0,
+                'items'          => [],
+                'has_more'       => false,
             ],
         ];
     }

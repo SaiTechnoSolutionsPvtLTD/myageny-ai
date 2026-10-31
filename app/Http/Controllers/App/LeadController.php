@@ -1364,6 +1364,46 @@ class LeadController extends Controller
                 ])->values()
                 : [],
 
+            // ── Invoices (Web Parity: Quote & Inv) ────────────────────────────
+            'invoices' => $lead->invoices->map(function ($inv) use ($lead) {
+                $invoiceDate = $inv->invoice_date;
+                if ($invoiceDate instanceof \DateTimeInterface) {
+                    $invoiceDateStr = $invoiceDate->format('Y-m-d');
+                } else {
+                    $invoiceDateStr = $invoiceDate ? (string) $invoiceDate : null;
+                }
+
+                $dueDate = $inv->due_date;
+                if ($dueDate instanceof \DateTimeInterface) {
+                    $dueDateStr = $dueDate->format('Y-m-d');
+                } else {
+                    $dueDateStr = $dueDate ? (string) $dueDate : null;
+                }
+
+                return [
+                    'id'             => $inv->id,
+                    'invoice_number' => $inv->invoice_number,
+                    'customer_id'    => $inv->customer_id,
+                    'customer_name'  => $inv->customer_name ?: ($inv->customer?->customer_name ?? '—'),
+                    'company_name'   => $inv->company_name ?: $inv->customer?->company_name,
+                    'customer_phone' => $inv->customer_phone ?: $inv->customer?->mobile_number,
+                    'customer_email' => $inv->customer_email ?: $inv->customer?->email,
+                    'invoice_date'   => $invoiceDateStr,
+                    'due_date'       => $dueDateStr,
+                    'payment_terms'  => $inv->payment_terms,
+                    'subtotal'       => (float) $inv->subtotal,
+                    'total_tax'      => (float) $inv->total_tax,
+                    'round_off'      => (float) $inv->round_off,
+                    'total_amount'   => (float) $inv->total_amount,
+                    'paid_amount'    => (float) $inv->paid_amount,
+                    'balance_due'    => (float) $inv->balance_due,
+                    'status'         => $inv->status,
+                    'status_label'   => $inv->status_badge ? strip_tags($inv->status_badge) : ucwords(str_replace('_', ' ', (string) $inv->status)),
+                    'lead_id'        => $inv->lead_id ?? $lead->id,
+                    'created_at'     => $inv->created_at?->toIso8601String(),
+                ];
+            })->values(),
+
             'custom_field_values' => $lead->customFieldValues->map(fn($v) => [
                 'id'                 => $v->id,
                 'lead_id'            => $v->lead_id,

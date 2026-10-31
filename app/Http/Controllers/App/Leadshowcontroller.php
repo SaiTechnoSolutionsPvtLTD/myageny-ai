@@ -1915,4 +1915,57 @@ class LeadShowController extends Controller
             'data'    => $created,
         ], 201);
     }
+
+    /**
+     * Get all invoices associated with a lead (Web Parity with Lead Show Quote & Inv).
+     */
+    public function invoices(Request $request, Lead $lead): JsonResponse
+    {
+        abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
+
+        $invoices = $lead->invoices->map(function ($inv) use ($lead) {
+            $invoiceDate = $inv->invoice_date;
+            if ($invoiceDate instanceof \DateTimeInterface) {
+                $invoiceDateStr = $invoiceDate->format('Y-m-d');
+            } else {
+                $invoiceDateStr = $invoiceDate ? (string) $invoiceDate : null;
+            }
+
+            $dueDate = $inv->due_date;
+            if ($dueDate instanceof \DateTimeInterface) {
+                $dueDateStr = $dueDate->format('Y-m-d');
+            } else {
+                $dueDateStr = $dueDate ? (string) $dueDate : null;
+            }
+
+            return [
+                'id'             => $inv->id,
+                'invoice_number' => $inv->invoice_number,
+                'customer_id'    => $inv->customer_id,
+                'customer_name'  => $inv->customer_name ?: ($inv->customer?->customer_name ?? '—'),
+                'company_name'   => $inv->company_name ?: $inv->customer?->company_name,
+                'customer_phone' => $inv->customer_phone ?: $inv->customer?->mobile_number,
+                'customer_email' => $inv->customer_email ?: $inv->customer?->email,
+                'invoice_date'   => $invoiceDateStr,
+                'due_date'       => $dueDateStr,
+                'payment_terms'  => $inv->payment_terms,
+                'subtotal'       => (float) $inv->subtotal,
+                'total_tax'      => (float) $inv->total_tax,
+                'round_off'      => (float) $inv->round_off,
+                'total_amount'   => (float) $inv->total_amount,
+                'paid_amount'    => (float) $inv->paid_amount,
+                'balance_due'    => (float) $inv->balance_due,
+                'status'         => $inv->status,
+                'status_label'   => $inv->status_badge ? strip_tags($inv->status_badge) : ucwords(str_replace('_', ' ', (string) $inv->status)),
+                'lead_id'        => $inv->lead_id ?? $lead->id,
+                'created_at'     => $inv->created_at?->toIso8601String(),
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $invoices,
+            'count'  => $invoices->count(),
+        ]);
+    }
 }

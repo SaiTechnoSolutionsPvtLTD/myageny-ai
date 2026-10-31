@@ -85,6 +85,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/getLeadQuotations/{leadid}', [QuotationController::class, 'getLeadQuotations']);
+    Route::get('/getLeadInvoices/{lead}', [MobileLeadShowController::class, 'invoices']);
     Route::get('/getAllQuotations', [QuotationController::class, 'getAllQuotations']);
 });
 
@@ -733,6 +734,9 @@ Route::middleware('auth:sanctum')->prefix('mobile/leads')->name('mobile.leads.')
         ->name('quotations.approve');
     Route::post('/{lead}/quotations/{quotation}/send-email', [MobileLeadShowController::class, 'sendQuotationEmail'])
         ->name('quotations.send-email');
+
+    // ── Invoices (Web Parity: Lead Quote & Inv Tab) ──────────────────────────
+    Route::get('/{lead}/invoices', [MobileLeadShowController::class, 'invoices'])->name('invoices.index');
 });
 
 

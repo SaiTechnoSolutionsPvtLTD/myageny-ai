@@ -173,6 +173,25 @@ class MenuService
 
         usort($visible, fn($a, $b) => $a['order'] <=> $b['order']);
 
+        // If a module contains only profile/account items (all functional items were hidden due to lack of permissions),
+        // return an empty array so client displays the empty state or module restriction.
+        $hasFunctionalItem = collect($visible)->contains(function ($node) {
+            $section = strtoupper($node['section'] ?? '');
+            $key = $node['key'] ?? '';
+            return $section !== 'ACCOUNT' && ! str_ends_with($key, '.profile');
+        });
+
+        if (! $hasFunctionalItem && ! empty($visible)) {
+            $onlyProfile = collect($visible)->every(function ($node) {
+                $section = strtoupper($node['section'] ?? '');
+                $key = $node['key'] ?? '';
+                return $section === 'ACCOUNT' || str_ends_with($key, '.profile');
+            });
+            if ($onlyProfile) {
+                $visible = [];
+            }
+        }
+
         return array_values($visible);
     }
 
@@ -184,6 +203,10 @@ class MenuService
     private function resolveItemLabel(array $item, ?object $permissionRecord): string
     {
         $staticLabel = $item['label'] ?? '';
+
+        if (! empty($item['keep_static_label'])) {
+            return $staticLabel;
+        }
 
         if (! $permissionRecord || empty($permissionRecord->display_name)) {
             return $staticLabel;
@@ -314,6 +337,14 @@ class MenuService
             $hasAccess = $user->can($matchedPermission->name);
             if (! $hasAccess && ! empty($rule['permission']) && $matchedPermission->name !== $rule['permission']) {
                 $hasAccess = $user->can($rule['permission']);
+            }
+            if (! $hasAccess && ! empty($rule['permission_aliases']) && is_array($rule['permission_aliases'])) {
+                foreach ($rule['permission_aliases'] as $alias) {
+                    if ($user->can($alias)) {
+                        $hasAccess = true;
+                        break;
+                    }
+                }
             }
 
             if (! $hasAccess) {
