@@ -1027,27 +1027,38 @@
                                         </td>
                                         @if($isSuperAdmin)
                                             <td onclick="event.stopPropagation();" style="text-align:center; white-space:nowrap;">
+                                                @php
+                                                    $editPayload = [
+                                                        'id' => (int) $row->payment_id,
+                                                        'code' => 'PMT-' . str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT),
+                                                        'customer' => (string) ($row->company_name ?: $row->customer_name),
+                                                        'product_name' => (string) ($row->product_name ?? 'Product Payment'),
+                                                        'total_price' => (float) ($row->total_amount ?? 0),
+                                                        'outstanding' => (float) ($row->outstanding_amount ?? 0),
+                                                        'payment_type' => (string) ($row->payment_type ?: $row->collection_type),
+                                                        'payment_date' => $row->payment_date ? \Illuminate\Support\Carbon::parse($row->payment_date)->format('Y-m-d') : '',
+                                                        'amount' => (float) ($row->received_amount ?? 0),
+                                                        'payment_mode' => (string) ($row->payment_mode ?: 'upi'),
+                                                        'reference_number' => (string) ($row->transaction_reference ?: ''),
+                                                        'notes' => (string) ($row->notes ?: ''),
+                                                        'is_tds_deducted' => $row->is_tds_deducted ? 1 : 0,
+                                                        'tds_percentage' => (float) ($row->tds_percentage ?? 0),
+                                                        'tds_amount' => (float) ($row->tds_amount ?? 0),
+                                                    ];
+
+                                                    $deletePayload = [
+                                                        'id' => (int) $row->payment_id,
+                                                        'code' => 'PMT-' . str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT),
+                                                        'customer' => (string) ($row->company_name ?: $row->customer_name),
+                                                        'amount' => (float) ($row->received_amount ?? 0),
+                                                    ];
+                                                @endphp
                                                 <div style="display:inline-flex; align-items:center; gap:6px;">
                                                     <button type="button"
                                                             class="crm-pay-edit-btn"
                                                             title="Edit Payment"
-                                                            onclick="event.stopPropagation(); openEditPaymentModal({
-                                                                id: {{ $row->payment_id }},
-                                                                code: 'PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}',
-                                                                customer: '{{ addslashes($row->company_name ?: $row->customer_name) }}',
-                                                                product_name: '{{ addslashes($row->product_name ?? 'Product Payment') }}',
-                                                                total_price: '{{ (float) ($row->total_amount ?? 0) }}',
-                                                                outstanding: '{{ (float) ($row->outstanding_amount ?? 0) }}',
-                                                                payment_type: '{{ $row->payment_type ?: $row->collection_type }}',
-                                                                payment_date: '{{ $row->payment_date ? \Illuminate\Support\Carbon::parse($row->payment_date)->format('Y-m-d') : '' }}',
-                                                                amount: '{{ (float) ($row->received_amount ?? 0) }}',
-                                                                payment_mode: '{{ $row->payment_mode ?: 'upi' }}',
-                                                                reference_number: '{{ addslashes($row->transaction_reference ?: '') }}',
-                                                                notes: '{{ addslashes($row->notes ?: '') }}',
-                                                                is_tds_deducted: {{ $row->is_tds_deducted ? 1 : 0 }},
-                                                                tds_percentage: '{{ (float) ($row->tds_percentage ?? 0) }}',
-                                                                tds_amount: '{{ (float) ($row->tds_amount ?? 0) }}'
-                                                            })">
+                                                            data-payment='@json($editPayload)'
+                                                            onclick="event.stopPropagation(); openEditPaymentModalFromBtn(this)">
                                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -1057,7 +1068,8 @@
                                                     <button type="button"
                                                             class="crm-pay-del-btn"
                                                             title="Delete Payment (Soft Delete)"
-                                                            onclick="event.stopPropagation(); handleDeletePayment({{ $row->payment_id }}, 'PMT-{{ str_pad((string) $row->payment_id, 4, '0', STR_PAD_LEFT) }}', '{{ addslashes($row->company_name ?: $row->customer_name) }}', '{{ (float) ($row->received_amount ?? 0) }}')">
+                                                            data-delete='@json($deletePayload)'
+                                                            onclick="event.stopPropagation(); handleDeletePaymentFromBtn(this)">
                                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                                             <polyline points="3 6 5 6 21 6"></polyline>
                                                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -1673,15 +1685,46 @@ function recalculateCrmEditTds() {
     }
 }
 
+function openEditPaymentModalFromBtn(btn) {
+    try {
+        const raw = btn.getAttribute('data-payment');
+        const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        openEditPaymentModal(data);
+    } catch (err) {
+        console.error('Error parsing payment data for edit modal:', err);
+    }
+}
+
+function handleDeletePaymentFromBtn(btn) {
+    try {
+        const raw = btn.getAttribute('data-delete');
+        const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        handleDeletePayment(data.id, data.code, data.customer, data.amount);
+    } catch (err) {
+        console.error('Error parsing payment data for delete:', err);
+    }
+}
+
 function openEditPaymentModal(data) {
-    document.getElementById('edit_payment_id').value = data.id;
-    document.getElementById('crmEditModalCode').textContent = data.code;
-    document.getElementById('crmEditModalCustomer').textContent = data.customer ? `Customer: ${data.customer}` : '';
-    document.getElementById('crmEditModalProductName').textContent = data.product_name || 'Product Payment';
-    document.getElementById('crmEditModalTotal').textContent = '₹' + Number(data.total_price || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
-    document.getElementById('crmEditModalBalance').textContent = '₹' + Number(data.outstanding || 0).toLocaleString('en-IN', {minimumFractionDigits: 2});
+    if (!data) return;
+
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val ?? '';
+    };
+    const setText = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text ?? '';
+    };
+
+    setVal('edit_payment_id', data.id);
+    setText('crmEditModalCode', data.code);
+    setText('crmEditModalCustomer', data.customer ? `Customer: ${data.customer}` : '');
+    setText('crmEditModalProductName', data.product_name || 'Product Payment');
+    setText('crmEditModalTotal', '₹' + Number(data.total_price || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}));
+    setText('crmEditModalBalance', '₹' + Number(data.outstanding || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}));
     
-    let rawType = (data.payment_type || '').toLowerCase().trim().replace(/[\s-]/g, '_');
+    let rawType = String(data.payment_type || '').toLowerCase().trim().replace(/[\s-]/g, '_');
     let pType = 'new_sale';
     if (['new_sale', 'new_sales', 'newsale', 'newsales', 'new'].includes(rawType)) {
         pType = 'new_sale';
@@ -1717,14 +1760,14 @@ function openEditPaymentModal(data) {
         }
     }
 
-    document.getElementById('edit_payment_date').value = data.payment_date || '';
-    document.getElementById('edit_amount').value = data.amount || '';
-    document.getElementById('edit_reference_number').value = data.reference_number || '';
-    document.getElementById('edit_notes').value = data.notes || '';
+    setVal('edit_payment_date', data.payment_date || '');
+    setVal('edit_amount', data.amount || '');
+    setVal('edit_reference_number', data.reference_number || '');
+    setVal('edit_notes', data.notes || '');
 
     // Payment Mode
-    const mode = (data.payment_mode || 'upi').toLowerCase();
-    document.getElementById('edit_payment_mode').value = mode;
+    const mode = String(data.payment_mode || 'upi').toLowerCase();
+    setVal('edit_payment_mode', mode);
     document.querySelectorAll('#crmEditPaymentModal .ppf-mode-tile').forEach(t => {
         if (t.getAttribute('data-val') === mode) {
             t.classList.add('pp-sel');
@@ -1737,7 +1780,7 @@ function openEditPaymentModal(data) {
     const isTds = !!(data.is_tds_deducted == 1 || data.is_tds_deducted === true);
     const tdsChk = document.getElementById('edit_is_tds_deducted');
     if (tdsChk) tdsChk.checked = isTds;
-    document.getElementById('edit_tds_percentage').value = isTds ? (data.tds_percentage || '') : '';
+    setVal('edit_tds_percentage', isTds ? (data.tds_percentage || '') : '');
     toggleCrmEditTds(isTds);
 
     const alertBox = document.getElementById('crmEditModalAlert');
@@ -1746,7 +1789,10 @@ function openEditPaymentModal(data) {
         alertBox.textContent = '';
     }
 
-    document.getElementById('crmEditPaymentModal').style.display = 'flex';
+    const modal = document.getElementById('crmEditPaymentModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
 }
 
 function closeEditPaymentModal() {

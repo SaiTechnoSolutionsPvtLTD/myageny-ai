@@ -244,8 +244,15 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
             }
 
             $branchId = $this->input('branch_id');
-            $isCompanyOrSuperAdmin = $teamLead->isSuperAdmin() || $teamLead->isCompanyAdmin() || $teamLead->hasRole('company_admin') || $this->isBranchAdminOrManagerUser($teamLead);
-            if ($branchId && $teamLead->branch_id && (int) $teamLead->branch_id !== (int) $branchId && ! $isCompanyOrSuperAdmin) {
+            $employeeBranchIds = array_values(array_unique(array_filter(array_merge(
+                $branchId ? [(int) $branchId] : [],
+                array_map('intval', (array) $this->input('branches', []))
+            ))));
+            $tlBranchIds = $teamLead->getMyBranchIds();
+            $isCompanyOrSuperAdmin = $teamLead->isSuperAdmin() || $teamLead->isCompanyAdmin() || $teamLead->hasRole('company_admin');
+
+            $matchesBranch = empty($employeeBranchIds) || empty($tlBranchIds) || ! empty(array_intersect($employeeBranchIds, $tlBranchIds));
+            if (! $matchesBranch && ! $isCompanyOrSuperAdmin) {
                 $fail('Selected TL does not belong to the selected branch.');
                 return;
             }
@@ -299,7 +306,7 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
             'chief_business_officer',
         ];
 
-        return $user->roles->contains(function (Role $role) use ($adminOrManagerKeys) {
+        $hasManagerRole = $user->roles->contains(function (Role $role) use ($adminOrManagerKeys) {
             $roleKeys = collect([$role->name, $role->display_name])
                 ->filter()
                 ->flatMap(function (string $roleName) {
@@ -311,6 +318,12 @@ class UpdateEmployeeOnboardingRequest extends FormRequest
 
             return $roleKeys->intersect($adminOrManagerKeys)->isNotEmpty();
         });
+
+        if ($hasManagerRole) {
+            return true;
+        }
+
+        return Branch::withoutGlobalScopes()->where('manager_id', $user->id)->exists();
     }
 
     private function userHasMappedParentRole(User $user, int $parentRoleId, ?Role $parentRole): bool

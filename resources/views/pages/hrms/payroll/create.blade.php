@@ -63,8 +63,13 @@
 
     <div class="pr-body">
         @if($errors->any())
-            <div class="pr-card" style="border-color:#fecaca;background:#fef2f2;color:#991b1b;">
-                Please review the payroll inputs and try again.
+            <div class="pr-card" style="border-color:#fecaca;background:#fef2f2;color:#991b1b;margin-bottom:16px;">
+                <div style="font-weight:700;margin-bottom:6px;">Please review the payroll inputs and try again:</div>
+                <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.5;">
+                    @foreach($errors->all() as $err)
+                        <li>{{ $err }}</li>
+                    @endforeach
+                </ul>
             </div>
         @endif
 
@@ -117,8 +122,8 @@
             <div id="pr-table-section">
                 <div style="font-size:16px;font-weight:700;color:#121212;">Employee Payroll Sheet</div>
                 <div style="margin-top:4px;color:#9e9e9e;font-size:12px;">Attendance values can be adjusted before saving. Gross salary automatically splits into Basic 50%, HRA 30%, Travel 10%, and Other 10%.</div>
-                <div style="margin-top:8px;padding:12px 14px;border-radius:12px;background:#eff6ff;border:1px solid #dbeafe;color:#1d4ed8;font-size:12px;font-weight:600;">
-                    PF formula: if Gross Salary is above 21,000, PF uses fixed 15,000. Otherwise PF uses Basic + Travel + Other. ESI formula: 4% of Gross Salary.
+                <div style="margin-top:8px;padding:12px 14px;border-radius:12px;background:#eff6ff;border:1px solid #dbeafe;color:#1d4ed8;font-size:12px;font-weight:600;" id="payrollFormulaBanner">
+                    PF formula: if Gross Salary is above {{ number_format((float) ($payrollSettings->pf_gross_threshold ?? 21000), 0) }}, PF uses fixed {{ number_format((float) ($payrollSettings->pf_basic_cap ?? 15000), 0) }}. Otherwise PF uses Basic + Travel + Other. Total PF deduction includes Employee PF ({{ (float) ($payrollSettings->pf_employee_percentage ?? 12) }}%) + Employer PF ({{ (float) ($payrollSettings->pf_employer_percentage ?? 13) }}%). ESI formula: {{ number_format((float) ($payrollSettings->esi_employee_percentage ?? 4), 0) }}% of Gross Salary.
                 </div>
                 <div style="margin-top:14px;padding:14px 16px;border-radius:12px;background:#fff8f4;border:1px solid #fed7aa;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
                     <div style="display:flex;align-items:center;gap:10px;">
@@ -171,6 +176,7 @@
                     @csrf
                     <input type="hidden" id="formMonth" name="month" value="{{ $selectedMonth->format('Y-m') }}">
                     <input type="hidden" id="formSalaryCycle" name="salary_cycle" value="{{ $selectedCycle ?? '26_to_25' }}">
+                    <input type="hidden" id="formItemsJson" name="items_json" value="">
                     <div class="pr-card" style="margin-bottom:12px;">
                         <div class="pr-form-row">
                             <div class="pr-field">
@@ -211,6 +217,8 @@
     const tableSection      = document.getElementById('pr-table-section');
     const tbody             = document.getElementById('payrollTbody');
     const hiddenContainer   = document.getElementById('hiddenInputsContainer');
+    const payrollForm       = document.getElementById('payrollForm');
+    const formItemsJson     = document.getElementById('formItemsJson');
     const formMonth         = document.getElementById('formMonth');
     const formSalaryCycle   = document.getElementById('formSalaryCycle');
     const metaEmpCount      = document.getElementById('metaEmpCount');
@@ -243,16 +251,38 @@
         const earnedBasic  = basic * ratio;
         const earnedTravel = travel * ratio;
         const earnedOther  = other * ratio;
-        const pfBase = gross > 21000 ? 15000 : (earnedBasic + earnedTravel + earnedOther);
-        const pf  = r.use_pf  ? Math.round(pfBase * 0.25) : 0;
-        const esi = r.use_esi ? Math.round(earnedGross * 0.04) : 0;
+
+        const defaultPfThreshold = {{ (float) ($payrollSettings->pf_gross_threshold ?? 21000) }};
+        const defaultPfCap       = {{ (float) ($payrollSettings->pf_basic_cap ?? 15000) }};
+        const defaultPfEmpPct    = {{ (float) ($payrollSettings->pf_employee_percentage ?? 12) }};
+        const defaultPfEmprPct   = {{ (float) ($payrollSettings->pf_employer_percentage ?? 13) }};
+        const defaultEsiEmpPct   = {{ (float) ($payrollSettings->esi_employee_percentage ?? 4) }};
+
+        const pfThreshold = (r.pf_gross_threshold !== undefined && r.pf_gross_threshold !== null && r.pf_gross_threshold !== '')
+            ? n(r.pf_gross_threshold) : (window.currentPayrollSettings?.pf_gross_threshold ?? defaultPfThreshold);
+        const pfCap = (r.pf_basic_cap !== undefined && r.pf_basic_cap !== null && r.pf_basic_cap !== '')
+            ? n(r.pf_basic_cap) : (window.currentPayrollSettings?.pf_basic_cap ?? defaultPfCap);
+
+        const pfEmpPct = (r.pf_employee_percentage !== undefined && r.pf_employee_percentage !== null && r.pf_employee_percentage !== '')
+            ? n(r.pf_employee_percentage) : (window.currentPayrollSettings?.pf_employee_percentage ?? defaultPfEmpPct);
+        const pfEmprPct = (r.pf_employer_percentage !== undefined && r.pf_employer_percentage !== null && r.pf_employer_percentage !== '')
+            ? n(r.pf_employer_percentage) : (window.currentPayrollSettings?.pf_employer_percentage ?? defaultPfEmprPct);
+
+        const esiEmpPct = (r.esi_employee_percentage !== undefined && r.esi_employee_percentage !== null && r.esi_employee_percentage !== '')
+            ? n(r.esi_employee_percentage) : (window.currentPayrollSettings?.esi_employee_percentage ?? defaultEsiEmpPct);
+
+        const pfBase = gross > pfThreshold ? pfCap : (earnedBasic + earnedTravel + earnedOther);
+        const pfEmployee = r.use_pf ? Math.round(pfBase * (pfEmpPct / 100) * 100) / 100 : 0;
+        const pfEmployer = r.use_pf ? Math.round(pfBase * (pfEmprPct / 100) * 100) / 100 : 0;
+        const pf  = pfEmployee + pfEmployer;
+        const esi = r.use_esi ? Math.round(earnedGross * (esiEmpPct / 100) * 100) / 100 : 0;
         const pt  = n(r.professional_tax);
         const tds = n(r.tds_amount);
         const loan = n(r.loan_deduction);
         const otherDed = n(r.other_deduction);
         const totalDed = pf + esi + pt + tds + loan + otherDed;
         const net = Math.max(earnedGross - totalDed, 0);
-        return { lop, pay, basic, hra, travel, other, pf, esi, totalDed, net };
+        return { lop, pay, basic, hra, travel, other, pf, pfEmployee, pfEmployer, esi, totalDed, net };
     }
 
     // ── Debounced syncOverall ─────────────────────────────────────────────────
@@ -272,17 +302,24 @@
     function syncRow(tr) {
         const get = key => tr.querySelector('[data-key="' + key + '"]');
         const row = {
-            working_days:       n(get('working_days')?.value),
-            days_attended:      n(get('days_attended')?.value),
-            leave_days:         n(get('leave_days')?.value),
-            timesheet_lop_days: n(get('timesheet_lop_days')?.value),
-            use_pf:             get('use_pf')?.checked ?? false,
-            use_esi:            get('use_esi')?.checked ?? false,
-            gross_salary:       n(get('gross_salary')?.value),
-            professional_tax:   n(get('professional_tax')?.value),
-            tds_amount:         n(get('tds_amount')?.value),
-            loan_deduction:     n(get('loan_deduction')?.value),
-            other_deduction:    n(get('other_deduction')?.value),
+            working_days:            n(get('working_days')?.value),
+            days_attended:           n(get('days_attended')?.value),
+            leave_days:              n(get('leave_days')?.value),
+            timesheet_lop_days:      n(get('timesheet_lop_days')?.value),
+            use_pf:                  get('use_pf')?.checked ?? false,
+            use_esi:                 get('use_esi')?.checked ?? false,
+            pf_employee_percentage:  n(get('pf_employee_percentage')?.value),
+            pf_employer_percentage:  n(get('pf_employer_percentage')?.value),
+            esi_employee_percentage: n(get('esi_employee_percentage')?.value),
+            esi_employer_percentage: n(get('esi_employer_percentage')?.value),
+            esi_salary_limit:        n(get('esi_salary_limit')?.value),
+            pf_gross_threshold:      n(get('pf_gross_threshold')?.value),
+            pf_basic_cap:            n(get('pf_basic_cap')?.value),
+            gross_salary:            n(get('gross_salary')?.value),
+            professional_tax:        n(get('professional_tax')?.value),
+            tds_amount:              n(get('tds_amount')?.value),
+            loan_deduction:          n(get('loan_deduction')?.value),
+            other_deduction:         n(get('other_deduction')?.value),
         };
         const c = calcRow(row);
         const set = (key, v) => { const el = get(key); if (el) el.value = fmt(v); };
@@ -316,7 +353,9 @@
             <td>
                 <div class="pr-emp-name">${escHtml(row.employee_name)}</div>
                 <div class="pr-emp-sub">${escHtml(row.employee_code || '')} | ${escHtml(row.designation || '')}${branch}</div>
-                <input type="hidden" name="items[${index}][employee_onboarding_id]" value="${row.employee_onboarding_id}">
+                <input type="hidden" name="items[${index}][employee_onboarding_id]" value="${row.employee_onboarding_id}" data-key="employee_onboarding_id">
+                <input type="hidden" name="items[${index}][pf_gross_threshold]" value="${row.pf_gross_threshold || ''}" data-key="pf_gross_threshold">
+                <input type="hidden" name="items[${index}][pf_basic_cap]" value="${row.pf_basic_cap || ''}" data-key="pf_basic_cap">
             </td>
             <td>${inp('working_days', row.working_days, 'working_days')}</td>
             <td>${inp('days_attended', row.days_attended, 'days_attended')}</td>
@@ -354,6 +393,17 @@
     function renderTable(data) {
         workingDays = data.working_days;
         payrollRows = data.rows;
+
+        if (data.payroll_settings) {
+            window.currentPayrollSettings = data.payroll_settings;
+            const banner = document.getElementById('payrollFormulaBanner');
+            if (banner) {
+                const thresh = Number(data.payroll_settings.pf_gross_threshold || 21000).toLocaleString();
+                const cap = Number(data.payroll_settings.pf_basic_cap || 15000).toLocaleString();
+                const esiRate = Number(data.payroll_settings.esi_employee_percentage || 4);
+                banner.textContent = `PF formula: if Gross Salary is above ${thresh}, PF uses fixed ${cap}. Otherwise PF uses Basic + Travel + Other. Total PF deduction includes Employee PF (${data.payroll_settings.pf_employee_percentage || 12}%) + Employer PF (${data.payroll_settings.pf_employer_percentage || 13}%). ESI formula: ${esiRate}% of Gross Salary.`;
+            }
+        }
 
         metaEmpCount.textContent    = payrollRows.length;
         metaWorkingDays.textContent = workingDays;
@@ -443,6 +493,66 @@
     }
     if (filterMonth) {
         filterMonth.addEventListener('change', loadRows);
+    }
+
+    // ── Form submit handler ───────────────────────────────────────────────────
+    if (payrollForm) {
+        payrollForm.addEventListener('submit', function (e) {
+            formMonth.value = filterMonth.value;
+            if (formSalaryCycle && filterSalaryCycle) {
+                formSalaryCycle.value = filterSalaryCycle.value;
+            }
+
+            const trList = tbody.querySelectorAll('.payroll-row');
+            if (!trList.length) {
+                e.preventDefault();
+                alert('No employee records found. Please click "Load Employees" first.');
+                return;
+            }
+
+            const items = [];
+            trList.forEach(function (tr) {
+                const get = key => tr.querySelector(`[data-key="${key}"]`);
+                const getVal = key => {
+                    const el = get(key);
+                    return el ? el.value : '';
+                };
+
+                syncRow(tr);
+
+                items.push({
+                    employee_onboarding_id: getVal('employee_onboarding_id'),
+                    working_days: n(getVal('working_days')),
+                    days_attended: n(getVal('days_attended')),
+                    leave_days: n(getVal('leave_days')),
+                    timesheet_lop_days: n(getVal('timesheet_lop_days')),
+                    lop_days: n(getVal('lop_days')),
+                    payable_days: n(getVal('payable_days')),
+                    use_pf: get('use_pf') ? (get('use_pf').checked ? 1 : 0) : 0,
+                    use_esi: get('use_esi') ? (get('use_esi').checked ? 1 : 0) : 0,
+                    pf_gross_threshold: n(getVal('pf_gross_threshold')),
+                    pf_basic_cap: n(getVal('pf_basic_cap')),
+                    pf_employee_percentage: n(getVal('pf_employee_percentage')),
+                    pf_employer_percentage: n(getVal('pf_employer_percentage')),
+                    esi_employee_percentage: n(getVal('esi_employee_percentage')),
+                    esi_employer_percentage: n(getVal('esi_employer_percentage')),
+                    esi_salary_limit: n(getVal('esi_salary_limit')),
+                    gross_salary: n(getVal('gross_salary')),
+                    basic_salary: n(getVal('basic_salary')),
+                    hra: n(getVal('hra')),
+                    travel_allowance: n(getVal('travel_allowance')),
+                    other_allowance: n(getVal('other_allowance')),
+                    professional_tax: n(getVal('professional_tax')),
+                    tds_amount: n(getVal('tds_amount')),
+                    loan_deduction: n(getVal('loan_deduction')),
+                    other_deduction: n(getVal('other_deduction')),
+                });
+            });
+
+            if (formItemsJson) {
+                formItemsJson.value = JSON.stringify(items);
+            }
+        });
     }
 
     // ── Auto-load on page open ────────────────────────────────────────────────

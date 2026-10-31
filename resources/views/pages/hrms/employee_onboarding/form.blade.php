@@ -486,6 +486,7 @@
                                         <option
                                             value="{{ $tlUser['id'] }}"
                                             data-branch-id="{{ $tlUser['branch_id'] }}"
+                                            data-branch-ids="{{ implode(',', $tlUser['branch_ids'] ?? (array) $tlUser['branch_id']) }}"
                                             data-department-ids="{{ implode(',', $tlUser['department_ids']) }}"
                                             data-role-ids="{{ implode(',', $tlUser['role_ids'] ?? []) }}"
                                             @selected((string) $selectedTlUserId === (string) $tlUser['id'])
@@ -1225,46 +1226,131 @@ document.addEventListener('DOMContentLoaded', function () {
         return Boolean(isExecutive && ['chief_business_officer', 'cheif_business_officer', 'cbo'].includes(parentKey));
     }
 
+    function getSelectedEmployeeBranchIds() {
+        const branchIds = [];
+        if (branchSelect && branchSelect.value) {
+            branchIds.push(String(branchSelect.value));
+        }
+        const additionalBranchCheckboxes = form.querySelectorAll('input[name="branches[]"]:checked');
+        additionalBranchCheckboxes.forEach(function (cb) {
+            if (cb.value && !branchIds.includes(String(cb.value))) {
+                branchIds.push(String(cb.value));
+            }
+        });
+        return branchIds;
+    }
+
+    function getTlUserBranchIds(tlUser) {
+        const branchIds = [];
+        if (Array.isArray(tlUser.branch_ids) && tlUser.branch_ids.length > 0) {
+            tlUser.branch_ids.forEach(function (id) {
+                if (id !== null && id !== undefined && id !== '' && !branchIds.includes(String(id))) {
+                    branchIds.push(String(id));
+                }
+            });
+        }
+        if (tlUser.branch_id && !branchIds.includes(String(tlUser.branch_id))) {
+            branchIds.push(String(tlUser.branch_id));
+        }
+        return branchIds;
+    }
+
+    function tlUserMatchesBranch(tlUser) {
+        if (isTlUserExecutiveOrAdmin(tlUser)) {
+            return true;
+        }
+
+        const employeeBranchIds = getSelectedEmployeeBranchIds();
+        if (employeeBranchIds.length === 0) {
+            return true;
+        }
+
+        const tlBranchIds = getTlUserBranchIds(tlUser);
+        if (tlBranchIds.length === 0) {
+            return true;
+        }
+
+        return employeeBranchIds.some(function (bId) {
+            return tlBranchIds.includes(String(bId));
+        });
+    }
+
+    function isTlUserBranchManager(tlUser) {
+        if (tlUser.is_branch_admin_or_manager) {
+            return true;
+        }
+        const label = (tlUser.role_label || '').toLowerCase();
+        return label.includes('branch manager') || label.includes('branch admin') || label.includes('bm');
+    }
+
     function filteredTlUsersForSelection() {
         const selectedDepartmentId = departmentSelect ? departmentSelect.value : '';
         const selectedRole = selectedRoleMeta();
-        const selectedBranchId = branchSelect ? branchSelect.value : '';
         const parentRoleId = selectedRole?.parentRoleId || '';
         const parentRoleLabel = selectedRole?.parentRoleLabel || '';
 
+        // 1. Primary TL candidates matching mapped parent role or department
         const primaryMatches = tlUsers.filter(function (tlUser) {
             if (currentPortalUserId && String(tlUser.id) === String(currentPortalUserId)) {
                 return false;
             }
 
+            if (!tlUserMatchesBranch(tlUser)) {
+                return false;
+            }
+
             const isExecutiveOrAdmin = isTlUserExecutiveOrAdmin(tlUser);
-            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || isExecutiveOrAdmin;
 
             if (parentRoleId) {
-                return matchesBranch && tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel);
+                return tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel);
             }
 
             const departments = Array.isArray(tlUser.department_ids) ? tlUser.department_ids.map(String) : [];
             const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || isExecutiveOrAdmin;
 
-            return matchesDepartment && matchesBranch;
+            return matchesDepartment;
         });
 
-        if (primaryMatches.length > 0) {
-            return primaryMatches;
-        }
-
-        // Fallback: If no TL is found, return Branch Admins and Managers for the selected branch
-        return tlUsers.filter(function (tlUser) {
+        // 2. Branch Managers / Admins mapped to the branch (Main or Additional branches)
+        const branchManagers = tlUsers.filter(function (tlUser) {
             if (currentPortalUserId && String(tlUser.id) === String(currentPortalUserId)) {
                 return false;
             }
 
-            const isExecutiveOrAdmin = isTlUserExecutiveOrAdmin(tlUser);
-            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || isExecutiveOrAdmin;
-            const isBranchAdminOrManager = tlUser.is_branch_admin_or_manager || isExecutiveOrAdmin;
+            if (!tlUserMatchesBranch(tlUser)) {
+                return false;
+            }
 
-            return matchesBranch && isBranchAdminOrManager;
+            return isTlUserBranchManager(tlUser);
+        });
+
+        const combined = [];
+        const seenIds = new Set();
+
+        primaryMatches.forEach(function (user) {
+            if (!seenIds.has(String(user.id))) {
+                seenIds.add(String(user.id));
+                combined.push(user);
+            }
+        });
+
+        branchManagers.forEach(function (user) {
+            if (!seenIds.has(String(user.id))) {
+                seenIds.add(String(user.id));
+                combined.push(user);
+            }
+        });
+
+        if (combined.length > 0) {
+            return combined;
+        }
+
+        // Fallback: Executives / Admins
+        return tlUsers.filter(function (tlUser) {
+            if (currentPortalUserId && String(tlUser.id) === String(currentPortalUserId)) {
+                return false;
+            }
+            return isTlUserExecutiveOrAdmin(tlUser);
         });
     }
 
@@ -1296,38 +1382,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        const selectedBranchId = branchSelect ? branchSelect.value : '';
-
-        // Check primary matches
-        const primaryTlUsers = tlUsers.filter(function (tlUser) {
-            if (currentPortalUserId && String(tlUser.id) === String(currentPortalUserId)) {
-                return false;
-            }
-
-            const isExecutiveOrAdmin = isTlUserExecutiveOrAdmin(tlUser);
-            const matchesBranch = !selectedBranchId || !tlUser.branch_id || String(tlUser.branch_id) === String(selectedBranchId) || isExecutiveOrAdmin;
-
-            if (parentRoleId) {
-                return matchesBranch && tlUserMatchesMappedParentRole(tlUser, parentRoleId, parentRoleLabel);
-            }
-
-            const departments = Array.isArray(tlUser.department_ids) ? tlUser.department_ids.map(String) : [];
-            const matchesDepartment = departments.includes(String(selectedDepartmentId)) || departments.includes('') || isExecutiveOrAdmin;
-
-            return matchesDepartment && matchesBranch;
-        });
-
-        const isUsingFallback = primaryTlUsers.length === 0;
         const filteredTlUsers = filteredTlUsersForSelection();
 
-        if (isUsingFallback) {
-            placeholder.textContent = filteredTlUsers.length
-                ? 'Select Branch Admin / Manager (No TL found)'
-                : 'No Branch Admin / Manager found for this branch';
-        } else {
-            placeholder.textContent = parentRoleId ? 'Select ' + parentRoleLabel : 'Select TL';
-        }
-
+        placeholder.textContent = parentRoleId ? 'Select ' + parentRoleLabel + ' or Branch Manager' : 'Select TL / Branch Manager';
         tlSelect.appendChild(placeholder);
 
         filteredTlUsers.forEach(function (tlUser) {
@@ -1357,15 +1414,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         if (tlHelp) {
-            if (isUsingFallback) {
-                tlHelp.textContent = filteredTlUsers.length
-                    ? 'No TL found for the selected department/role. ' + filteredTlUsers.length + ' Branch Admin / Manager' + (filteredTlUsers.length === 1 ? '' : 's') + ' available for selection.'
-                    : 'No TL, Branch Admin, or Manager found for the selected branch.';
-            } else {
-                tlHelp.textContent = parentRoleId
-                    ? filteredTlUsers.length + ' user' + (filteredTlUsers.length === 1 ? '' : 's') + ' available from mapped parent role: ' + parentRoleLabel + '.'
-                    : filteredTlUsers.length + ' TL' + (filteredTlUsers.length === 1 ? '' : 's') + ' available for the selected department.';
-            }
+            tlHelp.textContent = filteredTlUsers.length
+                ? filteredTlUsers.length + ' user' + (filteredTlUsers.length === 1 ? '' : 's') + ' available for selection (TLs & Branch Managers for branch).'
+                : 'No TL, Branch Admin, or Manager found for the selected branch.';
         }
 
         refreshSelect2(tlSelect);
@@ -1440,16 +1491,25 @@ document.addEventListener('DOMContentLoaded', function () {
         updatePortalMappingSummary();
     }
 
+    function onAdditionalBranchesChange() {
+        updateTlOptions();
+        updatePortalMappingSummary();
+    }
+
     if (window.jQuery) {
         if (roleSelect) $(roleSelect).on('change', onRoleChange);
         if (departmentSelect) $(departmentSelect).on('change', onDepartmentChange);
         if (branchSelect) $(branchSelect).on('change', onBranchChange);
         if (tlSelect) $(tlSelect).on('change', onTlChange);
+        $(form).on('change', 'input[name="branches[]"]', onAdditionalBranchesChange);
     }
     if (roleSelect) roleSelect.addEventListener('change', onRoleChange);
     if (departmentSelect) departmentSelect.addEventListener('change', onDepartmentChange);
     if (branchSelect) branchSelect.addEventListener('change', onBranchChange);
     if (tlSelect) tlSelect.addEventListener('change', onTlChange);
+    form.querySelectorAll('input[name="branches[]"]').forEach(function (cb) {
+        cb.addEventListener('change', onAdditionalBranchesChange);
+    });
 
     if (departmentSelect && !departmentSelect.value && roleSelect && roleSelect.value) {
         syncDepartmentFromRole(true);
@@ -1551,14 +1611,21 @@ document.addEventListener('DOMContentLoaded', function () {
         const pfEnabled = salaryInputs.pfToggle ? salaryInputs.pfToggle.checked : false;
         const esiEnabled = salaryInputs.esiToggle ? salaryInputs.esiToggle.checked : false;
 
-        const pfBaseAmount = grossSalary > 21000
-            ? 15000
+        const pfThreshold = {{ (float) ($payrollSettings->pf_gross_threshold ?? 21000) }};
+        const pfCap = {{ (float) ($payrollSettings->pf_basic_cap ?? 15000) }};
+        const pfEmpRate = {{ ((float) ($payrollSettings->pf_employee_percentage ?? 12)) / 100 }};
+        const pfEmprRate = {{ ((float) ($payrollSettings->pf_employer_percentage ?? 13)) / 100 }};
+        const esiEmpRate = {{ ((float) ($payrollSettings->esi_employee_percentage ?? 4)) / 100 }};
+        const esiEmprRate = {{ ((float) ($payrollSettings->esi_employer_percentage ?? 0)) / 100 }};
+
+        const pfBaseAmount = grossSalary > pfThreshold
+            ? pfCap
             : (breakdown.basicSalary + breakdown.specialAllowance + breakdown.otherAllowance);
-        const pfEmployee = pfEnabled ? (Math.round(pfBaseAmount * 0.12 * 100) / 100) : 0;
-        const pfEmployer = pfEnabled ? (Math.round(pfBaseAmount * 0.13 * 100) / 100) : 0;
-        const esiEmployee = esiEnabled ? (Math.round(grossSalary * 0.0075 * 100) / 100) : 0;
-        const esiEmployer = esiEnabled ? (Math.round(grossSalary * 0.0325 * 100) / 100) : 0;
-        const totalDeduction = pfEmployee + esiEmployee + professionalTax + tdsAmount + loanDeduction + otherDeduction;
+        const pfEmployee = pfEnabled ? (Math.round(pfBaseAmount * pfEmpRate * 100) / 100) : 0;
+        const pfEmployer = pfEnabled ? (Math.round(pfBaseAmount * pfEmprRate * 100) / 100) : 0;
+        const esiEmployee = esiEnabled ? (Math.round(grossSalary * esiEmpRate * 100) / 100) : 0;
+        const esiEmployer = esiEnabled ? (Math.round(grossSalary * esiEmprRate * 100) / 100) : 0;
+        const totalDeduction = pfEmployee + pfEmployer + esiEmployee + professionalTax + tdsAmount + loanDeduction + otherDeduction;
         const netSalary = Math.max(grossSalary - totalDeduction, 0);
 
         if (salaryInputs.pfEmployeeContribution) {

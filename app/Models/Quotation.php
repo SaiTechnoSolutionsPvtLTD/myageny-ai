@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class Quotation extends Model
 {
@@ -32,6 +34,10 @@ class Quotation extends Model
         });
 
         static::creating(function (Quotation $quotation) {
+            if (empty($quotation->quotation_no)) {
+                $quotation->quotation_no = static::generateQuotationNo($quotation->company_id);
+            }
+
             if (! $quotation->created_by && auth()->check()) {
                 $quotation->created_by = auth()->id();
             }
@@ -52,6 +58,23 @@ class Quotation extends Model
                     $quotation->approved_by = $quotation->approved_by ?: $creator->id;
                     $quotation->approved_at = $quotation->approved_at ?: now();
                 }
+            }
+        });
+
+        static::created(function (Quotation $quotation) {
+            try {
+                $branchId = $quotation->lead?->branch_id ?? $quotation->createdBy?->branch_id ?? auth()->user()?->branch_id;
+                $settings = QuotationSetting::allSettings($branchId);
+                $prefix   = ! empty($settings['prefix']) ? (string) $settings['prefix'] : 'QT-';
+                if (preg_match('/^' . preg_quote($prefix, '/') . '0*(\d+)$/i', (string) $quotation->quotation_no, $m)) {
+                    $usedNum = (int) $m[1];
+                    $currentNext = (int) ($settings['next_number'] ?? 1805);
+                    if ($usedNum >= $currentNext) {
+                        QuotationSetting::set('next_number', $usedNum + 1, $branchId);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Silently ignore setting cache issue
             }
         });
 
@@ -212,35 +235,92 @@ class Quotation extends Model
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /**
-     * Generate the next sequential quotation number per company.
-     * Format: QT-YY-0001
+     * Generate the next sequential quotation number per company / branch.
+     * Format: QT-001805 (or configured prefix & padding in QuotationSetting)
+     * Seamlessly continues from Zoho migrated estimates and existing quotations.
      */
-    public static function generateQuotationNo(?int $companyId = null): string
+    public static function generateQuotationNo(?int $companyId = null, ?int $branchId = null): string
     {
         $companyId = $companyId ?? (auth()->check() ? auth()->user()?->company_id : null);
-        $year   = now()->format('y');
-        $prefix = "QT-{$year}-";
+        $branchId  = $branchId  ?? (auth()->check() ? auth()->user()?->branch_id : null);
 
-        $query = static::withTrashed()->where('quotation_no', 'like', "{$prefix}%");
-        if ($companyId) {
-            $query->where('company_id', $companyId);
+        if (! $branchId && $companyId) {
+            $branchId = Branch::where('company_id', $companyId)->where('is_default', 1)->value('id')
+                ?? Branch::where('company_id', $companyId)->value('id');
         }
 
-        $last = $query->orderByDesc('id')->value('quotation_no');
-        $seq = $last ? ((int) substr($last, -4)) + 1 : 1;
+        $settings = QuotationSetting::allSettings($branchId);
+        $prefix   = ! empty($settings['prefix']) ? (string) $settings['prefix'] : 'QT-';
+        $padding  = ! empty($settings['number_padding']) ? (int) $settings['number_padding'] : 6;
+        $settingNext = ! empty($settings['next_number']) ? (int) $settings['next_number'] : 1805;
 
-        do {
-            $candidate = $prefix . str_pad($seq, 4, '0', STR_PAD_LEFT);
-            $checkQuery = static::where('quotation_no', $candidate);
-            if ($companyId) {
-                $checkQuery->where('company_id', $companyId);
-            } else {
-                $checkQuery->whereNull('company_id');
+        // 1. Scan native quotations for highest sequence number matching prefix or QT-
+        $maxNativeSeq = 0;
+        $quotesQuery = static::withoutGlobalScopes()->withTrashed();
+        if ($companyId) {
+            $quotesQuery->where('company_id', $companyId);
+        }
+        $existingQuotes = $quotesQuery->where(function ($q) use ($prefix) {
+            $q->where('quotation_no', 'like', "{$prefix}%")
+              ->orWhere('quotation_no', 'like', 'QT-%');
+        })->pluck('quotation_no');
+
+        foreach ($existingQuotes as $qNo) {
+            $str = trim((string) $qNo);
+            if (preg_match('/^' . preg_quote($prefix, '/') . '0*(\d+)$/i', $str, $m)) {
+                $maxNativeSeq = max($maxNativeSeq, (int) $m[1]);
+            } elseif (preg_match('/^QT-0*(\d+)$/i', $str, $m)) {
+                $maxNativeSeq = max($maxNativeSeq, (int) $m[1]);
             }
-            if (! $checkQuery->exists()) {
+        }
+
+        // 2. Scan Zoho quotations table (estimates migrated or synced from Zoho Books)
+        $maxZohoSeq = 0;
+        if (Schema::hasTable('zoho_quotations')) {
+            $zohoQuery = DB::table('zoho_quotations')->whereNotNull('estimate_number');
+            if ($companyId) {
+                $zohoQuery->where('company_id', $companyId);
+            }
+            $zohoEstimates = $zohoQuery->pluck('estimate_number');
+            foreach ($zohoEstimates as $estNo) {
+                $str = trim((string) $estNo);
+                if (preg_match('/^' . preg_quote($prefix, '/') . '0*(\d+)$/i', $str, $zm)) {
+                    $maxZohoSeq = max($maxZohoSeq, (int) $zm[1]);
+                } elseif (preg_match('/^QT-0*(\d+)$/i', $str, $zm)) {
+                    $maxZohoSeq = max($maxZohoSeq, (int) $zm[1]);
+                } elseif (preg_match('/(\d{4,10})$/', $str, $zm)) {
+                    $maxZohoSeq = max($maxZohoSeq, (int) $zm[1]);
+                }
+            }
+        }
+
+        // 3. Determine starting sequence: max of settingNext, highest existing + 1, or baseline 1805
+        $highestExisting = max($maxNativeSeq, $maxZohoSeq);
+        $nextSeq = max($settingNext, $highestExisting > 0 ? ($highestExisting + 1) : 1805, 1805);
+
+        // 4. Ensure uniqueness across system (loop until unused number found)
+        do {
+            $candidate = $prefix . str_pad((string) $nextSeq, $padding, '0', STR_PAD_LEFT);
+
+            $existsNative = static::withoutGlobalScopes()->withTrashed()->where('quotation_no', $candidate);
+            if ($companyId) {
+                $existsNative->where('company_id', $companyId);
+            }
+
+            $existsZoho = false;
+            if (Schema::hasTable('zoho_quotations')) {
+                $zq = DB::table('zoho_quotations')->where('estimate_number', $candidate);
+                if ($companyId) {
+                    $zq->where('company_id', $companyId);
+                }
+                $existsZoho = $zq->exists();
+            }
+
+            if (! $existsNative->exists() && ! $existsZoho) {
                 return $candidate;
             }
-            $seq++;
+
+            $nextSeq++;
         } while (true);
     }
 

@@ -48,7 +48,7 @@ class PayrollController extends Controller
                 });
             })
             ->when($request->month, function ($query) use ($request) {
-                $month = Carbon::createFromFormat('Y-m', $request->month)->startOfMonth();
+                $month = Carbon::parse($request->string('month')->value() . '-01')->startOfMonth();
                 $query->whereDate('salary_month', $month->toDateString());
             })
             ->when($request->filled('salary_cycle'), function ($query) use ($request) {
@@ -89,7 +89,7 @@ class PayrollController extends Controller
         abort_if($this->isSelfServiceUser(), 403);
 
         $selectedMonth = $request->filled('month')
-            ? Carbon::createFromFormat('Y-m', $request->string('month'))->startOfMonth()
+            ? Carbon::parse($request->string('month')->value() . '-01')->startOfMonth()
             : now()->startOfMonth();
 
         $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
@@ -107,6 +107,7 @@ class PayrollController extends Controller
             'selectedBranchId' => $selectedBranchId,
             'selectedCycle'    => $selectedCycle,
             'branches'         => $branches,
+            'payrollSettings'  => PayrollSetting::forCompany(auth()->user()?->company_id),
         ]);
     }
 
@@ -121,7 +122,7 @@ class PayrollController extends Controller
         abort_if($this->isSelfServiceUser(), 403);
 
         $selectedMonth = $request->filled('month')
-            ? Carbon::createFromFormat('Y-m', $request->string('month'))->startOfMonth()
+            ? Carbon::parse($request->string('month')->value() . '-01')->startOfMonth()
             : now()->startOfMonth();
 
         $selectedBranchId = $request->filled('branch_id') ? $request->integer('branch_id') : null;
@@ -137,15 +138,18 @@ class PayrollController extends Controller
             })
             ->with(['role', 'portalUser', 'department'])
             ->when($selectedCycle, function ($query) use ($selectedCycle) {
-                if (in_array($selectedCycle, ['26_to_25', '25_to_25'], true)) {
-                    $query->where(function ($q) {
-                        $q->whereIn('salary_cycle', ['26_to_25', '25_to_25'])
-                          ->orWhereNull('salary_cycle');
-                    });
-                } elseif (in_array($selectedCycle, ['1_to_30', '10_to_10'], true)) {
-                    $query->whereIn('salary_cycle', ['1_to_30', '10_to_10']);
-                } else {
-                    $query->where('salary_cycle', $selectedCycle);
+                $hasCustomCycleEmployees = EmployeeOnboarding::query()->whereIn('salary_cycle', ['1_to_30', '10_to_10'])->exists();
+                if ($hasCustomCycleEmployees) {
+                    if (in_array($selectedCycle, ['26_to_25', '25_to_25'], true)) {
+                        $query->where(function ($q) {
+                            $q->whereIn('salary_cycle', ['26_to_25', '25_to_25'])
+                              ->orWhereNull('salary_cycle');
+                        });
+                    } elseif (in_array($selectedCycle, ['1_to_30', '10_to_10'], true)) {
+                        $query->whereIn('salary_cycle', ['1_to_30', '10_to_10']);
+                    } else {
+                        $query->where('salary_cycle', $selectedCycle);
+                    }
                 }
             })
             ->when(auth()->user()?->company_id, function ($query) {
@@ -202,6 +206,8 @@ class PayrollController extends Controller
                 'payable_days'             => $summary['payable_days'],
                 'use_pf'                   => (bool) $employee->pf_enabled,
                 'use_esi'                  => (bool) $employee->esi_enabled,
+                'pf_gross_threshold'       => (float) ($payrollSettings->pf_gross_threshold ?? 21000),
+                'pf_basic_cap'             => (float) ($payrollSettings->pf_basic_cap ?? 15000),
                 'pf_employee_percentage'   => (float) $payrollSettings->pf_employee_percentage,
                 'pf_employer_percentage'   => (float) $payrollSettings->pf_employer_percentage,
                 'esi_employee_percentage'  => (float) $payrollSettings->esi_employee_percentage,
@@ -222,12 +228,21 @@ class PayrollController extends Controller
         $monthLabel = $selectedMonth->format('M Y') . ' (' . $cycleStart->format('d M') . ' - ' . $cycleEnd->format('d M') . ')';
 
         return response()->json([
-            'working_days' => $workingDays,
-            'month_label'  => $monthLabel,
-            'salary_cycle' => $selectedCycle,
-            'cycle_start'  => $cycleStart->toDateString(),
-            'cycle_end'    => $cycleEnd->toDateString(),
-            'rows'         => $rows,
+            'working_days'     => $workingDays,
+            'month_label'      => $monthLabel,
+            'salary_cycle'     => $selectedCycle,
+            'cycle_start'      => $cycleStart->toDateString(),
+            'cycle_end'        => $cycleEnd->toDateString(),
+            'payroll_settings' => [
+                'pf_gross_threshold'      => (float) ($payrollSettings->pf_gross_threshold ?? 21000),
+                'pf_basic_cap'            => (float) ($payrollSettings->pf_basic_cap ?? 15000),
+                'pf_employee_percentage'  => (float) $payrollSettings->pf_employee_percentage,
+                'pf_employer_percentage'  => (float) $payrollSettings->pf_employer_percentage,
+                'esi_employee_percentage' => (float) $payrollSettings->esi_employee_percentage,
+                'esi_employer_percentage' => (float) $payrollSettings->esi_employer_percentage,
+                'esi_salary_limit'        => (float) $payrollSettings->esi_salary_limit,
+            ],
+            'rows'             => $rows,
         ]);
     }
 
@@ -236,6 +251,13 @@ class PayrollController extends Controller
         $this->authorizePayrollModuleAccess();
 
         abort_if($this->isSelfServiceUser(), 403);
+
+        if ($request->filled('items_json')) {
+            $decoded = json_decode($request->string('items_json')->value(), true);
+            if (is_array($decoded)) {
+                $request->merge(['items' => $decoded]);
+            }
+        }
 
         $validated = $request->validate([
             'month' => ['required', 'date_format:Y-m'],
@@ -250,34 +272,37 @@ class PayrollController extends Controller
             'items.*.timesheet_lop_days' => ['nullable', 'numeric', 'min:0'],
             'items.*.lop_days' => ['required', 'numeric', 'min:0'],
             'items.*.payable_days' => ['required', 'numeric', 'min:0'],
-            'items.*.use_pf' => ['nullable', 'boolean'],
-            'items.*.use_esi' => ['nullable', 'boolean'],
-            'items.*.pf_employee_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
-            'items.*.pf_employer_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
-            'items.*.esi_employee_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
-            'items.*.esi_employer_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
-            'items.*.esi_salary_limit' => ['required', 'numeric', 'min:0'],
+            'items.*.use_pf' => ['nullable'],
+            'items.*.use_esi' => ['nullable'],
+            'items.*.pf_gross_threshold' => ['nullable', 'numeric', 'min:0'],
+            'items.*.pf_basic_cap' => ['nullable', 'numeric', 'min:0'],
+            'items.*.pf_employee_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.pf_employer_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.esi_employee_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.esi_employer_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.esi_salary_limit' => ['nullable', 'numeric', 'min:0'],
             'items.*.gross_salary' => ['required', 'numeric', 'min:0'],
             'items.*.basic_salary' => ['required', 'numeric', 'min:0'],
             'items.*.hra' => ['required', 'numeric', 'min:0'],
             'items.*.travel_allowance' => ['required', 'numeric', 'min:0'],
             'items.*.other_allowance' => ['required', 'numeric', 'min:0'],
-            'items.*.professional_tax' => ['required', 'numeric', 'min:0'],
-            'items.*.tds_amount' => ['required', 'numeric', 'min:0'],
-            'items.*.loan_deduction' => ['required', 'numeric', 'min:0'],
-            'items.*.other_deduction' => ['required', 'numeric', 'min:0'],
+            'items.*.professional_tax' => ['nullable', 'numeric', 'min:0'],
+            'items.*.tds_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.loan_deduction' => ['nullable', 'numeric', 'min:0'],
+            'items.*.other_deduction' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        $salaryMonth = Carbon::createFromFormat('Y-m', $validated['month'])->startOfMonth();
+        $salaryMonth = Carbon::parse($validated['month'] . '-01')->startOfMonth();
         $salaryCycle = $validated['salary_cycle'] ?? '26_to_25';
-        $employeeIds = collect($validated['items'])->pluck('employee_onboarding_id')->all();
+        $itemsCollection = collect($validated['items'])->unique('employee_onboarding_id')->values();
+        $employeeIds = $itemsCollection->pluck('employee_onboarding_id')->all();
         $employees = EmployeeOnboarding::query()
             ->with('role')
             ->whereIn('id', $employeeIds)
             ->get()
             ->keyBy('id');
 
-        $payroll = DB::transaction(function () use ($validated, $salaryMonth, $salaryCycle, $employees) {
+        $payroll = DB::transaction(function () use ($validated, $salaryMonth, $salaryCycle, $employees, $itemsCollection) {
             $payroll = Payroll::updateOrCreate(
                 [
                     'company_id'   => auth()->user()?->company_id,
@@ -299,7 +324,7 @@ class PayrollController extends Controller
             $netTotal = 0;
             $workingDays = 0;
 
-            foreach ($validated['items'] as $item) {
+            foreach ($itemsCollection as $item) {
                 $employee = $employees->get((int) $item['employee_onboarding_id']);
 
                 if (! $employee) {
@@ -322,20 +347,22 @@ class PayrollController extends Controller
                     'payable_days' => $item['payable_days'],
                     'use_pf' => (bool) ($item['use_pf'] ?? false),
                     'use_esi' => (bool) ($item['use_esi'] ?? false),
-                    'pf_employee_percentage' => $item['pf_employee_percentage'],
-                    'pf_employer_percentage' => $item['pf_employer_percentage'],
-                    'esi_employee_percentage' => $item['esi_employee_percentage'],
-                    'esi_employer_percentage' => $item['esi_employer_percentage'],
-                    'esi_salary_limit' => $item['esi_salary_limit'],
+                    'pf_gross_threshold' => $item['pf_gross_threshold'] ?? null,
+                    'pf_basic_cap' => $item['pf_basic_cap'] ?? null,
+                    'pf_employee_percentage' => $item['pf_employee_percentage'] ?? 12,
+                    'pf_employer_percentage' => $item['pf_employer_percentage'] ?? 13,
+                    'esi_employee_percentage' => $item['esi_employee_percentage'] ?? 4,
+                    'esi_employer_percentage' => $item['esi_employer_percentage'] ?? 0,
+                    'esi_salary_limit' => $item['esi_salary_limit'] ?? 21000,
                     'gross_salary' => $item['gross_salary'],
                     'basic_salary' => $item['basic_salary'],
                     'hra' => $item['hra'],
                     'travel_allowance' => $item['travel_allowance'],
                     'other_allowance' => $item['other_allowance'],
-                    'professional_tax' => $item['professional_tax'],
-                    'tds_amount' => $item['tds_amount'],
-                    'loan_deduction' => $item['loan_deduction'],
-                    'other_deduction' => $item['other_deduction'],
+                    'professional_tax' => $item['professional_tax'] ?? 0,
+                    'tds_amount' => $item['tds_amount'] ?? 0,
+                    'loan_deduction' => $item['loan_deduction'] ?? 0,
+                    'other_deduction' => $item['other_deduction'] ?? 0,
                 ]);
 
                 $payroll->items()->create($row);
@@ -388,7 +415,9 @@ class PayrollController extends Controller
             'net_total' => round((float) $items->sum('net_salary'), 2),
         ];
 
-        return view('pages.hrms.payroll.show', compact('payroll', 'items', 'summary', 'selfServiceMode'));
+        [$cycleStart, $cycleEnd] = self::getCycleDateRange($payroll->salary_month, $payroll->salary_cycle ?? '26_to_25');
+
+        return view('pages.hrms.payroll.show', compact('payroll', 'items', 'summary', 'selfServiceMode', 'cycleStart', 'cycleEnd'));
     }
 
     public function payslip(Payroll $payroll, PayrollItem $item)
@@ -419,8 +448,10 @@ class PayrollController extends Controller
             }
         }
         $logoBase64 = $this->imageBase64($logoPath);
+        $logoUrl = $logoPath ? asset(ltrim((string) $logoPath, '/')) : asset('images/my_agenci_logo.png');
+        $signatureUrl = !empty($settings['signature']) ? asset(ltrim((string) $settings['signature'], '/')) : null;
 
-        $pdf = Pdf::loadView('pages.hrms.payroll.pdf', [
+        $viewData = [
             'payroll' => $payroll,
             'item' => $item,
             'companyName' => $settings['company_name'] ?: ($company?->company_name ?: 'Company'),
@@ -429,14 +460,24 @@ class PayrollController extends Controller
             'companyEmail' => $settings['company_email'] ?: ($company?->email ?: ''),
             'signatureBase64' => $signatureBase64,
             'logoBase64' => $logoBase64,
-        ])->setPaper('a4', 'portrait')
-            ->setOptions([
-                'defaultFont' => 'DejaVu Sans',
-                'isHtml5ParserEnabled' => true,
-                'isRemoteEnabled' => true,
-            ]);
+            'logoUrl' => $logoUrl,
+            'signatureUrl' => $signatureUrl,
+            'selfServiceMode' => $this->isSelfServiceUser(),
+        ];
 
-        return $pdf->stream('payslip_' . $item->employee_code . '_' . $payroll->salary_month->format('Y_m') . '.pdf');
+        if (request()->query('format') === 'pdf' || request()->has('download')) {
+            $pdf = Pdf::loadView('pages.hrms.payroll.pdf', $viewData)
+                ->setPaper('a4', 'portrait')
+                ->setOptions([
+                    'defaultFont' => 'DejaVu Sans',
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled' => true,
+                ]);
+
+            return $pdf->stream('payslip_' . $item->employee_code . '_' . $payroll->salary_month->format('Y_m') . '.pdf');
+        }
+
+        return view('pages.hrms.payroll.payslip', $viewData);
     }
 
     private function authorizePayroll(Payroll $payroll): void
@@ -456,15 +497,17 @@ class PayrollController extends Controller
 
     public static function getCycleDateRange(Carbon $month, ?string $cycle): array
     {
+        $m = $month->copy()->startOfMonth();
+
         if (in_array($cycle, ['26_to_25', '25_to_25'], true)) {
-            $start = $month->copy()->subMonthNoOverflow()->setDay(26)->startOfDay();
-            $end   = $month->copy()->setDay(25)->endOfDay();
+            $start = $m->copy()->subMonthNoOverflow()->setDay(26)->startOfDay();
+            $end   = $m->copy()->setDay(25)->endOfDay();
         } elseif (in_array($cycle, ['1_to_30', '10_to_10'], true)) {
-            $start = $month->copy()->startOfMonth();
-            $end   = $month->copy()->endOfMonth();
+            $start = $m->copy()->startOfMonth();
+            $end   = $m->copy()->endOfMonth();
         } else {
-            $start = $month->copy()->subMonthNoOverflow()->setDay(26)->startOfDay();
-            $end   = $month->copy()->setDay(25)->endOfDay();
+            $start = $m->copy()->subMonthNoOverflow()->setDay(26)->startOfDay();
+            $end   = $m->copy()->setDay(25)->endOfDay();
         }
 
         return [$start, $end];
@@ -870,12 +913,20 @@ class PayrollController extends Controller
         $useEsi = (bool) ($row['use_esi'] ?? false);
         $pfEmployeePercentage = round((float) ($row['pf_employee_percentage'] ?? 12), 2);
         $pfEmployerPercentage = round((float) ($row['pf_employer_percentage'] ?? 13), 2);
-        $esiEmployeePercentage = round((float) ($row['esi_employee_percentage'] ?? 0.75), 2);
-        $esiEmployerPercentage = round((float) ($row['esi_employer_percentage'] ?? 3.25), 2);
+        $esiEmployeePercentage = round((float) ($row['esi_employee_percentage'] ?? 4), 2);
+        $esiEmployerPercentage = round((float) ($row['esi_employer_percentage'] ?? 0), 2);
         $esiSalaryLimit = round((float) ($row['esi_salary_limit'] ?? 21000), 2);
 
-        $pfBaseAmount = $grossSalary > self::PF_GROSS_THRESHOLD
-            ? self::PF_BASIC_CAP
+        static $cachedPayrollSettings = null;
+        if ($cachedPayrollSettings === null) {
+            $cachedPayrollSettings = PayrollSetting::forCompany(auth()->user()?->company_id);
+        }
+
+        $pfGrossThreshold = round((float) ($row['pf_gross_threshold'] ?? $cachedPayrollSettings->pf_gross_threshold ?? self::PF_GROSS_THRESHOLD), 2);
+        $pfBasicCap = round((float) ($row['pf_basic_cap'] ?? $cachedPayrollSettings->pf_basic_cap ?? self::PF_BASIC_CAP), 2);
+
+        $pfBaseAmount = $grossSalary > $pfGrossThreshold
+            ? $pfBasicCap
             : ($earnedBasic + $earnedTravel + $earnedOther);
         $pfEmployee = $usePf ? round($pfBaseAmount * ($pfEmployeePercentage / 100), 2) : 0;
         $pfEmployer = $usePf ? round($pfBaseAmount * ($pfEmployerPercentage / 100), 2) : 0;
@@ -886,7 +937,7 @@ class PayrollController extends Controller
         $loanDeduction = round((float) ($row['loan_deduction'] ?? 0), 2);
         $otherDeduction = round((float) ($row['other_deduction'] ?? 0), 2);
 
-        $totalDeductions = round($pfEmployee + $esiEmployee + $professionalTax + $tdsAmount + $loanDeduction + $otherDeduction, 2);
+        $totalDeductions = round($pfEmployee + $pfEmployer + $esiEmployee + $professionalTax + $tdsAmount + $loanDeduction + $otherDeduction, 2);
         $netSalary = round(max($earnedGross - $totalDeductions, 0), 2);
 
         return [
@@ -906,6 +957,8 @@ class PayrollController extends Controller
             'payable_days' => round($payableDays, 2),
             'use_pf' => $usePf,
             'use_esi' => $useEsi,
+            'pf_gross_threshold' => $pfGrossThreshold,
+            'pf_basic_cap' => $pfBasicCap,
             'pf_employee_percentage' => $pfEmployeePercentage,
             'pf_employer_percentage' => $pfEmployerPercentage,
             'esi_employee_percentage' => $esiEmployeePercentage,

@@ -97,9 +97,19 @@
                 </div>
                 <div class="pset-grid">
                     <div class="pset-field">
+                        <label class="pset-label">PF Gross Salary Threshold</label>
+                        <input type="number" step="0.01" min="0" name="pf_gross_threshold" class="pset-input" value="{{ old('pf_gross_threshold', $settings->pf_gross_threshold ?? 21000) }}">
+                        <div class="pset-hint">If Gross Salary is above this threshold (e.g. 21,000), PF uses fixed Cap amount. Otherwise PF uses Basic + Travel + Other.</div>
+                    </div>
+                    <div class="pset-field">
+                        <label class="pset-label">PF Basic / Cap Amount</label>
+                        <input type="number" step="0.01" min="0" name="pf_basic_cap" class="pset-input" value="{{ old('pf_basic_cap', $settings->pf_basic_cap ?? 15000) }}">
+                        <div class="pset-hint">Fixed PF wage base amount (e.g. 15,000) applied when Gross Salary exceeds threshold.</div>
+                    </div>
+                    <div class="pset-field">
                         <label class="pset-label">PF Employee Percentage</label>
                         <input type="number" step="0.01" min="0" max="100" name="pf_employee_percentage" class="pset-input" value="{{ old('pf_employee_percentage', $settings->pf_employee_percentage) }}">
-                        <div class="pset-hint">Example: `12.00` means 12% employee PF deduction on earned basic salary.</div>
+                        <div class="pset-hint">Example: `12.00` means 12% employee PF deduction on PF wage base.</div>
                     </div>
                     <div class="pset-field">
                         <label class="pset-label">PF Employer Percentage</label>
@@ -109,12 +119,12 @@
                     <div class="pset-field">
                         <label class="pset-label">ESI Employee Percentage</label>
                         <input type="number" step="0.01" min="0" max="100" name="esi_employee_percentage" class="pset-input" value="{{ old('esi_employee_percentage', $settings->esi_employee_percentage) }}">
-                        <div class="pset-hint">Example: `0.75` means 0.75% employee ESI deduction on earned gross salary.</div>
+                        <div class="pset-hint">Percentage applied to Gross Salary (e.g. `4.00` for 4% ESI of Gross Salary).</div>
                     </div>
                     <div class="pset-field">
                         <label class="pset-label">ESI Employer Percentage</label>
                         <input type="number" step="0.01" min="0" max="100" name="esi_employer_percentage" class="pset-input" value="{{ old('esi_employer_percentage', $settings->esi_employer_percentage) }}">
-                        <div class="pset-hint">Used for employer-side ESI contribution values in payroll records.</div>
+                        <div class="pset-hint">Employer-side ESI contribution percentage.</div>
                     </div>
                     <div class="pset-field">
                         <label class="pset-label">ESI Salary Limit</label>
