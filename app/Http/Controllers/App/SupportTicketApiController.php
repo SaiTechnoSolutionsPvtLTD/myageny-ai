@@ -91,7 +91,7 @@ class SupportTicketApiController extends Controller
             ];
         }
 
-        $canUpdateStatus = ($ticket->to_user_id === $currentUser->id || $isCompanyAdmin) && $ticket->status !== 'closed';
+        $canUpdateStatus = $ticket->status !== 'closed';
 
         return [
             'id'                             => $ticket->id,
@@ -157,7 +157,8 @@ class SupportTicketApiController extends Controller
         $selectedCategoryId = $request->input('category_id');
         $selectedSubcategoryId = $request->input('subcategory_id');
         $search = trim((string) $request->input('search'));
-        $tab = $request->input('tab', $isCompanyAdmin ? 'all' : 'received');
+        // Support Portal is accessible to all users; default tab is 'all'
+        $tab = $request->input('tab', 'all');
         $perPage = max(1, min(50, (int) $request->input('per_page', 15)));
 
         // Filter callback
@@ -180,23 +181,20 @@ class SupportTicketApiController extends Controller
             }
         };
 
-        // KPI statistics calculation (matches web SupportController::index)
-        if ($isCompanyAdmin) {
-            $kpiQuery = SupportTicket::query();
+        // Company scope helper - scopes to the user's company (or matches creator/assignee company)
+        $applyCompanyScope = function ($query) use ($companyId) {
             if ($companyId) {
-                $kpiQuery->where(function ($q) use ($companyId) {
+                $query->where(function ($q) use ($companyId) {
                     $q->where('company_id', $companyId)
                       ->orWhereHas('creator', fn($cq) => $cq->where('company_id', $companyId))
                       ->orWhereHas('assignedTo', fn($aq) => $aq->where('company_id', $companyId));
                 });
             }
-        } else {
-            $kpiQuery = SupportTicket::where(function ($q) use ($userId) {
-                $q->where('to_user_id', $userId)
-                  ->orWhere('created_by', $userId);
-            });
-        }
+        };
 
+        // KPI statistics calculation: computed across all support tickets in the company scope for ALL authenticated users
+        $kpiQuery = SupportTicket::query();
+        $applyCompanyScope($kpiQuery);
         $applyFilters($kpiQuery);
 
         $statTotal     = (clone $kpiQuery)->count();
@@ -204,53 +202,35 @@ class SupportTicketApiController extends Controller
         $statOnProcess = (clone $kpiQuery)->where('status', 'onprocess')->count();
         $statResolved  = (clone $kpiQuery)->whereIn('status', ['resolved', 'closed'])->count();
 
-        // Calculate Tab Counts
-        $allCount = 0;
-        if ($isCompanyAdmin) {
-            $allBaseQuery = SupportTicket::query();
-            if ($companyId) {
-                $allBaseQuery->where(function ($q) use ($companyId) {
-                    $q->where('company_id', $companyId)
-                      ->orWhereHas('creator', fn($cq) => $cq->where('company_id', $companyId))
-                      ->orWhereHas('assignedTo', fn($aq) => $aq->where('company_id', $companyId));
-                });
-            }
-            $applyFilters($allBaseQuery);
-            $allCount = $allBaseQuery->count();
-        }
+        // Calculate Tab Counts for ALL users without role/user restrictions
+        $allBaseQuery = SupportTicket::query();
+        $applyCompanyScope($allBaseQuery);
+        $applyFilters($allBaseQuery);
+        $allCount = $allBaseQuery->count();
 
-        $receivedBaseQuery = SupportTicket::where('to_user_id', $userId);
+        $receivedBaseQuery = SupportTicket::query();
+        $applyCompanyScope($receivedBaseQuery);
+        $receivedBaseQuery->where('to_user_id', $userId);
         $applyFilters($receivedBaseQuery);
         $receivedCount = $receivedBaseQuery->count();
 
-        $createdBaseQuery = SupportTicket::where('created_by', $userId);
+        $createdBaseQuery = SupportTicket::query();
+        $applyCompanyScope($createdBaseQuery);
+        $createdBaseQuery->where('created_by', $userId);
         $applyFilters($createdBaseQuery);
         $createdCount = $createdBaseQuery->count();
 
-        // Active List Query based on tab
+        // Active List Query based on tab:
+        // 'all' returns all company support tickets without restricting by user ID
         $query = SupportTicket::with(['creator', 'assignedTo', 'category', 'subcategory']);
+        $applyCompanyScope($query);
 
-        if ($tab === 'all') {
-            if ($isCompanyAdmin) {
-                if ($companyId) {
-                    $query->where(function ($q) use ($companyId) {
-                        $q->where('company_id', $companyId)
-                          ->orWhereHas('creator', fn($cq) => $cq->where('company_id', $companyId))
-                          ->orWhereHas('assignedTo', fn($aq) => $aq->where('company_id', $companyId));
-                    });
-                }
-            } else {
-                $query->where(function ($q) use ($userId) {
-                    $q->where('to_user_id', $userId)
-                      ->orWhere('created_by', $userId);
-                });
-            }
+        if ($tab === 'received') {
+            $query->where('to_user_id', $userId);
         } elseif ($tab === 'created') {
             $query->where('created_by', $userId);
         } else {
-            // default 'received'
-            $tab = 'received';
-            $query->where('to_user_id', $userId);
+            $tab = 'all';
         }
 
         $applyFilters($query);
@@ -285,7 +265,8 @@ class SupportTicketApiController extends Controller
                     'created'  => $createdCount,
                 ],
                 'current_tab'  => $tab,
-                'is_admin'     => $isCompanyAdmin,
+                // Allow all authenticated users full tab navigation (All, Received, Created)
+                'is_admin'     => true,
             ],
         ]);
     }
@@ -358,7 +339,8 @@ class SupportTicketApiController extends Controller
             'data'   => [
                 'categories'       => $categories,
                 'users'            => $users,
-                'is_company_admin' => $isCompanyAdmin,
+                // Accessible to all users: unlocks the 'All' tab and tab switching in mobile app
+                'is_company_admin' => true,
             ],
         ]);
     }
@@ -565,13 +547,6 @@ class SupportTicketApiController extends Controller
                 'status'  => false,
                 'message' => 'Support ticket not found.',
             ], 404);
-        }
-
-        if ($ticket->to_user_id !== $user->id && !$isCompanyAdmin) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Unauthorized. Only the assigned user or Company Admin can update ticket status.',
-            ], 403);
         }
 
         if ($ticket->status === 'closed') {

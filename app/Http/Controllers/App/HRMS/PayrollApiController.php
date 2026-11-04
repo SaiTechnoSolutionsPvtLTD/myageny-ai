@@ -654,7 +654,11 @@ class PayrollApiController extends Controller
             'salary_month' => optional($payroll->salary_month)->format('M Y'),
             'salary_date'  => optional($payroll->salary_date)->format('d M Y'),
             'item'         => $item,
-            'pdf_url'      => route('hrms.payroll.payslip-pdf', ['payroll' => $payroll->id, 'item' => $item->id]),
+            'pdf_url'      => \Illuminate\Support\Facades\Route::has('mobile.hrms.payroll.payslip-pdf')
+                ? route('mobile.hrms.payroll.payslip-pdf', ['payroll' => $payroll->id, 'item' => $item->id])
+                : (\Illuminate\Support\Facades\Route::has('hrms.payroll.payslip-pdf')
+                    ? route('hrms.payroll.payslip-pdf', ['payroll' => $payroll->id, 'item' => $item->id])
+                    : url("api/mobile/hrms/payroll/{$payroll->id}/payslip/{$item->id}/pdf")),
         ]);
     }
 

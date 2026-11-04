@@ -2497,6 +2497,32 @@ class LeadController extends Controller
             return response()->json(['status' => false, 'message' => 'Unauthenticated'], 401);
         }
 
+        // 1. Role authorization check:
+        // Sales-related roles, Company Admin, and CBO are authorized for lead notifications.
+        // Pure Development, Design, Digital Marketing, HR, Accounts, CST roles must not receive lead notifications.
+        $isCompanyAdmin = $user->isCompanyAdmin()
+            || $user->isCompanyAdminRole()
+            || $user->isSuperAdmin()
+            || $user->isSystemAdmin();
+        $isCbo = $user->isCbo();
+        $hasAdminRole = $user->hasAdminLikeRole();
+
+        $isSalesAuthorized = $user->belongsToSalesDepartment()
+            || $user->hasSalesLikeRole()
+            || $user->canAccessMobileCrmModule()
+            || $user->can('modules_menu.crm')
+            || $user->can('leads.view')
+            || $user->can('leads.menuview')
+            || ($user->hasExecutiveLikeRole() && ! $user->belongsToDevelopmentDepartment() && ! $user->belongsToDesigningDepartment() && ! $user->belongsToDigitalMarketingDepartment());
+
+        if (! $isCompanyAdmin && ! $isCbo && ! $hasAdminRole && ! $isSalesAuthorized) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'User role is not authorized for lead notifications.',
+                'data'    => null,
+            ], 403);
+        }
+
         // Current calendar date in application timezone (Asia/Kolkata)
         $today = Carbon::now('Asia/Kolkata')->toDateString();
 
