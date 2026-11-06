@@ -440,6 +440,10 @@ class DataVisibilityService
         }
 
         $user ??= auth()->user();
+        if ($user && $user->isHrOrAdmin()) {
+            return true;
+        }
+
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
             $supportUserIds = $this->customerSupportUserIds($user);
             return $query->whereHas($relation, function ($q) use ($supportUserIds) {
@@ -464,6 +468,10 @@ class DataVisibilityService
         $this->applyCompanyVisibility($query, $user, 'company_id');
 
         $user ??= auth()->user();
+        if ($user && $user->isHrOrAdmin()) {
+            return $query;
+        }
+
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
             $supportUserIds = $this->customerSupportUserIds($user);
             return $query->where(function (Builder $quotationQuery) use ($supportUserIds) {
@@ -550,6 +558,10 @@ class DataVisibilityService
         }
 
         $user ??= auth()->user();
+        if ($user && $user->isHrOrAdmin()) {
+            return true;
+        }
+
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {
             $quotation->loadMissing('lead:id,customer_support_tl_id,customer_support_executive_id');
             if ($quotation->lead) {

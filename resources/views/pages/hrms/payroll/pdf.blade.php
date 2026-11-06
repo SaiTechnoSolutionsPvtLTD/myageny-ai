@@ -285,7 +285,22 @@
                 <div class="company-name">{{ $companyName }}</div>
                 @if($companyAddress || $companyPhone || $companyEmail)
                     <div class="company-meta">
-                        {{ trim(collect([$companyAddress, $companyPhone, $companyEmail])->filter()->implode(' • ')) }}
+                        @if($companyAddress)
+                            <div>{{ $companyAddress }}</div>
+                        @endif
+                        @if($companyPhone || $companyEmail)
+                            <div style="margin-top: 2px;">
+                                @if($companyPhone)
+                                    <span>Phone: {{ $companyPhone }}</span>
+                                @endif
+                                @if($companyPhone && $companyEmail)
+                                    <span>&nbsp;|&nbsp;</span>
+                                @endif
+                                @if($companyEmail)
+                                    <span>Email: {{ $companyEmail }}</span>
+                                @endif
+                            </div>
+                        @endif
                     </div>
                 @endif
             </td>
@@ -322,7 +337,7 @@
                 <td class="info-label">UAN / PF No.</td>
                 <td class="info-val">{{ $item->uan_no ?: 'N/A' }}</td>
                 <td class="info-label">Leave / LOP</td>
-                <td class="info-val">{{ number_format((float) $item->leave_days, 1) }} / {{ number_format((float) $item->lop_days, 1) }}{{ (float) ($item->timesheet_lop_days ?? 0) > 0 ? ' (TS: ' . number_format((float) $item->timesheet_lop_days, 1) . ')' : '' }}</td>
+                <td class="info-val">{{ number_format((float) $item->leave_days, 1) }} / {{ number_format((float) $item->lop_days, 1) }}</td>
             </tr>
             <tr>
                 <td class="info-label">ESI Number</td>
@@ -331,9 +346,9 @@
                 <td class="info-val">{{ optional($item->employee)->bank_name ? (optional($item->employee)->bank_name . ' (' . (optional($item->employee)->bank_branch ?: 'Main') . ')') : 'N/A' }}</td>
             </tr>
             <tr>
-                <td class="info-label">Salary Cycle</td>
-                <td class="info-val"><strong>{{ $cycleLabel }}</strong></td>
-                <td class="info-label">Cycle Period</td>
+                <td class="info-label">Bank A/C No.</td>
+                <td class="info-val">{{ optional($item->employee)->account_number ? ('****' . substr(optional($item->employee)->account_number, -4)) : 'N/A' }}</td>
+                <td class="info-label">Pay Period</td>
                 <td class="info-val">{{ $cStart->format('d M Y') }} - {{ $cEnd->format('d M Y') }}</td>
             </tr>
         </table>

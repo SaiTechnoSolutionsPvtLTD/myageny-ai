@@ -247,6 +247,53 @@
     transition: transform 0.15s ease-out;
 }
 
+/* Quotation Watermark (Shown when unapproved, removed on approval) */
+.quotation-watermark-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    z-index: 20;
+    overflow: hidden;
+}
+.quotation-watermark-stamp {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transform: rotate(-30deg);
+    padding: 16px 44px;
+    border: 5px dashed rgba(220, 38, 38, 0.22);
+    border-radius: 18px;
+    background: rgba(254, 242, 242, 0.08);
+}
+.quotation-watermark-text {
+    font-size: 82px;
+    font-weight: 900;
+    letter-spacing: 6px;
+    line-height: 1;
+    color: rgba(220, 38, 38, 0.16);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.quotation-watermark-sub {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: rgba(220, 38, 38, 0.20);
+    margin-top: 8px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 /* Top Header */
 .inv-header {
     display: flex;
@@ -548,6 +595,22 @@
         break-after: auto !important;
         margin: 0 auto !important;
     }
+    .quotation-watermark-container {
+        display: flex !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .quotation-watermark-stamp {
+        border-color: rgba(220, 38, 38, 0.28) !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .quotation-watermark-text,
+    .quotation-watermark-sub {
+        color: rgba(220, 38, 38, 0.24) !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
     * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
@@ -795,9 +858,15 @@
                         <i class="bi bi-receipt-cutoff"></i> View Invoice (#{{ $convertedInvoice->invoice_number }})
                     </a>
                 @endif
-                <button type="button" onclick="openConvertModal()" class="inv-btn-primary" style="background:linear-gradient(135deg, #2563eb, #1d4ed8); border-color:#1d4ed8; color:#ffffff; font-weight:700; box-shadow:0 2px 8px rgba(37,99,235,0.25);">
-                    <i class="bi bi-arrow-repeat"></i> {{ $convertedInvoice ? 'Convert Again' : 'Convert to Invoice' }}
-                </button>
+                @if($quotation->is_approved)
+                    <button type="button" onclick="openConvertModal()" class="inv-btn-primary" style="background:linear-gradient(135deg, #2563eb, #1d4ed8); border-color:#1d4ed8; color:#ffffff; font-weight:700; box-shadow:0 2px 8px rgba(37,99,235,0.25);">
+                        <i class="bi bi-arrow-repeat"></i> {{ $convertedInvoice ? 'Convert Again' : 'Convert to Invoice' }}
+                    </button>
+                @else
+                    <button type="button" class="inv-btn-primary" disabled style="opacity:0.6; cursor:not-allowed; background:#94a3b8; border-color:#94a3b8; color:#ffffff; box-shadow:none;" title="Quotation must be approved by Admin or HR before converting to an invoice.">
+                        <i class="bi bi-arrow-repeat"></i> Convert to Invoice
+                    </button>
+                @endif
                 <a href="{{ route('quotations.edit', $quotation) }}" class="inv-btn-secondary">
                     <i class="bi bi-pencil"></i> Edit
                 </a>
@@ -825,6 +894,10 @@
                     <span style="background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px;">
                         <i class="bi bi-check-circle-fill"></i> Approved
                     </span>
+                @elseif($quotation->rejected_at)
+                    <span style="background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px;" title="Rejected Reason: {{ $quotation->rejection_remarks }}">
+                        <i class="bi bi-x-circle-fill"></i> Rejected
+                    </span>
                 @else
                     <span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px;">
                         <i class="bi bi-clock-fill"></i> Pending Approval
@@ -846,22 +919,33 @@
             </div>
 
             <div class="inv-header-actions">
-                @if(!$quotation->is_approved)
-                <form method="POST" action="{{ route('quotations.approve', $quotation) }}" style="margin:0;">
+                @if(!$quotation->is_approved && auth()->user()?->canApproveQuotation())
+                <form method="POST" action="{{ route('quotations.approve', $quotation) }}" style="margin:0; display:inline;">
                     @csrf @method('PATCH')
-                    <button type="submit" class="inv-btn-primary" style="background:linear-gradient(135deg, #16a34a, #15803d); box-shadow:0 2px 6px rgba(22,163,74,0.18);">
-                        <i class="bi bi-check-circle-fill"></i> Approve
+                    <button type="submit" class="inv-btn-primary" style="background:linear-gradient(135deg, #16a34a, #15803d); box-shadow:0 2px 6px rgba(22,163,74,0.18);" onclick="return confirm('Approve Quotation #{{ $quotation->quotation_no }}?')">
+                        <i class="bi bi-check-circle-fill"></i> Approve Quotation
                     </button>
                 </form>
+                @if(!$quotation->rejected_at)
+                <button type="button" class="inv-btn-secondary" style="background:#fff1f2; border-color:#fecaca; color:#dc2626; font-weight:700;" onclick="openRejectModal('{{ route('quotations.reject', $quotation) }}', '{{ $quotation->quotation_no }}')">
+                    <i class="bi bi-x-circle-fill"></i> Reject Quotation
+                </button>
+                @endif
                 @endif
                 @if($convertedInvoice)
                     <a href="{{ route('accounts.sales.invoices.show', $convertedInvoice->id) }}" class="inv-btn-secondary" style="background:#ecfdf5; border-color:#a7f3d0; color:#047857; font-weight:700;">
                         <i class="bi bi-check2-circle"></i> Invoiced: {{ $convertedInvoice->invoice_number }}
                     </a>
                 @endif
-                <button type="button" onclick="openConvertModal()" class="inv-btn-primary" style="background:linear-gradient(135deg, #2563eb, #1d4ed8); border-color:#1d4ed8; color:#ffffff; font-weight:700; box-shadow:0 2px 8px rgba(37,99,235,0.25);">
-                    <i class="bi bi-arrow-repeat"></i> {{ $convertedInvoice ? 'Convert Again' : 'Convert to Invoice' }}
-                </button>
+                @if($quotation->is_approved)
+                    <button type="button" onclick="openConvertModal()" class="inv-btn-primary" style="background:linear-gradient(135deg, #2563eb, #1d4ed8); border-color:#1d4ed8; color:#ffffff; font-weight:700; box-shadow:0 2px 8px rgba(37,99,235,0.25);">
+                        <i class="bi bi-arrow-repeat"></i> {{ $convertedInvoice ? 'Convert Again' : 'Convert to Invoice' }}
+                    </button>
+                @else
+                    <button type="button" class="inv-btn-primary" disabled style="opacity:0.6; cursor:not-allowed; background:#94a3b8; border-color:#94a3b8; color:#ffffff; box-shadow:none;" title="Quotation must be approved by Admin or HR before converting to an invoice.">
+                        <i class="bi bi-arrow-repeat"></i> Convert to Invoice
+                    </button>
+                @endif
                 <a href="{{ route('quotation.print', ['quotation' => $quotation->id, 'autoprint' => 1]) }}" target="_blank" class="inv-btn-secondary">
                     <i class="bi bi-printer-fill"></i> Print
                 </a>
@@ -875,6 +959,59 @@
             <div style="background:#dcfce7; border:1px solid #bbf7d0; color:#15803d; padding:12px 18px; border-radius:10px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px;">
                 <i class="bi bi-check-circle-fill"></i>
                 <span>{{ session('success') }}</span>
+            </div>
+        @endif
+
+        @if($quotation->rejected_at)
+            <div style="background:#fef2f2; border:1px solid #fecaca; border-left: 5px solid #dc2626; color:#991b1b; padding:16px 22px; border-radius:12px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:40px; height:40px; border-radius:10px; background:#fee2e2; color:#dc2626; display:inline-flex; align-items:center; justify-content:center; font-size:20px;">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:14px; font-weight:700; color:#991b1b;">
+                            Quotation Rejected
+                            @if($quotation->rejecter)
+                                <span style="font-weight:400; font-size:12px; color:#7f1d1d;">by {{ $quotation->rejecter->name }} on {{ $quotation->rejected_at->format('d M Y, h:i A') }}</span>
+                            @endif
+                        </div>
+                        <div style="font-size:13px; color:#b91c1c; margin-top:4px; font-weight:600;">
+                            <strong>Remarks:</strong> {{ $quotation->rejection_remarks }}
+                        </div>
+                    </div>
+                </div>
+                <a href="{{ route('quotations.edit', $quotation) }}" class="inv-btn-primary" style="background:#fe5f04; border-color:#fe5f04; color:#ffffff; font-weight:700; text-decoration:none;">
+                    <i class="bi bi-pencil-square"></i> Edit & Resubmit
+                </a>
+            </div>
+        @elseif(!$quotation->is_approved)
+            <div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:16px 22px; border-radius:12px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:40px; height:40px; border-radius:10px; background:#fef3c7; color:#d97706; display:inline-flex; align-items:center; justify-content:center; font-size:20px;">
+                        <i class="bi bi-clock-history"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:14px; font-weight:700; color:#92400e;">
+                            Quotation Pending Approval
+                        </div>
+                        <div style="font-size:12px; color:#b45309; margin-top:2px;">
+                            This quotation is pending Admin or HR approval. A "Myagenci" watermark is applied until approved. Sending to client is disabled until approval.
+                        </div>
+                    </div>
+                </div>
+                @if(auth()->user()?->canApproveQuotation())
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <form method="POST" action="{{ route('quotations.approve', $quotation) }}" style="margin:0;">
+                            @csrf @method('PATCH')
+                            <button type="submit" class="inv-btn-primary" style="background:linear-gradient(135deg, #16a34a, #15803d); box-shadow:0 2px 8px rgba(22,163,74,0.3); font-weight:700; padding:8px 18px;" onclick="return confirm('Approve Quotation #{{ $quotation->quotation_no }}?')">
+                                <i class="bi bi-check-circle-fill"></i> Approve Quotation Now
+                            </button>
+                        </form>
+                        <button type="button" class="inv-btn-secondary" style="background:#fff1f2; border-color:#fecaca; color:#dc2626; font-weight:700; padding:8px 18px;" onclick="openRejectModal('{{ route('quotations.reject', $quotation) }}', '{{ $quotation->quotation_no }}')">
+                            <i class="bi bi-x-circle-fill"></i> Reject
+                        </button>
+                    </div>
+                @endif
             </div>
         @endif
 
@@ -938,6 +1075,14 @@
                 
                 {{-- PAGE 1: ESTIMATE SHEET --}}
                 <div class="invoice-sheet" id="invoiceSheet">
+                    @if(! $quotation->is_approved)
+                        <div class="quotation-watermark-container" aria-hidden="true">
+                            <div class="quotation-watermark-stamp">
+                                <div class="quotation-watermark-text">Myagenci</div>
+                                <div class="quotation-watermark-sub">Pending Approval</div>
+                            </div>
+                        </div>
+                    @endif
 
                     {{-- 1. Top Header --}}
                     <div class="inv-header">
@@ -1072,7 +1217,7 @@
                             <tr class="item-row">
                                 <td class="td-item" style="text-align:center; font-weight:700;">{{ $index + 1 }}</td>
                                 <td class="td-item">
-                                    <div style="font-weight:800; color:#000;">{{ $item->product?->product_name ?: ($item->product?->package_name ?: 'Item') }}</div>
+                                    <div style="font-weight:800; color:#000;">{{ $item->item_name ?: ($item->product?->product_name ?: ($item->product?->package_name ?: 'Item')) }}</div>
                                     @if($item->description)
                                         <div style="font-size:10.5px; color:#334155; margin-top:2px; line-height:1.4;">
                                             {!! nl2br(e($item->description)) !!}
@@ -1192,6 +1337,14 @@
 
                 {{-- DEDICATED PAGE 2: TERMS & CONDITIONS ONLY --}}
                 <div class="invoice-sheet" id="invoiceSheetPage2" style="margin:0 auto; padding:32px 36px; box-sizing:border-box;">
+                    @if(! $quotation->is_approved)
+                        <div class="quotation-watermark-container" aria-hidden="true">
+                            <div class="quotation-watermark-stamp">
+                                <div class="quotation-watermark-text">Myagenci</div>
+                                <div class="quotation-watermark-sub">Pending Approval</div>
+                            </div>
+                        </div>
+                    @endif
                     <div style="font-size: 18px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 12px; border-bottom: 1px solid #000000; margin-bottom: 22px;">
                         Terms &amp; Conditions
                     </div>
@@ -1399,4 +1552,65 @@ document.addEventListener('keydown', function(e) {
         </form>
     </div>
 </div>
+
+{{-- Reject Quotation Modal --}}
+<div id="rejectQuotationModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#ffffff; border-radius:16px; width:100%; max-width:480px; box-shadow:0 20px 40px rgba(0,0,0,0.25); overflow:hidden;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:#fff1f2; border-bottom:1px solid #fecaca;">
+            <div style="font-size:15px; font-weight:800; color:#dc2626; display:flex; align-items:center; gap:8px;">
+                <i class="bi bi-x-circle-fill"></i>
+                Reject Quotation <span id="rejectQuotationNoDisplay"></span>
+            </div>
+            <button type="button" onclick="closeRejectModal()" style="border:none; background:none; font-size:22px; color:#94a3b8; cursor:pointer;">&times;</button>
+        </div>
+        <form method="POST" id="rejectQuotationForm" action="" style="margin:0;">
+            @csrf
+            @method('PATCH')
+            <div style="padding:20px; display:flex; flex-direction:column; gap:14px;">
+                <div style="font-size:13px; color:#64748b; line-height:1.5;">
+                    Please enter the remarks / reason for rejecting this quotation. These remarks will be emailed to the sales person.
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; display:block; margin-bottom:6px;">
+                        Rejection Remarks <span style="color:#ef4444;">*</span>
+                    </label>
+                    <textarea
+                        name="rejection_remarks"
+                        id="rejectionRemarksInput"
+                        rows="3"
+                        required
+                        minlength="3"
+                        maxlength="1000"
+                        placeholder="Enter reason for rejection (e.g. incorrect price, scope mismatch, missing details)..."
+                        style="width:100%; padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px; outline:none; box-sizing:border-box; resize:vertical; font-family:inherit;"
+                    ></textarea>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:14px 20px; background:#f8fafc; border-top:1px solid #e2e8f0;">
+                <button type="button" onclick="closeRejectModal()" class="inv-btn-secondary" style="padding:8px 16px; border-radius:8px; font-size:13px;">Cancel</button>
+                <button type="submit" class="inv-btn-primary" style="padding:8px 18px; border-radius:8px; font-size:13px; font-weight:700; background:#dc2626; border-color:#dc2626; color:#ffffff;">Confirm Rejection</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openRejectModal(actionUrl, qNo) {
+    const modal = document.getElementById('rejectQuotationModal');
+    const form = document.getElementById('rejectQuotationForm');
+    const display = document.getElementById('rejectQuotationNoDisplay');
+    const input = document.getElementById('rejectionRemarksInput');
+    if (modal && form) {
+        form.action = actionUrl;
+        if (display) display.textContent = qNo ? ('#' + qNo) : '';
+        if (input) input.value = '';
+        modal.style.display = 'flex';
+        setTimeout(() => input && input.focus(), 60);
+    }
+}
+function closeRejectModal() {
+    const modal = document.getElementById('rejectQuotationModal');
+    if (modal) modal.style.display = 'none';
+}
+</script>
 @endsection

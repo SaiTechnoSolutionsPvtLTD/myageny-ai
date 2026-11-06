@@ -69,6 +69,116 @@ tbody tr:last-child td { border-bottom: none; }
 .badge-pending   { background: #fff8ec; color: #9a6200; border: 1px solid #ffd98a; }
 .badge-agree     { background: #edfaf3; color: #1a7a52; border: 1px solid #b6ead0; }
 .badge-disagree  { background: #fef2f2; color: #b42318; border: 1px solid #fecaca; }
+
+/* ── Dropdown Styles for Quotations Table ── */
+.crm-table-dropdown {
+    position: relative;
+    display: inline-block;
+}
+.crm-table-dropdown[open] {
+    z-index: 1050 !important;
+}
+.crm-table-dropdown summary {
+    list-style: none;
+    outline: none;
+    cursor: pointer;
+}
+.crm-table-dropdown summary::-webkit-details-marker {
+    display: none;
+}
+.crm-table-dropdown-trigger {
+    min-width: 82px;
+    height: 32px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 10px;
+    border: 1px solid #e1dee3;
+    background: #fff;
+    color: #121212;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all .15s ease;
+    user-select: none;
+}
+.crm-table-dropdown[open] .crm-table-dropdown-trigger,
+.crm-table-dropdown-trigger:hover {
+    background: #fff7ed;
+    color: #fe5f04;
+    border-color: #fdba74;
+}
+.crm-table-dropdown-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 170px;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid #ece7ec;
+    background: #ffffff;
+    box-shadow: 0 16px 40px rgba(18, 18, 18, 0.18), 0 4px 12px rgba(0, 0, 0, 0.08);
+    z-index: 99999 !important;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    text-align: left;
+}
+.crm-table-dropdown.dropup .crm-table-dropdown-menu {
+    top: auto !important;
+    bottom: calc(100% + 6px) !important;
+    box-shadow: 0 -16px 40px rgba(18, 18, 18, 0.18), 0 -4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+.crm-table-dropdown-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 12px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: #fff;
+    color: #121212;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    transition: all .15s ease;
+    box-sizing: border-box;
+}
+.crm-table-dropdown-item i {
+    font-size: 14px;
+    line-height: 1;
+}
+.crm-table-dropdown-item:hover {
+    background: #fff7ed;
+    color: #fe5f04;
+    border-color: #fed7aa;
+}
+.crm-table-dropdown-item.danger {
+    color: #dc2626;
+}
+.crm-table-dropdown-item.danger:hover {
+    background: #fef2f2;
+    color: #dc2626;
+    border-color: #fecaca;
+}
+.crm-table-dropdown-item:disabled,
+.crm-table-dropdown-item.disabled {
+    opacity: .5;
+    cursor: not-allowed;
+    background: transparent !important;
+    color: #9e9e9e !important;
+    border-color: transparent !important;
+    pointer-events: none;
+}
+.crm-table-dropdown-menu form {
+    margin: 0;
+    width: 100%;
+}
 .action-btns { display: flex; gap: 6px; }
 .btn-outline-sm {
     padding: 4px 12px; border-radius: 10px; font-size: 12px;
@@ -133,6 +243,59 @@ tbody tr:last-child td { border-bottom: none; }
 .qt-modal-actions .btn-primary,
 .qt-modal-actions .btn-filter-reset { border-radius: 10px; }
 .qt-modal-actions .btn-primary:disabled { opacity: .7; cursor: wait; }
+.qt-nav-tabs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e1dee3;
+    padding-bottom: 0;
+}
+.qt-nav-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 10px 10px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    text-decoration: none;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s ease;
+}
+.qt-nav-tab:hover {
+    color: #fe5f04;
+    background: #fff8f5;
+}
+.qt-nav-tab.active {
+    color: #fe5f04;
+    background: #fff;
+    border-bottom-color: #fe5f04;
+}
+.qt-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #f1f5f9;
+    color: #64748b;
+}
+.qt-nav-tab.active .qt-tab-badge {
+    background: #fed7aa;
+    color: #9a3412;
+}
+.qt-tab-badge-amber {
+    background: #fef3c7 !important;
+    color: #b45309 !important;
+    border: 1px solid #fde68a;
+}
 @media (max-width: 1200px) {
     .filter-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -148,8 +311,17 @@ tbody tr:last-child td { border-bottom: none; }
 
     {{-- Header --}}
     <div class="page-header">
-        <div class="page-title">Quotations</div>
-
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div class="page-title">Quotations</div>
+            @if(($currentTab ?? 'all') === 'pending')
+                <span class="badge" style="background:#fffbeb; color:#b45309; border:1px solid #fde68a; font-size:12px; padding:4px 12px;">
+                    <i class="bi bi-clock-fill"></i> Pending Approval Queue ({{ $quotations->total() }})
+                </span>
+            @endif
+        </div>
+        <a href="{{ route('quotations.create') }}" class="btn-primary">
+            <i class="bi bi-plus-lg"></i> Create Quotation
+        </a>
     </div>
 
     {{-- Flash --}}
@@ -160,8 +332,31 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="alert-error">{{ session('error') }}</div>
     @endif
 
+    {{-- Tabs (Visible only if user can approve quotations: Admin & HR) --}}
+    @if(!empty($canApprove))
+        <div class="qt-nav-tabs">
+            <a href="{{ request()->fullUrlWithQuery(['tab' => 'all', 'page' => 1]) }}"
+               class="qt-nav-tab {{ ($currentTab ?? 'all') !== 'pending' ? 'active' : '' }}">
+                <i class="bi bi-collection"></i>
+                <span>All Quotations</span>
+                <span class="qt-tab-badge">{{ $allCount ?? 0 }}</span>
+            </a>
+            <a href="{{ request()->fullUrlWithQuery(['tab' => 'pending', 'page' => 1]) }}"
+               class="qt-nav-tab {{ ($currentTab ?? 'all') === 'pending' ? 'active' : '' }}">
+                <i class="bi bi-clock-history"></i>
+                <span>Pending Approval</span>
+                @if(($pendingCount ?? 0) > 0)
+                    <span class="qt-tab-badge qt-tab-badge-amber">{{ $pendingCount }}</span>
+                @else
+                    <span class="qt-tab-badge">0</span>
+                @endif
+            </a>
+        </div>
+    @endif
+
     <div class="filter-card">
         <form method="GET" action="{{ url()->current() }}" class="filter-form">
+            <input type="hidden" name="tab" value="{{ $currentTab ?? 'all' }}">
             @if(request('lead_id'))
                 <input type="hidden" name="lead_id" value="{{ request('lead_id') }}">
             @endif
@@ -197,14 +392,17 @@ tbody tr:last-child td { border-bottom: none; }
                     value="{{ request('end_date') }}">
             </div>
 
+            @if(($currentTab ?? 'all') !== 'pending')
             <div class="filter-group">
-                <label class="filter-label" for="status">Status</label>
+                <label class="filter-label" for="status">Approval Status</label>
                 <select id="status" name="status" class="filter-select">
-                    <option value="">All Status</option>
+                    <option value="">All Approval Status</option>
                     <option value="approved" @selected(request('status') === 'approved')>Approved</option>
-                    <option value="pending" @selected(request('status') === 'pending')>Pending</option>
+                    <option value="pending" @selected(request('status') === 'pending')>Pending Approval</option>
+                    <option value="rejected" @selected(request('status') === 'rejected')>Rejected</option>
                 </select>
             </div>
+            @endif
 
             <div class="filter-group">
                 <label class="filter-label" for="customer_response">Customer Status</label>
@@ -229,12 +427,12 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
 
             <button type="submit" class="btn-primary">Apply Filter</button>
-            <a href="{{ url()->current() . (request()->filled('lead_id') ? '?lead_id=' . request('lead_id') : '') }}" class="btn-filter-reset">Reset</a>
+            <a href="{{ url()->current() . (($currentTab ?? 'all') === 'pending' ? '?tab=pending' : '') . (request()->filled('lead_id') ? ((($currentTab ?? 'all') === 'pending' ? '&' : '?') . 'lead_id=' . request('lead_id')) : '') }}" class="btn-filter-reset">Reset</a>
         </form>
     </div>
 
     {{-- Table --}}
-    <div class="card">
+    <div class="card crm-table-card">
         <div class="table-responsive">
             <table>
                 <thead>
@@ -245,10 +443,9 @@ tbody tr:last-child td { border-bottom: none; }
                         <th>Date</th>
                         <th>Valid Until</th>
                         <th>Total Amount</th>
+                        <th>Approval Status</th>
                         <th>Customer Status</th>
-                        {{--  <th>Status</th>  --}}
-                        {{--  <th>Approved By</th>  --}}
-                        <th>Actions</th>
+                        <th style="text-align:right">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -266,6 +463,8 @@ tbody tr:last-child td { border-bottom: none; }
                             'disagree', 'rejected', 'reject' => 'bi-x-circle-fill',
                             default => 'bi-clock-fill',
                         };
+                        $canApprove = (bool) auth()->user()?->canApproveQuotation();
+                        $isApproved = (bool) $q->is_approved;
                     @endphp
                     <tr>
                         <td>{{ $loop->iteration + ($quotations->firstItem() - 1) }}</td>
@@ -277,6 +476,32 @@ tbody tr:last-child td { border-bottom: none; }
                         <td>{{ $q->valid_until ? $q->valid_until->format('d M Y') : ($q->quotation_date ? $q->quotation_date->copy()->addDays(7)->format('d M Y') : '—') }}</td>
                         <td><strong>₹{{ number_format($q->total_amount, 2) }}</strong></td>
                         <td>
+                            @if($isApproved)
+                                <span class="badge" style="background:#dcfce7; color:#15803d; border:1px solid #bbf7d0;">
+                                    <i class="bi bi-check-circle-fill"></i> Approved
+                                </span>
+                                @if($q->approver)
+                                    <br><small style="color:#64748b; font-size:11px;">by {{ $q->approver->name }}</small>
+                                @endif
+                            @elseif($q->rejected_at)
+                                <span class="badge" style="background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;" title="Remarks: {{ $q->rejection_remarks }}">
+                                    <i class="bi bi-x-circle-fill"></i> Rejected
+                                </span>
+                                @if($q->rejecter)
+                                    <br><small style="color:#64748b; font-size:11px;">by {{ $q->rejecter->name }}</small>
+                                @endif
+                                @if($q->rejection_remarks)
+                                    <br><small style="color:#b91c1c; font-size:10px; font-weight:600; max-width:130px; display:inline-block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ $q->rejection_remarks }}">
+                                        {{ $q->rejection_remarks }}
+                                    </small>
+                                @endif
+                            @else
+                                <span class="badge" style="background:#fffbeb; color:#b45309; border:1px solid #fde68a;">
+                                    <i class="bi bi-clock-fill"></i> Pending Approval
+                                </span>
+                            @endif
+                        </td>
+                        <td>
                             <span class="badge {{ $responseBadge }}">
                                 <i class="bi {{ $responseIcon }}"></i> {{ $q->customer_response_label }}
                             </span>
@@ -285,54 +510,91 @@ tbody tr:last-child td { border-bottom: none; }
                                 <small style="color:#9e9e9e">{{ $q->customer_responded_at->format('d M Y, h:i A') }}</small>
                             @endif
                         </td>
-                        {{--  <td>
-                            @if($q->is_approved)
-                                <span class="badge badge-approved"><i class="bi bi-check-circle-fill"></i> Approved</span>
-                            @else
-                                <span class="badge badge-pending"><i class="bi bi-clock-fill"></i> Pending</span>
-                            @endif
-                        </td>  --}}
-                        {{--  <td>{{ $q->approver->name ?? '—' }}</td>  --}}
-                        <td>
-                            <div class="action-btns">
-                                <a href="{{ request()->routeIs('accounts.*') ? route('accounts.quotations.show', $q) : route('quotations.show', $q) }}" class="btn-outline-sm">
-                                    <i class="bi bi-eye"></i> View
-                                </a>
-                                <a href="{{ route('quotations.edit', $q) }}" class="btn-outline-sm">
-                                    <i class="bi bi-pencil"></i> Edit
-                                </a>
-                                <button
-                                    type="button"
-                                    class="btn-send-sm js-send-quotation"
-                                    data-action="{{ route('quotations.send-email', $q) }}"
-                                    data-quotation="{{ $q->quotation_no }}"
-                                    data-email="{{ $leadEmail ?? '' }}"
-                                    data-lead="{{ $q->lead?->contact_name ?? $q->lead?->company_name ?? 'Lead' }}"
-                                    @if(empty($leadEmail)) disabled title="Lead email not available" @endif>
-                                    <i class="bi bi-send"></i> Send Quotation
-                                </button>
-                                @if(!$q->is_approved)
-                                {{--  <form method="POST" action="{{ route('quotations.approve', $q) }}" style="display:inline">
-                                    @csrf @method('PATCH')
-                                    <button class="btn-outline-sm" style="border-color:#4caf50;color:#2e7d32">
-                                        <i class="bi bi-check-lg"></i> Approve
-                                    </button>
-                                </form>  --}}
-                                @endif
-                                <form method="POST" action="{{ route('quotations.destroy', $q) }}"
-                                      onsubmit="return confirm('Delete this quotation?')" style="display:inline">
-                                    @csrf @method('DELETE')
-                                    <button class="btn-danger-sm"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </div>
+                        <td style="text-align:right">
+                            <details class="crm-table-dropdown table-dropdown">
+                                <summary class="crm-table-dropdown-trigger" title="Actions">
+                                    <span>Actions</span>
+                                    <i class="bi bi-chevron-down" style="font-size:10px;"></i>
+                                </summary>
+                                <div class="crm-table-dropdown-menu">
+                                    <a href="{{ request()->routeIs('accounts.*') ? route('accounts.quotations.show', $q) : route('quotations.show', $q) }}" class="crm-table-dropdown-item" title="View Quotation">
+                                        <i class="bi bi-eye"></i>
+                                        <span>View</span>
+                                    </a>
+
+                                    @if(!$isApproved && $canApprove)
+                                        <form method="POST" action="{{ route('quotations.approve', $q) }}">
+                                            @csrf @method('PATCH')
+                                            <button type="submit" class="crm-table-dropdown-item" style="color:#15803d;" title="Approve Quotation" onclick="return confirm('Approve Quotation #{{ $q->quotation_no }}?')">
+                                                <i class="bi bi-check-circle-fill"></i>
+                                                <span>Approve</span>
+                                            </button>
+                                        </form>
+                                        @if(!$q->rejected_at)
+                                            <button type="button" class="crm-table-dropdown-item danger js-reject-quotation"
+                                                    title="Reject Quotation with remarks"
+                                                    data-action="{{ route('quotations.reject', $q) }}"
+                                                    data-quotation="{{ $q->quotation_no }}">
+                                                <i class="bi bi-x-circle-fill"></i>
+                                                <span>Reject</span>
+                                            </button>
+                                        @endif
+                                    @endif
+
+                                    <a href="{{ route('quotations.edit', $q) }}" class="crm-table-dropdown-item" title="Edit Quotation">
+                                        <i class="bi bi-pencil"></i>
+                                        <span>Edit</span>
+                                    </a>
+
+                                    @if(!$isApproved)
+                                        <span class="crm-table-dropdown-item disabled" title="Quotation requires Admin or HR approval before sending">
+                                            <i class="bi bi-send"></i>
+                                            <span>Send Quotation</span>
+                                        </span>
+                                    @elseif(empty($leadEmail))
+                                        <span class="crm-table-dropdown-item disabled" title="Lead email not available">
+                                            <i class="bi bi-send"></i>
+                                            <span>Send Quotation</span>
+                                        </span>
+                                    @else
+                                        <button
+                                            type="button"
+                                            class="crm-table-dropdown-item js-send-quotation"
+                                            style="color:#1a7a52;"
+                                            data-action="{{ route('quotations.send-email', $q) }}"
+                                            data-quotation="{{ $q->quotation_no }}"
+                                            data-email="{{ $leadEmail }}"
+                                            data-lead="{{ $q->lead?->contact_name ?? $q->lead?->company_name ?? 'Lead' }}"
+                                            title="Send Quotation via Email">
+                                            <i class="bi bi-send"></i>
+                                            <span>Send Quotation</span>
+                                        </button>
+                                    @endif
+
+                                    <form method="POST" action="{{ route('quotations.destroy', $q) }}"
+                                          onsubmit="return confirm('Delete this quotation?')">
+                                        @csrf @method('DELETE')
+                                        <button type="submit" class="crm-table-dropdown-item danger" title="Delete Quotation">
+                                            <i class="bi bi-trash"></i>
+                                            <span>Delete</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </details>
                         </td>
                     </tr>
                     @empty
                     <tr>
                         <td colspan="9">
                             <div class="empty-state">
-                                <i class="bi bi-file-earmark-text"></i>
-                                No quotations found.
+                                @if(($currentTab ?? 'all') === 'pending')
+                                    <i class="bi bi-check-circle-fill" style="color:#10b981; font-size:42px;"></i>
+                                    <p style="font-size:15px; font-weight:700; color:#1e293b; margin-top:8px;">No Quotations Pending Approval</p>
+                                    <p style="font-size:13px; color:#64748b;">All quotations have been approved or none are awaiting review.</p>
+                                @else
+                                    <i class="bi bi-file-earmark-text"></i>
+                                    <p style="margin-top:8px;">No quotations found.</p>
+                                @endif
                             </div>
                         </td>
                     </tr>
@@ -373,6 +635,46 @@ tbody tr:last-child td { border-bottom: none; }
                     <button type="button" class="btn-filter-reset" id="sendQuotationCancel">Cancel</button>
                     <button type="submit" class="btn-primary" id="sendQuotationSubmit">
                         <i class="bi bi-send"></i> Send Mail
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {{-- Reject Quotation Modal --}}
+    <div class="qt-modal-backdrop" id="rejectQuotationModal" aria-hidden="true">
+        <div class="qt-modal" role="dialog" aria-modal="true" style="width: min(480px, 100%);">
+            <form method="POST" id="rejectQuotationForm" action="">
+                @csrf @method('PATCH')
+                <div class="qt-modal-header">
+                    <div class="qt-modal-title" style="display:flex; align-items:center; gap:8px; color:#dc2626;">
+                        <i class="bi bi-x-circle-fill"></i>
+                        <span>Reject Quotation</span>
+                    </div>
+                    <button type="button" class="qt-modal-close" id="rejectQuotationClose" aria-label="Close">&times;</button>
+                </div>
+                <div class="qt-modal-copy">
+                    Please enter the reason / remarks for rejecting quotation <strong id="rejectQuotationNoDisplay"></strong>. These remarks will be emailed directly to the sales person.
+                </div>
+                <div style="margin-bottom: 18px;">
+                    <label style="display:block; font-size:12px; font-weight:700; color:#374151; margin-bottom:6px;">
+                        Rejection Remarks <span style="color:#dc2626;">*</span>
+                    </label>
+                    <textarea
+                        name="rejection_remarks"
+                        id="rejectionRemarksInput"
+                        rows="3"
+                        required
+                        minlength="3"
+                        maxlength="1000"
+                        placeholder="Enter reason for rejection (e.g. incorrect pricing, missing discount, scope change)..."
+                        style="width:100%; border:1px solid #cbd5e1; border-radius:10px; padding:10px 12px; font-size:13px; font-family:inherit; resize:vertical; box-sizing:border-box; outline:none;"
+                    ></textarea>
+                </div>
+                <div class="qt-modal-actions">
+                    <button type="button" class="btn-filter-reset" id="rejectQuotationCancel">Cancel</button>
+                    <button type="submit" class="btn-danger-sm" id="rejectQuotationSubmit" style="padding:10px 18px; font-size:13px; font-weight:700; border-radius:10px; background:#dc2626; color:#ffffff; border:none; cursor:pointer;">
+                        <i class="bi bi-x-circle"></i> Confirm Rejection
                     </button>
                 </div>
             </form>
@@ -444,6 +746,47 @@ tbody tr:last-child td { border-bottom: none; }
     form.addEventListener('submit', function () {
         submitButton.disabled = true;
         submitButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending...';
+    });
+})();
+
+// Rejection Modal JS
+(function () {
+    const rejectModal = document.getElementById('rejectQuotationModal');
+    const rejectForm = document.getElementById('rejectQuotationForm');
+    const rejectClose = document.getElementById('rejectQuotationClose');
+    const rejectCancel = document.getElementById('rejectQuotationCancel');
+    const rejectQuotationNoDisplay = document.getElementById('rejectQuotationNoDisplay');
+    const rejectionRemarksInput = document.getElementById('rejectionRemarksInput');
+
+    if (!rejectModal || !rejectForm) return;
+
+    function openRejectModal(actionUrl, qNo) {
+        rejectForm.action = actionUrl;
+        if (rejectQuotationNoDisplay) rejectQuotationNoDisplay.textContent = qNo ? ('#' + qNo) : '';
+        if (rejectionRemarksInput) rejectionRemarksInput.value = '';
+        rejectModal.classList.add('is-open');
+        setTimeout(() => rejectionRemarksInput && rejectionRemarksInput.focus(), 60);
+    }
+
+    function closeRejectModal() {
+        rejectModal.classList.remove('is-open');
+    }
+
+    document.querySelectorAll('.js-reject-quotation').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            openRejectModal(btn.dataset.action, btn.dataset.quotation);
+        });
+    });
+
+    rejectClose?.addEventListener('click', closeRejectModal);
+    rejectCancel?.addEventListener('click', closeRejectModal);
+
+    rejectModal.addEventListener('click', function (e) {
+        if (e.target === rejectModal) closeRejectModal();
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && rejectModal.classList.contains('is-open')) closeRejectModal();
     });
 })();
 </script>

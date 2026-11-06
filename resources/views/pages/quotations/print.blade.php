@@ -92,6 +92,53 @@
             box-decoration-break: clone;
         }
 
+        /* Quotation Watermark (Shown when unapproved, removed on approval) */
+        .quotation-watermark-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-select: none;
+            z-index: 20;
+            overflow: hidden;
+        }
+        .quotation-watermark-stamp {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transform: rotate(-30deg);
+            padding: 16px 44px;
+            border: 5px dashed rgba(220, 38, 38, 0.24);
+            border-radius: 18px;
+            background: rgba(254, 242, 242, 0.08);
+        }
+        .quotation-watermark-text {
+            font-size: 82px;
+            font-weight: 900;
+            letter-spacing: 6px;
+            line-height: 1;
+            color: rgba(220, 38, 38, 0.18);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .quotation-watermark-sub {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: rgba(220, 38, 38, 0.22);
+            margin-top: 8px;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
         /* Top Header */
         .inv-header {
             display: flex;
@@ -394,6 +441,22 @@
                 break-after: auto !important;
                 margin: 0 auto !important;
             }
+            .quotation-watermark-container {
+                display: flex !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .quotation-watermark-stamp {
+                border-color: rgba(220, 38, 38, 0.28) !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .quotation-watermark-text,
+            .quotation-watermark-sub {
+                color: rgba(220, 38, 38, 0.24) !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
             .party-head.party-right, .party-body.party-right {
                 border-right: none !important;
             }
@@ -517,6 +580,14 @@
     @endphp
 
     <div class="invoice-sheet">
+        @if(! $quotation->is_approved)
+            <div class="quotation-watermark-container" aria-hidden="true">
+                <div class="quotation-watermark-stamp">
+                    <div class="quotation-watermark-text">Myagenci</div>
+                    <div class="quotation-watermark-sub">Pending Approval</div>
+                </div>
+            </div>
+        @endif
 
         {{-- 1. Top Header --}}
         <div class="inv-header">
@@ -652,7 +723,7 @@
                 <tr>
                     <td class="td-item" style="text-align:center; font-weight:700;">{{ $index + 1 }}</td>
                     <td class="td-item">
-                        <div style="font-weight:800; color:#000;">{{ $item->product?->product_name ?? ($item->item_name ?? '—') }}</div>
+                        <div style="font-weight:800; color:#000;">{{ $item->item_name ?: ($item->product?->product_name ?? '—') }}</div>
                         @if(!empty($item->description))
                             <div style="font-size:10.5px; color:#334155; margin-top:2px; line-height:1.4;">
                                 {!! nl2br(e($item->description)) !!}
@@ -660,7 +731,7 @@
                         @endif
                     </td>
                     <td class="td-item" style="text-align:center;">{{ $item->hsn_sac_code ?? ($item->product?->hsn_code ?: '—') }}</td>
-                    <td class="td-item" style="text-align:center;">{{ number_format((float) $item->quantity, 2) }}</td>
+                    <td class="td-item" style="text-align:center;">{{ number_format((float) ($item->quantity ?: $item->qty), 2) }}</td>
                     <td class="td-item" style="text-align:right;">{{ number_format((float) $item->unit_price, 2) }}</td>
                     <td class="td-item" style="text-align:right;">{{ number_format((float) $item->total, 2) }}</td>
                 </tr>
@@ -770,6 +841,14 @@
     @if(!empty(trim($termsBody)))
     {{-- DEDICATED PAGE 2: TERMS & CONDITIONS ONLY --}}
     <div class="invoice-sheet terms-sheet" style="padding: 32px 36px;">
+        @if(! $quotation->is_approved)
+            <div class="quotation-watermark-container" aria-hidden="true">
+                <div class="quotation-watermark-stamp">
+                    <div class="quotation-watermark-text">Myagenci</div>
+                    <div class="quotation-watermark-sub">Pending Approval</div>
+                </div>
+            </div>
+        @endif
         <div style="font-size: 18px; font-weight: 800; color: #000000; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 12px; border-bottom: 1px solid #000000; margin-bottom: 22px;">
             Terms &amp; Conditions
         </div>

@@ -389,46 +389,72 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 24px 14px 20px;
+    padding: 16px 20px 14px 20px;
     border-bottom: 1px solid #000000;
 }
 .ps-header-left {
     display: flex;
     align-items: center;
     gap: 16px;
+    max-width: 68%;
 }
 .ps-logo {
-    height: 60px;
+    height: 56px;
     width: auto;
-    max-width: 150px;
+    max-width: 140px;
     object-fit: contain;
+    flex-shrink: 0;
+}
+.ps-comp-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 .ps-comp-title {
     font-size: 15px;
     font-weight: 800;
     color: #000000;
     line-height: 1.25;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
+    letter-spacing: -0.01em;
 }
 .ps-comp-address {
     font-size: 10.5px;
     color: #000000;
-    line-height: 1.4;
+    line-height: 1.45;
+}
+.ps-comp-line {
+    margin-top: 1px;
+}
+.ps-comp-contact {
+    font-size: 10px;
+    color: #000000;
+    margin-top: 2px;
+}
+.ps-comp-contact strong {
+    color: #000000;
+}
+.ps-comp-sep {
+    margin: 0 6px;
+    color: #000000;
+}
+.ps-header-right {
+    text-align: right;
+    flex-shrink: 0;
 }
 .ps-doc-title {
     font-size: 26px;
     font-weight: 900;
     color: #000000;
     letter-spacing: 0.5px;
-    text-align: right;
     line-height: 1;
-    margin: 0 0 6px 0;
+    margin: 0 0 5px 0;
 }
 .ps-doc-sub {
-    font-size: 10px;
+    font-size: 10.5px;
     color: #000000;
-    text-align: right;
-    font-weight: 600;
+    font-weight: 700;
+    line-height: 1.3;
 }
 
 /* 2-Column Metadata Box */
@@ -453,8 +479,8 @@
     vertical-align: top;
 }
 .ps-meta-label {
-    width: 110px;
-    color: #334155;
+    width: 115px;
+    color: #000000;
     font-weight: 600;
 }
 .ps-meta-colon {
@@ -482,7 +508,7 @@
     color: #000000;
     font-size: 11px;
     font-weight: 800;
-    padding: 6px 12px;
+    padding: 7px 12px;
     border-bottom: 1px solid #000000;
     border-right: 1px solid #000000;
     text-align: left;
@@ -496,7 +522,7 @@
 .ps-td-cell {
     padding: 7px 12px;
     vertical-align: middle;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid #000000;
     border-right: 1px solid #000000;
     color: #000000;
     font-size: 11px;
@@ -514,13 +540,17 @@
     font-weight: 800;
     border-top: 1px solid #000000;
     border-bottom: 1px solid #000000;
+    border-right: 1px solid #000000;
     padding: 7px 12px;
 }
+.ps-subtotal-row td:last-child {
+    border-right: none !important;
+}
 
-/* Bottom Summary Section */
+/* Bottom Summary Section (Exact 50/50 split matching central vertical divider) */
 .ps-bottom-grid {
     display: grid;
-    grid-template-columns: 1.15fr 0.85fr;
+    grid-template-columns: 1fr 1fr;
     min-height: 180px;
 }
 .ps-bottom-left {
@@ -543,15 +573,15 @@
 }
 .ps-sec-body {
     font-size: 10.5px;
-    color: #1e293b;
+    color: #000000;
     line-height: 1.45;
 }
 .ps-words-box {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     padding: 6px 10px;
     background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
+    border: 1px solid #000000;
+    border-radius: 4px;
 }
 .ps-totals-tbl {
     width: 100%;
@@ -559,8 +589,9 @@
     border-bottom: 1px solid #000000;
 }
 .ps-totals-tbl td {
-    padding: 5px 12px;
+    padding: 6px 12px;
     vertical-align: middle;
+    border-bottom: 1px solid #000000;
 }
 .ps-totals-tbl .t-label {
     text-align: right;
@@ -579,8 +610,9 @@
 .ps-totals-tbl .net-row td {
     background: #f0fdf4;
     border-top: 1px solid #000000;
-    padding-top: 7px;
-    padding-bottom: 7px;
+    border-bottom: none;
+    padding-top: 8px;
+    padding-bottom: 8px;
 }
 .ps-sig-container {
     padding: 14px 12px 10px 12px;
@@ -595,33 +627,97 @@
     border-top: 1px solid #000000;
     padding-top: 4px;
     font-weight: 800;
-    font-size: 10px;
+    font-size: 10.5px;
     color: #000000;
 }
 .ps-footer-note {
     border-top: 1px solid #000000;
     padding: 6px 12px;
     font-size: 9.5px;
-    color: #64748b;
+    color: #000000;
     text-align: center;
     background: #fafafa;
 }
 
+/* Hide floating widgets (Notification & Modules) on payslip page */
+.app-notify-fab,
+#appNotifyFab,
+.module-fab,
+#moduleFab,
+.module-overlay,
+#moduleOverlay,
+.module-panel,
+#modulePanel {
+    display: none !important;
+}
+
 /* Print Handling */
 @media print {
-    body { background: #fff !important; }
-    .inv-topbar, .inv-kpi-grid, .inv-doc-toolbar, .navbar, .sidebar, header, footer { display: none !important; }
-    .inv-page, .inv-body, .inv-canvas-surface, .inv-canvas-wrap {
-        padding: 0 !important;
+    @page {
+        size: A4 portrait;
+        margin: 8mm 10mm;
+    }
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    html, body {
+        background: #ffffff !important;
+        color: #000000 !important;
         margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+    }
+    .sidebar,
+    .sidebar-header,
+    .navbar,
+    header,
+    footer,
+    aside,
+    .app-notify-fab,
+    #appNotifyFab,
+    .module-fab,
+    #moduleFab,
+    .module-overlay,
+    #moduleOverlay,
+    .module-panel,
+    #modulePanel,
+    .inv-topbar,
+    .inv-kpi-grid,
+    .inv-doc-toolbar,
+    .inv-breadcrumbs,
+    .inv-header-actions,
+    .print-hide {
+        display: none !important;
+    }
+    .container,
+    main,
+    .inv-page,
+    .inv-body,
+    .inv-canvas-wrap,
+    .inv-canvas-surface {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
         background: transparent !important;
+        border: none !important;
         box-shadow: none !important;
+        overflow: visible !important;
     }
     .payslip-sheet {
-        box-shadow: none !important;
-        border: 1px solid #000 !important;
+        display: block !important;
+        width: 100% !important;
         max-width: 100% !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+        border: 1px solid #000000 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
         transform: none !important;
+        page-break-inside: avoid;
         page-break-after: avoid;
     }
 }
@@ -638,7 +734,7 @@
                     <i class="bi bi-arrow-left"></i> Back to Payroll Batch
                 </a>
                 <div class="inv-breadcrumbs">
-                    <a href="{{ route('home') }}"><i class="bi bi-house-door"></i></a>
+                    <a href="{{ route('dashboard') }}"><i class="bi bi-house-door"></i></a>
                     <span>/</span>
                     <a href="{{ route('payroll.index') }}">HRMS</a>
                     <span>/</span>
@@ -671,9 +767,6 @@
                         <span class="inv-num-pill">#{{ $item->employee_code }}</span>
                         <span class="acm-badge status-paid">
                             <i class="bi bi-check-circle-fill"></i> VERIFIED &amp; PAID
-                        </span>
-                        <span class="acm-badge status-cycle">
-                            <i class="bi bi-arrow-repeat"></i> {{ $cycleLabel }}
                         </span>
                     </div>
                     <div class="inv-meta-row">
@@ -790,19 +883,32 @@
                             @if(!empty($logoUrl))
                                 <img src="{{ $logoUrl }}" alt="Company Logo" class="ps-logo">
                             @endif
-                            <div>
+                            <div class="ps-comp-info">
                                 <div class="ps-comp-title">{{ $companyName }}</div>
-                                @if($companyAddress || $companyPhone || $companyEmail)
-                                    <div class="ps-comp-address">
-                                        {{ trim(collect([$companyAddress, $companyPhone, $companyEmail])->filter()->implode(' • ')) }}
-                                    </div>
-                                @endif
+                                <div class="ps-comp-address">
+                                    @if($companyAddress)
+                                        <div class="ps-comp-line">{{ $companyAddress }}</div>
+                                    @endif
+                                    @if($companyPhone || $companyEmail)
+                                        <div class="ps-comp-line ps-comp-contact">
+                                            @if($companyPhone)
+                                                <span><strong>Phone:</strong> {{ $companyPhone }}</span>
+                                            @endif
+                                            @if($companyPhone && $companyEmail)
+                                                <span class="ps-comp-sep">&bull;</span>
+                                            @endif
+                                            @if($companyEmail)
+                                                <span><strong>Email:</strong> {{ $companyEmail }}</span>
+                                            @endif
+                                        </div>
+                                    @endif
+                                </div>
                             </div>
                         </div>
-                        <div>
+                        <div class="ps-header-right">
                             <div class="ps-doc-title">PAYSLIP</div>
                             <div class="ps-doc-sub">FOR {{ strtoupper($payroll->salary_month->format('F Y')) }}</div>
-                            <div class="ps-doc-sub" style="margin-top:2px;color:#64748b;">Issued on: {{ $issuedOn }}</div>
+                            <div class="ps-doc-sub" style="margin-top:3px;color:#000000;">Issued on: {{ $issuedOn }}</div>
                         </div>
                     </div>
 
@@ -851,12 +957,12 @@
                                     <td class="ps-meta-val">{{ optional($item->employee)->bank_name ? (optional($item->employee)->bank_name . ' (' . (optional($item->employee)->bank_branch ?: 'Main') . ')') : 'N/A' }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="ps-meta-label">Salary Cycle</td>
+                                    <td class="ps-meta-label">Bank A/C No.</td>
                                     <td class="ps-meta-colon">:</td>
-                                    <td class="ps-meta-val">{{ $cycleLabel }}</td>
+                                    <td class="ps-meta-val">{{ optional($item->employee)->account_number ? ('****' . substr(optional($item->employee)->account_number, -4)) : 'N/A' }}</td>
                                 </tr>
                                 <tr>
-                                    <td class="ps-meta-label">Cycle Period</td>
+                                    <td class="ps-meta-label">Pay Period</td>
                                     <td class="ps-meta-colon">:</td>
                                     <td class="ps-meta-val">{{ $cStart->format('d M Y') }} - {{ $cEnd->format('d M Y') }}</td>
                                 </tr>
@@ -873,7 +979,7 @@
                                 <tr>
                                     <td class="ps-meta-label">Leave / LOP</td>
                                     <td class="ps-meta-colon">:</td>
-                                    <td class="ps-meta-val">{{ number_format((float) $item->leave_days, 1) }} / {{ number_format((float) $item->lop_days, 1) }}{{ (float) ($item->timesheet_lop_days ?? 0) > 0 ? ' (TS: ' . number_format((float) $item->timesheet_lop_days, 1) . ')' : '' }}</td>
+                                    <td class="ps-meta-val">{{ number_format((float) $item->leave_days, 1) }} / {{ number_format((float) $item->lop_days, 1) }}</td>
                                 </tr>
                             </table>
                         </div>

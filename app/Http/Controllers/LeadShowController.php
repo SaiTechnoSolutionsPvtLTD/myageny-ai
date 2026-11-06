@@ -19,6 +19,7 @@ use App\Models\QuotationItem;
 use App\Models\ZohoIntegration;
 use App\Services\ActivityLogger;
 use App\Services\DataVisibilityService;
+use App\Services\QuotationNotificationService;
 use App\Services\ZohoBooksService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -529,6 +530,10 @@ class LeadShowController extends Controller
         }
 
         $quotation->refresh()->recalculateTotals();
+
+        if (! $quotation->is_approved) {
+            QuotationNotificationService::sendPendingApprovalNotification($quotation);
+        }
 
         return back()->with('success', "Quotation <strong>{$quotation->quotation_number}</strong> created.");
     }

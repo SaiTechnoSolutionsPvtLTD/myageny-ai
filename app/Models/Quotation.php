@@ -175,6 +175,9 @@ class Quotation extends Model
         'cgst_amount',
         'sgst_amount',
         'igst_amount',
+        'rejected_by',
+        'rejected_at',
+        'rejection_remarks',
     ];
 
     protected $casts = [
@@ -183,6 +186,7 @@ class Quotation extends Model
         'is_approved'    => 'boolean',
         'customer_responded_at' => 'datetime',
         'approved_at'    => 'datetime',
+        'rejected_at'    => 'datetime',
         'tax'            => 'decimal:2',
         'subtotal'       => 'decimal:2',
         'tax_amount'     => 'decimal:2',
@@ -205,6 +209,11 @@ class Quotation extends Model
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function rejecter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 
     public function createdBy(): BelongsTo

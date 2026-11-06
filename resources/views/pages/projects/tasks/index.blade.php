@@ -562,7 +562,10 @@
 
                                         $hasSupportTask = $group->contains(fn($t) => ($t->task_type ?? '') === 'support');
                                     @endphp
-                                    <tr data-group-row>
+                                    <tr data-group-row 
+                                        data-user-name="{{ $assignedUser?->name ?: 'Team Member' }}"
+                                        data-task-date="{{ optional($taskDate)->format('d M Y') }}"
+                                        data-tasks='@json($tasksData)'>
                                         <!-- Date -->
                                         <td>
                                             <div style="font-weight:800; color:#0f172a;">
@@ -605,10 +608,7 @@
                                         <td>
                                             <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                                                 <button type="button" 
-                                                        class="pts-btn pts-btn-outline open-tasks-modal-btn" 
-                                                        data-user-name="{{ $assignedUser?->name ?: 'Team Member' }}"
-                                                        data-task-date="{{ optional($taskDate)->format('d M Y') }}"
-                                                        data-tasks='@json($tasksData)'>
+                                                        class="pts-btn pts-btn-outline open-tasks-modal-btn">
                                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                                     <span>View Tasks</span>
                                                     <span class="pts-badge count" style="padding:2px 7px; font-size:10px; margin-left:2px;">{{ $totalTasks }}</span>
@@ -639,9 +639,6 @@
                                             <button type="button" 
                                                     class="pts-btn pts-btn-primary open-tasks-modal-btn" 
                                                     style="padding:7px 12px; font-size:12px;"
-                                                    data-user-name="{{ $assignedUser?->name ?: 'Team Member' }}"
-                                                    data-task-date="{{ optional($taskDate)->format('d M Y') }}"
-                                                    data-tasks='@json($tasksData)'
                                                     title="View task items">
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
                                                 <span>Details</span>
@@ -1112,11 +1109,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.querySelectorAll('.open-tasks-modal-btn').forEach(btn => {
         btn.addEventListener('click', function () {
-            const userName = this.getAttribute('data-user-name');
-            const taskDate = this.getAttribute('data-task-date');
+            const row = this.closest('tr');
+            const userName = this.getAttribute('data-user-name') || row?.getAttribute('data-user-name') || 'Team Member';
+            const taskDate = this.getAttribute('data-task-date') || row?.getAttribute('data-task-date') || '';
             let tasks = [];
             try {
-                tasks = JSON.parse(this.getAttribute('data-tasks') || '[]');
+                const rawTasks = this.getAttribute('data-tasks') || row?.getAttribute('data-tasks');
+                tasks = JSON.parse(rawTasks || '[]');
             } catch (e) {
                 console.error('Failed to parse tasks JSON', e);
             }

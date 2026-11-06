@@ -16,6 +16,7 @@ use App\Models\QuotationSetting;
 use App\Models\User;
 use App\Models\ZohoIntegration;
 use App\Services\DataVisibilityService;
+use App\Services\QuotationNotificationService;
 use App\Services\ZohoBooksService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -42,10 +43,32 @@ class QuotationController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = Quotation::with(['lead', 'approver'])
+        $user = auth()->user();
+        $canApprove = (bool) ($user?->canApproveQuotation());
+
+        $currentTab = $request->get('tab', 'all');
+        if ($currentTab === 'pending' && ! $canApprove) {
+            $currentTab = 'all';
+        }
+
+        $query = Quotation::with(['lead', 'approver', 'rejecter'])
             ->latest();
 
         $this->visibility->applyQuotationVisibility($query);
+
+        // Counts for tabs (scoped to user's visibility)
+        $allCount = 0;
+        $pendingCount = 0;
+        if ($canApprove) {
+            $baseCountQuery = Quotation::query();
+            $this->visibility->applyQuotationVisibility($baseCountQuery);
+            $allCount = (clone $baseCountQuery)->count();
+            $pendingCount = (clone $baseCountQuery)->where('is_approved', false)->whereNull('rejected_at')->count();
+        }
+
+        if ($currentTab === 'pending') {
+            $query->where('is_approved', false)->whereNull('rejected_at');
+        }
 
         if ($request->filled('lead_id')) {
             $query->where('lead_id', $request->lead_id);
@@ -55,11 +78,13 @@ class QuotationController extends Controller
             $query->where('quotation_no', 'like', '%' . trim($request->quotation_no) . '%');
         }
 
-        if ($request->filled('status')) {
+        if ($request->filled('status') && $currentTab !== 'pending') {
             if ($request->status === 'approved') {
                 $query->where('is_approved', true);
             } elseif ($request->status === 'pending') {
-                $query->where('is_approved', false);
+                $query->where('is_approved', false)->whereNull('rejected_at');
+            } elseif ($request->status === 'rejected') {
+                $query->whereNotNull('rejected_at');
             }
         }
 
@@ -88,7 +113,14 @@ class QuotationController extends Controller
         $quotations = $query->paginate(15)->withQueryString();
         $approvers = $this->visibility->visibleAssignableUsers();
 
-        return view('pages.quotations.index', compact('quotations', 'approvers'));
+        return view('pages.quotations.index', compact(
+            'quotations',
+            'approvers',
+            'currentTab',
+            'canApprove',
+            'allCount',
+            'pendingCount'
+        ));
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -98,7 +130,7 @@ class QuotationController extends Controller
      */
     public function create($leadId = null): View
     {
-        $lead = $leadId ? Lead::with('branch')->findOrFail($leadId) : null;
+        $lead = $leadId ? Lead::with(['branch', 'products.product', 'customerMasters'])->findOrFail($leadId) : null;
         if ($lead) {
             abort_unless($this->visibility->canAccessLead($lead), 403);
         }
@@ -122,16 +154,57 @@ class QuotationController extends Controller
         $selectedLeadId = $leadId;
         $companyId = $lead?->company_id ?? auth()->user()?->company_id;
 
+        $customerMaster = $lead?->customerMasters?->first();
+        $billToAddress = $customerMaster ? trim(implode("\n", array_filter([
+            $customerMaster->billing_address_street_1,
+            $customerMaster->billing_address_street_2,
+            $customerMaster->billing_city,
+            $customerMaster->billing_state,
+            $customerMaster->billing_pin_code,
+        ]))) : null;
+        $shipToAddress = $customerMaster ? trim(implode("\n", array_filter([
+            $customerMaster->shipping_address_street_1,
+            $customerMaster->shipping_address_street_2,
+            $customerMaster->shipping_city,
+            $customerMaster->shipping_state,
+            $customerMaster->shipping_pin_code,
+        ]))) : null;
+
         $defaults = [
-            'quotation_no'   => Quotation::generateQuotationNo($companyId),
-            'quotation_date' => now()->toDateString(),
-            'valid_until'    => now()->addDays(7)->toDateString(),
-            'tax'            => Quotation::GST_RATE,
-            'seller_state'   => $lead?->branch?->state ?: Quotation::DEFAULT_SELLER_STATE,
-            'customer_state' => 'Tamil Nadu',
+            'quotation_no'    => Quotation::generateQuotationNo($companyId),
+            'quotation_date'  => now()->toDateString(),
+            'valid_until'     => now()->addDays(7)->toDateString(),
+            'tax'             => Quotation::GST_RATE,
+            'seller_state'    => $lead?->branch?->state ?: Quotation::DEFAULT_SELLER_STATE,
+            'customer_state'  => $customerMaster?->billing_state ?: 'Tamil Nadu',
+            'bill_to_address' => $billToAddress,
+            'ship_to_address' => $shipToAddress,
+            'gst_number'      => $customerMaster?->gst_number,
+            'payment_terms'   => $customerMaster?->payment_terms,
         ];
 
-        return view('pages.quotations.create', compact('leads', 'products', 'selectedLeadId', 'defaults', 'lead', 'leadId'));
+        $initialItems = [];
+        if (old('items')) {
+            $initialItems = array_values(old('items'));
+        } elseif ($lead && $lead->products->isNotEmpty()) {
+            foreach ($lead->products as $lp) {
+                $qty = (float) ($lp->quantity ?: 1);
+                $unitPrice = (float) ($lp->unit_price ?: ($lp->product?->base_price ?? 0));
+                $discountPercent = (float) ($lp->discount_percent ?? 0);
+                $discountAmount = $discountPercent > 0 ? ($qty * $unitPrice * ($discountPercent / 100)) : 0;
+
+                $initialItems[] = [
+                    'product_id'  => $lp->product_id,
+                    'item_name'   => $lp->deal_name ?: ($lp->product_name ?: ($lp->product?->product_name ?? '')),
+                    'description' => $lp->description ?: ($lp->remarks ?: ($lp->product?->description ?? '')),
+                    'qty'         => $qty,
+                    'unit_price'  => $unitPrice,
+                    'discount'    => round($discountAmount, 2),
+                ];
+            }
+        }
+
+        return view('pages.quotations.create', compact('leads', 'products', 'selectedLeadId', 'defaults', 'lead', 'leadId', 'initialItems'));
     }
 
     // ── Store ─────────────────────────────────────────────────────────────────
@@ -153,6 +226,7 @@ class QuotationController extends Controller
             // Line items
             'items'                  => ['required', 'array', 'min:1'],
             'items.*.product_id'     => ['required', 'exists:products,id'],
+            'items.*.item_name'      => ['nullable', 'string', 'max:255'],
             'items.*.description'    => ['nullable', 'string'],
             'items.*.qty'            => ['required', 'numeric', 'min:0.01'],
             'items.*.unit_price'     => ['required', 'numeric', 'min:0'],
@@ -233,6 +307,7 @@ class QuotationController extends Controller
                     'quotation_id' => $quotation->id,
                     'company_id'   => $quotation->company_id,
                     'product_id'   => $item['product_id'],
+                    'item_name'    => $item['item_name'] ?? null,
                     'description'  => $item['description'] ?? null,
                     'qty'          => $item['qty'],
                     'unit_price'   => $item['unit_price'],
@@ -243,6 +318,10 @@ class QuotationController extends Controller
 
             return $quotation;
         });
+
+        if (! $quotation->is_approved) {
+            QuotationNotificationService::sendPendingApprovalNotification($quotation);
+        }
 
         // API Response
         if ($request->expectsJson() || $request->is('api/*')) {
@@ -255,14 +334,18 @@ class QuotationController extends Controller
         }
 
         // Web Response
+        $successMessage = $quotation->is_approved
+            ? 'Quotation created successfully.'
+            : 'Quotation created successfully. It is pending approval from Admin or HR before it can be opened, downloaded, or sent.';
+
         return redirect()
             ->route('quotations.index')
-            ->with('success', 'Quotation created successfully.');
+            ->with('success', $successMessage);
     }
 
     // ── Show ──────────────────────────────────────────────────────────────────
 
-    public function show(Quotation $quotation): View
+    public function show(Quotation $quotation)
     {
         abort_unless($this->visibility->canAccessQuotation($quotation), 403);
 
@@ -326,6 +409,7 @@ class QuotationController extends Controller
             // Line items
             'items'                  => ['required', 'array', 'min:1'],
             'items.*.product_id'     => ['required', 'exists:products,id'],
+            'items.*.item_name'      => ['nullable', 'string', 'max:255'],
             'items.*.description'    => ['nullable', 'string'],
             'items.*.qty'            => ['required', 'numeric', 'min:0.01'],
             'items.*.unit_price'     => ['required', 'numeric', 'min:0'],
@@ -393,6 +477,7 @@ class QuotationController extends Controller
                     'quotation_id' => $quotation->id,
                     'company_id'   => $quotation->company_id,
                     'product_id'   => $item['product_id'],
+                    'item_name'    => $item['item_name'] ?? null,
                     'description'  => $item['description'] ?? null,
                     'qty'          => $item['qty'],
                     'unit_price'   => $item['unit_price'],
@@ -401,6 +486,23 @@ class QuotationController extends Controller
                 ]);
             }
         });
+
+        if (! auth()->user()?->canApproveQuotation()) {
+            $quotation->update([
+                'is_approved'       => false,
+                'approved_by'       => null,
+                'approved_at'       => null,
+                'rejected_by'       => null,
+                'rejected_at'       => null,
+                'rejection_remarks' => null,
+            ]);
+
+            QuotationNotificationService::sendPendingApprovalNotification($quotation);
+
+            return redirect()
+                ->route('quotations.index')
+                ->with('success', "Quotation updated successfully. It requires Admin or HR approval before it can be opened, downloaded, or sent.");
+        }
 
         return redirect()
             ->route('quotations.show', $quotation)
@@ -412,14 +514,47 @@ class QuotationController extends Controller
     public function approve(Quotation $quotation): RedirectResponse
     {
         abort_unless($this->visibility->canAccessQuotation($quotation), 403);
+        abort_unless(auth()->user()?->canApproveQuotation(), 403, 'Only Super Admin, Company Admin, or HR can approve quotations.');
 
         $quotation->update([
-            'is_approved' => true,
-            'approved_by' => Auth::id(),
-            'approved_at' => now(),
+            'is_approved'       => true,
+            'approved_by'       => Auth::id(),
+            'approved_at'       => now(),
+            'rejected_by'       => null,
+            'rejected_at'       => null,
+            'rejection_remarks' => null,
         ]);
 
-        return back()->with('success', 'Quotation approved successfully.');
+        QuotationNotificationService::sendApprovedNotification($quotation);
+
+        return back()->with('success', "Quotation #{$quotation->quotation_no} approved successfully.");
+    }
+
+    // ── Reject ────────────────────────────────────────────────────────────────
+
+    public function reject(Request $request, Quotation $quotation): RedirectResponse
+    {
+        abort_unless($this->visibility->canAccessQuotation($quotation), 403);
+        abort_unless(auth()->user()?->canApproveQuotation(), 403, 'Only Super Admin, Company Admin, or HR can reject quotations.');
+
+        $validated = $request->validate([
+            'rejection_remarks' => ['required', 'string', 'min:3', 'max:1000'],
+        ], [
+            'rejection_remarks.required' => 'Please provide remarks / reason for rejecting this quotation.',
+        ]);
+
+        $quotation->update([
+            'is_approved'       => false,
+            'approved_by'       => null,
+            'approved_at'       => null,
+            'rejected_by'       => Auth::id(),
+            'rejected_at'       => now(),
+            'rejection_remarks' => trim($validated['rejection_remarks']),
+        ]);
+
+        QuotationNotificationService::sendRejectedNotification($quotation);
+
+        return back()->with('success', "Quotation #{$quotation->quotation_no} has been rejected and remarks sent to the sales person.");
     }
 
     // ── Convert to Invoice ────────────────────────────────────────────────────
@@ -427,6 +562,10 @@ class QuotationController extends Controller
     public function convertToInvoice(Request $request, Quotation $quotation): RedirectResponse
     {
         abort_unless($this->visibility->canAccessQuotation($quotation), 403);
+
+        if (! $quotation->is_approved) {
+            return back()->with('error', "Quotation #{$quotation->quotation_no} must be approved by Admin or HR before converting to an invoice.");
+        }
 
         $quotation->load(['lead', 'items.product']);
         $companyId = $quotation->company_id ?: auth()->user()?->company_id;
@@ -619,6 +758,10 @@ class QuotationController extends Controller
     public function sendEmail(Quotation $quotation): RedirectResponse
     {
         abort_unless($this->visibility->canAccessQuotation($quotation), 403);
+
+        if (! $quotation->is_approved) {
+            return back()->with('error', "Quotation #{$quotation->quotation_no} must be approved by Admin or HR before sending to client.");
+        }
 
         $quotation->loadMissing(['items.product', 'createdBy', 'lead.createdBy', 'lead.assignedTo']);
 
@@ -950,6 +1093,7 @@ class QuotationController extends Controller
                     'quotation_id' => $quotation->id,
                     'company_id'   => $quotation->company_id,
                     'product_id'   => $item['product_id'],
+                    'item_name'    => $item['item_name'] ?? null,
                     'description'  => $item['description'] ?? null,
                     'qty'          => $item['qty'],
                     'unit_price'   => $item['unit_price'],
@@ -958,6 +1102,10 @@ class QuotationController extends Controller
                 ]);
             }
         });
+
+        if (! $quotation->is_approved) {
+            QuotationNotificationService::sendPendingApprovalNotification($quotation);
+        }
 
         return response()->json([
             'status'    => true,
@@ -1046,6 +1194,7 @@ class QuotationController extends Controller
                     'quotation_id' => $quotation->id,
                     'company_id'   => $quotation->company_id,
                     'product_id'   => $item['product_id'],
+                    'item_name'    => $item['item_name'] ?? null,
                     'description'  => $item['description'] ?? null,
                     'qty'          => $item['qty'],
                     'unit_price'   => $item['unit_price'],
@@ -1054,6 +1203,10 @@ class QuotationController extends Controller
                 ]);
             }
         });
+
+        if (! $quotation->is_approved) {
+            QuotationNotificationService::sendPendingApprovalNotification($quotation);
+        }
 
         return response()->json([
             'status' => true,
@@ -1065,7 +1218,7 @@ class QuotationController extends Controller
     public function downloadPdf($id)
     {
         $quotation = Quotation::with('items', 'createdBy', 'lead.createdBy', 'lead.assignedTo')->findOrFail($id);
-        // abort_unless(auth()->check() && $this->visibility->canAccessQuotation($quotation), 403);
+        abort_unless(auth()->check() && $this->visibility->canAccessQuotation($quotation), 403);
 
         $pdf = $this->makeQuotationPdf($quotation);
         $filename = $this->quotationPdfFilename($quotation);

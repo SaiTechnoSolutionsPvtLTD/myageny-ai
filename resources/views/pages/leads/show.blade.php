@@ -422,7 +422,7 @@ tbody tr:last-child td { border-bottom: none; }
         @endif
 
         {{-- Duplicate Lead Alert Notification --}}
-        @php
+        {{--  @php
             $dups = $duplicateLeads ?? ($lead->duplicateLeads() ?? collect());
         @endphp
         @if(!empty($dups) && $dups->isNotEmpty())
@@ -451,9 +451,9 @@ tbody tr:last-child td { border-bottom: none; }
                     @foreach($dups as $dup)
                     @php
                         $dupUser = $dup->assignedTo;
-                        $dupUserMobile = $dupUser?->mobile_number 
-                            ?: ($dupUser?->employee?->mobile 
-                            ?: ($dupUser?->employee?->official_mobile 
+                        $dupUserMobile = $dupUser?->mobile_number
+                            ?: ($dupUser?->employee?->mobile
+                            ?: ($dupUser?->employee?->official_mobile
                             ?: ($dupUser?->internJoiningForm?->contact_no ?: 'N/A')));
                     @endphp
                     <div style="background:#ffffff; border:1px solid #fbcfe8; border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:8px; box-shadow:0 2px 6px rgba(0,0,0,0.02);">
@@ -496,7 +496,7 @@ tbody tr:last-child td { border-bottom: none; }
                 </div>
             </div>
         </div>
-        @endif
+        @endif  --}}
 
         {{-- ════════════════════════════════════════
              TAB 1 — LEAD INFO

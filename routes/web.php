@@ -1023,6 +1023,7 @@ Route::middleware(['auth'])->group(function () {
         // ── Core CRUD ─────────────────────────────────────────
         Route::get('/',            [LeadController::class, 'index'])->middleware('can:leads.view')->name('index');
         Route::get('/untouched',   [LeadController::class, 'untouchedIndex'])->middleware('can:leads.view')->name('untouched');
+        Route::get('/duplicates',  [LeadController::class, 'duplicatesIndex'])->middleware('can:leads.view')->name('duplicates');
         Route::get('/products',    [LeadController::class, 'productsIndex'])->middleware('can:leads.view')->name('products.index');
         Route::get('/create',      [LeadController::class, 'create'])->middleware('can:leads.create')->name('create');
         Route::get('/call-updates',[LeadCallUpdateController::class, 'index'])->middleware('can:call_updates.view')->name('calls.index');
@@ -1284,6 +1285,7 @@ Route::post('/facebook-integration/update-token', [FacebookIntegrationController
     Route::get('/quotations/{quotation}/edit', [QuotationController::class, 'edit'])->middleware('can:quotations.create')->name('quotations.edit');
     Route::put('/quotations/{quotation}', [QuotationController::class, 'update'])->middleware('can:quotations.create')->name('quotations.update');
     Route::patch('/quotations/{quotation}/approve', [QuotationController::class, 'approve'])->middleware('can:quotations.approve')->name('quotations.approve');
+    Route::patch('/quotations/{quotation}/reject', [QuotationController::class, 'reject'])->middleware('can:quotations.approve')->name('quotations.reject');
     Route::post('/quotations/{quotation}/send-email', [QuotationController::class, 'sendEmail'])->middleware('can:quotations.view')->name('quotations.send-email');
     Route::post('/quotations/{quotation}/convert-to-invoice', [QuotationController::class, 'convertToInvoice'])->name('quotations.convert-to-invoice');
     Route::patch('/quotations/{quotation}/map-lead', [QuotationController::class, 'mapLead'])->middleware('can:quotations.create')->name('quotations.map-lead');

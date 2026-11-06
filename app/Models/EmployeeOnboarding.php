@@ -232,6 +232,11 @@ class EmployeeOnboarding extends Model
         return $this->belongsTo(InternJoiningForm::class, 'source_intern_joining_form_id');
     }
 
+    public function assetEntries(): HasMany
+    {
+        return $this->hasMany(AssetEntry::class, 'assigned_employee_id');
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', self::STATUS_ACTIVE);

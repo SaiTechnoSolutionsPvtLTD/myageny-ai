@@ -446,15 +446,22 @@ class FacebookLeadImporter
             ->first();
 
         if ($existingLead) {
-            $this->createLeadProductIfPossible($existingLead, $mappedValues['core'], $this->resolveNextAssignedUser($campaignIdentifier, $assignedUsers));
+            $assignedUser = $this->resolveNextAssignedUser($campaignIdentifier, $assignedUsers);
+            $this->createLeadProductIfPossible($existingLead, $mappedValues['core'], $assignedUser);
 
-            return $this->syncMappedValuesForExistingLead($existingLead, $mappedValues, $leadFields)
+            return $this->syncMappedValuesForExistingLead($existingLead, $mappedValues, $leadFields, $assignedUser)
                 ? 'updated'
                 : 'skipped';
         }
 
         $assignedUser = $this->resolveNextAssignedUser($campaignIdentifier, $assignedUsers);
-        $leadDate = Carbon::parse(data_get($submission, 'created_time', now()))->toDateString();
+
+        $timezone = config('app.timezone', 'Asia/Kolkata') ?: 'Asia/Kolkata';
+        $fbCreatedTime = data_get($submission, 'created_time');
+        $submissionCarbon = $fbCreatedTime
+            ? Carbon::parse($fbCreatedTime)->setTimezone($timezone)
+            : now($timezone);
+        $leadDate = $submissionCarbon->toDateString();
 
         $leadPayload = $this->buildLeadPayload(
             $campaign,
@@ -466,8 +473,12 @@ class FacebookLeadImporter
             $submission
         );
 
-        DB::transaction(function () use ($leadPayload, $mappedValues, $leadFields, $assignedUser) {
-            $lead = Lead::create($leadPayload);
+        DB::transaction(function () use ($leadPayload, $mappedValues, $leadFields, $assignedUser, $submissionCarbon) {
+            $lead = new Lead($leadPayload);
+            if ($submissionCarbon) {
+                $lead->created_at = $submissionCarbon;
+            }
+            $lead->save();
 
             $this->syncCustomFieldValues($lead, $mappedValues['custom'], $leadFields);
             $this->createLeadProductIfPossible($lead, $mappedValues['core'], $assignedUser);
@@ -476,8 +487,12 @@ class FacebookLeadImporter
         return 'created';
     }
 
-    protected function syncMappedValuesForExistingLead(Lead $lead, array $mappedValues, Collection $leadFields): bool
-    {
+    protected function syncMappedValuesForExistingLead(
+        Lead $lead,
+        array $mappedValues,
+        Collection $leadFields,
+        ?User $assignedUser = null
+    ): bool {
         $updated = false;
 
         $core = $mappedValues['core'] ?? [];
@@ -490,6 +505,23 @@ class FacebookLeadImporter
 
             if (empty($lead->{$column}) || $lead->{$column} !== $val) {
                 $fillableUpdates[$column] = $val;
+            }
+        }
+
+        if (empty($lead->assigned_to) && $assignedUser) {
+            $fillableUpdates['assigned_to'] = $assignedUser->id;
+        }
+
+        if (empty($lead->branch_id)) {
+            $targetUserId = $fillableUpdates['assigned_to'] ?? $lead->assigned_to ?? $assignedUser?->id;
+            if ($targetUserId) {
+                $targetUser = ($assignedUser && $assignedUser->id == $targetUserId)
+                    ? $assignedUser
+                    : User::find($targetUserId);
+                $branchId = $targetUser?->branch_id ?: $targetUser?->branches()->value('branches.id');
+                if ($branchId) {
+                    $fillableUpdates['branch_id'] = $branchId;
+                }
             }
         }
 
@@ -656,24 +688,39 @@ class FacebookLeadImporter
         $contactName = trim((string) ($core['contact_name'] ?? $core['company_name'] ?? 'Facebook Lead'));
         $mobileNumber = $this->cleanPhoneNumber($core['mobile_number'] ?? '0000000000');
 
+        $assignedUserId = $assignedUser?->id ?? ($core['assigned_to'] ?? null);
+        $targetUser = $assignedUser ?: ($assignedUserId ? User::find($assignedUserId) : null);
+        $branchId = $targetUser?->branch_id ?: $targetUser?->branches()->value('branches.id') ?: ($core['branch_id'] ?? null);
+
+        $timezone = config('app.timezone', 'Asia/Kolkata') ?: 'Asia/Kolkata';
+        $resolvedLeadDate = $leadDate;
+        if (!empty($core['lead_date'])) {
+            try {
+                $resolvedLeadDate = Carbon::parse($core['lead_date'])->setTimezone($timezone)->toDateString();
+            } catch (\Throwable) {
+                $resolvedLeadDate = $leadDate;
+            }
+        }
+
         return [
             'company_name' => $companyName !== '' ? $companyName : 'Facebook Lead',
             'contact_name' => $contactName !== '' ? $contactName : 'Facebook Lead',
-            'lead_date'    => $core['lead_date'] ?? $leadDate,
+            'lead_date'    => $resolvedLeadDate,
             'mobile_number' => $mobileNumber !== '' ? $mobileNumber : '0000000000',
             'email'        => $core['email'] ?? null,
-            'lead_source_id' => $this->normalizeLeadSourceId($core['lead_source'] ?? null, $assignedUser?->company_id)
-                ?? $this->defaultLeadSourceId($assignedUser?->company_id),
-            'lead_status_id' => $this->normalizeLeadStatusId($core['lead_status'] ?? null, $assignedUser?->company_id)
-                ?? $this->defaultLeadStatusId($assignedUser?->company_id),
+            'lead_source_id' => $this->normalizeLeadSourceId($core['lead_source'] ?? null, $targetUser?->company_id)
+                ?? $this->defaultLeadSourceId($targetUser?->company_id),
+            'lead_status_id' => $this->normalizeLeadStatusId($core['lead_status'] ?? null, $targetUser?->company_id)
+                ?? $this->defaultLeadStatusId($targetUser?->company_id),
             'product_name' => $core['product_name'] ?? null,
             'product_id'   => $this->normalizeProductId($core['product_id'] ?? null),
             'priority'     => $this->normalizePriority($core['priority'] ?? null),
             'deal_value'   => $this->normalizeMoney($core['deal_value'] ?? null),
             'remarks'      => $core['remarks'] ?? '',
-            'assigned_to'  => $assignedUser?->id,
-            'created_by'   => $assignedUser?->id,
-            'company_id'   => $assignedUser?->company_id,
+            'branch_id'    => $branchId,
+            'assigned_to'  => $assignedUserId,
+            'created_by'   => $assignedUserId,
+            'company_id'   => $targetUser?->company_id,
             'facebook_lead_id'     => $facebookLeadId,
             'facebook_campaign_id' => data_get($submission, 'campaign_id') ?: data_get($submission, 'ad_id') ?: $campaignIdentifier,
             'facebook_payload'     => $submission,
@@ -977,6 +1024,8 @@ class FacebookLeadImporter
             'deal_value', 'dealvalue', 'amount' => 'deal_value',
             'remarks', 'notes', 'message' => 'remarks',
             'lead_date', 'entry_date', 'entrydate' => 'lead_date',
+            'branch', 'branch_id', 'branchid' => 'branch_id',
+            'assigned_to', 'assignedto', 'user_id' => 'assigned_to',
             default => $normalized,
         };
     }
@@ -997,6 +1046,8 @@ class FacebookLeadImporter
             'priority',
             'deal_value',
             'remarks',
+            'branch_id',
+            'assigned_to',
         ], true);
     }
 

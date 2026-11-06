@@ -247,7 +247,7 @@
       <tr>
         <td style="color:#5a6472;">{{ $i + 1 }}</td>
         <td>
-          <div class="item-title">{{ $item->product?->product_name }}</div>
+          <div class="item-title">{{ $item->item_name ?: ($item->product?->product_name ?? '—') }}</div>
           @if($item->description)
             <div class="item-sub">{!! nl2br(e($item->description)) !!}</div>
           @endif

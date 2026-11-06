@@ -357,6 +357,7 @@ class FacebookIntegrationController extends Controller
                 ]);
 
                 $this->syncExistingFacebookLeadProducts($campaignId, $product);
+                $this->syncExistingFacebookLeadBranches($campaignId, $users);
             }
 
             return response()->json( [
@@ -414,12 +415,75 @@ class FacebookIntegrationController extends Controller
             });
     }
 
+    protected function syncExistingFacebookLeadBranches(int $campaignId, $users = null): void
+    {
+        $campaign = CampaignMaster::query()->find($campaignId);
+
+        if (! $campaign) {
+            return;
+        }
+
+        $campaignIdentifiers = collect([$campaign->camp_id, $campaign->ad_id])
+            ->filter()
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($campaignIdentifiers->isEmpty()) {
+            return;
+        }
+
+        $assignedUserList = collect($users);
+        if ($assignedUserList->isEmpty()) {
+            $assignedUserIds = AssignedUser::where('campaign_id', $campaignId)->pluck('user_id');
+            $assignedUserList = User::whereIn('id', $assignedUserIds)->get();
+        }
+
+        $userIndex = 0;
+        $totalUsers = $assignedUserList->count();
+
+        Lead::query()
+            ->whereIn('facebook_campaign_id', $campaignIdentifiers)
+            ->get()
+            ->each(function (Lead $lead) use (&$userIndex, $totalUsers, $assignedUserList) {
+                $needsSave = false;
+
+                if (empty($lead->assigned_to) && $totalUsers > 0) {
+                    $assignedUser = $assignedUserList->values()->get($userIndex % $totalUsers);
+                    $userIndex++;
+                    $lead->assigned_to = $assignedUser->id;
+                    if (empty($lead->created_by)) {
+                        $lead->created_by = $assignedUser->id;
+                    }
+                    if (empty($lead->company_id) && $assignedUser->company_id) {
+                        $lead->company_id = $assignedUser->company_id;
+                    }
+                    $needsSave = true;
+                }
+
+                if (!empty($lead->assigned_to)) {
+                    $targetUser = $assignedUserList->firstWhere('id', $lead->assigned_to) ?: User::find($lead->assigned_to);
+                    $targetBranchId = $targetUser?->branch_id ?: $targetUser?->branches()->value('branches.id');
+
+                    if ($targetBranchId && (empty($lead->branch_id) || (int) $lead->branch_id !== (int) $targetBranchId)) {
+                        $lead->branch_id = $targetBranchId;
+                        $needsSave = true;
+                    }
+                }
+
+                if ($needsSave) {
+                    $lead->saveQuietly();
+                }
+            });
+    }
+
     public function viewAssigned() {
         try {
 
             $active_campaigns = CampaignMaster::where( 'status', 1 )->where('is_integrated',1)->get();
             $assigned_users = AssignedUser::all();
-            $users = User::where(function ($query) {
+            $users = User::with('branch')->where(function ($query) {
                 $query->where('is_active', true)
                     ->orWhere('user_status', 'active');
             })->get();
@@ -453,11 +517,13 @@ class FacebookIntegrationController extends Controller
                         [ 'user_name' => $original_user->name ]
                     );
                 }
+
+                $this->syncExistingFacebookLeadBranches($campaign_id, $original_users);
             }
 
             $active_campaigns = CampaignMaster::where( 'status', 1 )->where('is_integrated',1)->get();
             $assigned_users = AssignedUser::all();
-            $users = User::where(function ($query) {
+            $users = User::with('branch')->where(function ($query) {
                 $query->where('is_active', true)
                     ->orWhere('user_status', 'active');
             })->get();
@@ -933,6 +999,7 @@ class FacebookIntegrationController extends Controller
             ['key' => 'priority', 'label' => 'Priority'],
             ['key' => 'deal_value', 'label' => 'Deal Value'],
             ['key' => 'remarks', 'label' => 'Remarks'],
+            ['key' => 'branch_id', 'label' => 'Branch ID'],
         ];
 
         $customFields = LeadFormField::query()

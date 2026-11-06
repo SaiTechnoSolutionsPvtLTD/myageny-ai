@@ -68,13 +68,16 @@
                             <div class="fb-success-users">
                                 @foreach ($assignedUsers as $user)
                                     @php
-                                        $assignedUser = App\Models\User::where('id', $user->user_id)->first();
+                                        $assignedUser = App\Models\User::with('branch')->where('id', $user->user_id)->first();
                                     @endphp
                                     <div class="fb-success-user">
                                         <div class="fb-success-user-main">
                                             <h5 class="fb-success-user-name">{{ $assignedUser?->name ?? $user->user_name }}</h5>
                                             <p class="fb-success-user-meta">
                                                 {{ $assignedUser?->mobilenum ?: 'Mobile not available' }}
+                                                @if ($assignedUser?->branch)
+                                                    <br>Branch: {{ $assignedUser->branch->name }}
+                                                @endif
                                                 @if (!empty($assignedUser?->role))
                                                     <br>{{ $assignedUser->role }}
                                                 @endif

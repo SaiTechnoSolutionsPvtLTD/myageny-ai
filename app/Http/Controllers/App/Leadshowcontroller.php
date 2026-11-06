@@ -21,6 +21,7 @@ use App\Models\QuotationSetting;
 use App\Models\QuotationItem;
 use App\Services\ActivityLogger;
 use App\Services\DataVisibilityService;
+use App\Services\QuotationNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use OpenApi\Attributes as OA;
@@ -1467,6 +1468,10 @@ class LeadShowController extends Controller
         $quotation->refresh()->recalculateTotals();
         $quotation->load(['items', 'createdBy:id,name']);
 
+        if (! $quotation->is_approved) {
+            QuotationNotificationService::sendPendingApprovalNotification($quotation);
+        }
+
         return response()->json([
             'status'  => true,
             'message' => "Quotation {$quotation->quotation_number} created.",
@@ -1566,6 +1571,7 @@ class LeadShowController extends Controller
     {
         abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
         abort_if($quotation->lead_id !== $lead->id, 403, 'Quotation does not belong to this lead.');
+        abort_unless($request->user()->canApproveQuotation(), 403, 'Only Super Admin, Company Admin, or HR can approve quotations.');
 
         $quotation->update([
             'is_approved' => true,
@@ -1573,6 +1579,8 @@ class LeadShowController extends Controller
             'approved_at' => now(),
         ]);
         $quotation->load(['items', 'lead', 'approver']);
+
+        QuotationNotificationService::sendApprovedNotification($quotation);
 
         return response()->json([
             'status'  => true,
@@ -1585,6 +1593,13 @@ class LeadShowController extends Controller
     {
         abort_unless($this->visibility->canAccessLead($lead, $request->user()), 403);
         abort_if($quotation->lead_id !== $lead->id, 403, 'Quotation does not belong to this lead.');
+
+        if (! $quotation->is_approved) {
+            return response()->json([
+                'status'  => false,
+                'message' => "Quotation #{$quotation->quotation_no} must be approved by Admin or HR before sending email.",
+            ], 403);
+        }
 
         $quotation->loadMissing(['items.product', 'createdBy']);
         $lead->loadMissing(['createdBy', 'assignedTo']);

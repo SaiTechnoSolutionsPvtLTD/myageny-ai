@@ -15,6 +15,7 @@ class QuotationItem extends Model
     protected $fillable = [
         'quotation_id',
         'product_id',
+        'item_name',
         'description',
         'qty',
         'unit_price',
@@ -29,6 +30,11 @@ class QuotationItem extends Model
         'discount'   => 'decimal:2',
         'total'      => 'decimal:2',
     ];
+
+    public function getItemNameAttribute($value): ?string
+    {
+        return $value ?: ($this->product?->product_name ?: ($this->product?->package_name ?: null));
+    }
 
     // ── Relationships ──────────────────────────────────────────────────────────
 

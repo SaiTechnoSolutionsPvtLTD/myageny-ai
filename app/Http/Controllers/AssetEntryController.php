@@ -38,15 +38,111 @@ class AssetEntryController extends Controller
             ->paginate(10)
             ->withQueryString();
 
+        // Fetch all assets with relationships for pivot tables
+        $allAssets = AssetEntry::query()
+            ->with(['assignedEmployee.department', 'assignedEmployee.role'])
+            ->latest()
+            ->get();
+
+        // 1. Employee-wise Pivot
+        $employeePivot = [];
+        $unassignedAssets = [];
+
+        foreach ($allAssets as $asset) {
+            if ($asset->assigned_employee_id && $asset->assignedEmployee) {
+                $empId = $asset->assigned_employee_id;
+                if (! isset($employeePivot[$empId])) {
+                    $employeePivot[$empId] = [
+                        'employee'      => $asset->assignedEmployee,
+                        'total_count'   => 0,
+                        'total_cost'    => 0,
+                        'categories'    => [],
+                        'status_counts' => [],
+                        'assets'        => collect(),
+                    ];
+                }
+                $employeePivot[$empId]['total_count']++;
+                $employeePivot[$empId]['total_cost'] += (float) ($asset->purchase_cost ?? 0);
+
+                $cat = $asset->asset_category ?: 'Uncategorized';
+                $employeePivot[$empId]['categories'][$cat] = ($employeePivot[$empId]['categories'][$cat] ?? 0) + 1;
+
+                $status = $asset->asset_status ?: 'unknown';
+                $employeePivot[$empId]['status_counts'][$status] = ($employeePivot[$empId]['status_counts'][$status] ?? 0) + 1;
+
+                $employeePivot[$empId]['assets']->push($asset);
+            } else {
+                $unassignedAssets[] = $asset;
+            }
+        }
+
+        // Sort employee pivot by total count descending
+        uasort($employeePivot, fn ($a, $b) => $b['total_count'] <=> $a['total_count']);
+
+        $unassignedPivot = [
+            'total_count'   => count($unassignedAssets),
+            'total_cost'    => (float) collect($unassignedAssets)->sum(fn ($a) => (float) ($a->purchase_cost ?? 0)),
+            'categories'    => collect($unassignedAssets)->groupBy(fn ($a) => $a->asset_category ?: 'Uncategorized')->map->count()->all(),
+            'status_counts' => collect($unassignedAssets)->groupBy(fn ($a) => $a->asset_status ?: 'unknown')->map->count()->all(),
+            'assets'        => collect($unassignedAssets),
+        ];
+
+        // 2. Category-wise Pivot
+        $categoryModels = AssetCategory::query()->orderBy('name')->get()->keyBy('name');
+        $categoryPivot = [];
+
+        $assetsByCategory = $allAssets->groupBy(fn ($a) => $a->asset_category ?: 'Uncategorized');
+
+        foreach ($categoryModels as $catName => $catModel) {
+            $catAssets = $assetsByCategory->get($catName, collect());
+            $categoryPivot[$catName] = [
+                'category_name'    => $catName,
+                'category_model'   => $catModel,
+                'total_count'      => $catAssets->count(),
+                'total_cost'       => (float) $catAssets->sum('purchase_cost'),
+                'available_count'  => $catAssets->where('asset_status', 'available')->count(),
+                'assigned_count'   => $catAssets->where('asset_status', 'assigned')->count(),
+                'in_service_count' => $catAssets->where('asset_status', 'in_service')->count(),
+                'damaged_count'    => $catAssets->where('asset_status', 'damaged')->count(),
+                'retired_count'    => $catAssets->where('asset_status', 'retired')->count(),
+                'employees_count'  => $catAssets->pluck('assigned_employee_id')->filter()->unique()->count(),
+                'assets'           => $catAssets,
+            ];
+        }
+
+        foreach ($assetsByCategory as $catName => $catAssets) {
+            if (! isset($categoryPivot[$catName])) {
+                $categoryPivot[$catName] = [
+                    'category_name'    => $catName,
+                    'category_model'   => null,
+                    'total_count'      => $catAssets->count(),
+                    'total_cost'       => (float) $catAssets->sum('purchase_cost'),
+                    'available_count'  => $catAssets->where('asset_status', 'available')->count(),
+                    'assigned_count'   => $catAssets->where('asset_status', 'assigned')->count(),
+                    'in_service_count' => $catAssets->where('asset_status', 'in_service')->count(),
+                    'damaged_count'    => $catAssets->where('asset_status', 'damaged')->count(),
+                    'retired_count'    => $catAssets->where('asset_status', 'retired')->count(),
+                    'employees_count'  => $catAssets->pluck('assigned_employee_id')->filter()->unique()->count(),
+                    'assets'           => $catAssets,
+                ];
+            }
+        }
+
+        uasort($categoryPivot, fn ($a, $b) => $b['total_count'] <=> $a['total_count']);
+
         return view('pages.hrms.assets.index', [
-            'assets' => $assets,
-            'categories' => AssetCategory::query()->orderBy('name')->pluck('name'),
-            'employees' => EmployeeOnboarding::query()->active()->orderBy('name')->get(['id', 'employee_id', 'name']),
-            'stats' => [
-                'total' => AssetEntry::count(),
-                'assigned' => AssetEntry::where('asset_status', 'assigned')->count(),
-                'available' => AssetEntry::where('asset_status', 'available')->count(),
-                'in_service' => AssetEntry::where('asset_status', 'in_service')->count(),
+            'assets'          => $assets,
+            'categories'      => AssetCategory::query()->orderBy('name')->pluck('name'),
+            'employees'       => EmployeeOnboarding::query()->active()->orderBy('name')->get(['id', 'employee_id', 'name']),
+            'employeePivot'   => $employeePivot,
+            'unassignedPivot' => $unassignedPivot,
+            'categoryPivot'   => $categoryPivot,
+            'stats'           => [
+                'total'       => AssetEntry::count(),
+                'assigned'    => AssetEntry::where('asset_status', 'assigned')->count(),
+                'available'   => AssetEntry::where('asset_status', 'available')->count(),
+                'in_service'  => AssetEntry::where('asset_status', 'in_service')->count(),
+                'total_value' => (float) AssetEntry::sum('purchase_cost'),
             ],
         ]);
     }
