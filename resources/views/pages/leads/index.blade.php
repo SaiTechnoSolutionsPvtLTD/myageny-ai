@@ -330,6 +330,10 @@
             <div class="ld-breadcrumb">Sales > Leads</div>
         </div>
         <div class="ld-topbar-right">
+            <a href="{{ route('leads.duplicates') }}" class="ld-btn ld-btn-outline" style="display:inline-flex; align-items:center; gap:6px;">
+                <i class="bi bi-copy"></i>
+                Duplicate Leads
+            </a>
             <a href="{{ route('leads.create') }}" class="ld-btn ld-btn-primary">
                 <i class="bi bi-plus-lg"></i>
                 New Lead

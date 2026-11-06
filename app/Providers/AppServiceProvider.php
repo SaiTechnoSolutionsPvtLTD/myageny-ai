@@ -30,7 +30,27 @@ class AppServiceProvider extends ServiceProvider
                 return true;
             }
 
+            // Quotation approval is strictly prohibited for branch admin, branch manager, and hr admin
+            if ($ability === 'quotations.approve') {
+                if ($user->isBranchAdmin() || $user->isBranchManager() || $user->isHrAdmin() || collect($user->roleKeys()->all())->intersect(['branch_admin', 'branch_manager', 'bm', 'hr_admin'])->isNotEmpty()) {
+                    return false;
+                }
+            }
+
             return $user->hasCrmPermission($ability) ? true : null;
+        });
+
+        // Quotations approval & access gates: Admin and HR can approve and view
+        Gate::define('quotations.approve', function (User $user) {
+            return $user->canApproveQuotation();
+        });
+
+        Gate::define('quotations.view', function (User $user) {
+            return $user->canApproveQuotation() || $user->hasCrmPermission('quotations.view');
+        });
+
+        Gate::define('quotations.menuview', function (User $user) {
+            return $user->canApproveQuotation() || $user->hasCrmPermission('quotations.menuview');
         });
 
         // Mobile CST Updates route guard — mirrors the inline

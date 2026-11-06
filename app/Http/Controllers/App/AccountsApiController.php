@@ -37,6 +37,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\SupplierMaster;
 use App\Models\ZohoIntegration;
+use App\Services\QuotationNotificationService;
 use App\Services\ZohoBooksService;
 use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\InvoiceController;
@@ -7499,6 +7500,14 @@ class AccountsApiController extends Controller
     {
         try {
             $quotation = Quotation::with(['lead', 'approver', 'createdBy', 'items.product'])->findOrFail($id);
+
+            if (! $quotation->is_approved && ! auth()->user()?->canApproveQuotation()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => "Quotation #{$quotation->quotation_no} is pending approval from Admin or HR. You cannot open or view it until it is approved.",
+                ], 403);
+            }
+
             $converted = $quotation->converted_invoice;
 
             $data = $quotation->toArray();
@@ -7727,12 +7736,16 @@ class AccountsApiController extends Controller
     public function approveQuotation(Request $request, $id): JsonResponse
     {
         try {
+            abort_unless(auth()->user()?->canApproveQuotation(), 403, 'Only Super Admin, Company Admin, or HR can approve quotations.');
+
             $quotation = Quotation::findOrFail($id);
             $quotation->update([
                 'is_approved' => true,
                 'approved_by' => auth()->id(),
                 'approved_at' => now(),
             ]);
+
+            QuotationNotificationService::sendApprovedNotification($quotation);
 
             return response()->json([
                 'status' => true,
@@ -7768,6 +7781,14 @@ class AccountsApiController extends Controller
     {
         try {
             $quotation = Quotation::with(['lead', 'items.product', 'createdBy'])->findOrFail($id);
+
+            if (! $quotation->is_approved) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => "Quotation #{$quotation->quotation_no} must be approved by Admin or HR before sending email.",
+                ], 403);
+            }
+
             $lead = $quotation->lead;
             $email = trim((string) $lead?->email);
 
@@ -7854,6 +7875,14 @@ class AccountsApiController extends Controller
     {
         try {
             $quotation = Quotation::with(['items.product', 'createdBy', 'lead.createdBy', 'lead.assignedTo'])->findOrFail($id);
+
+            if (! $quotation->is_approved && ! auth()->user()?->canApproveQuotation()) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => "Quotation #{$quotation->quotation_no} is pending approval from Admin or HR. PDF download is locked until approved.",
+                ], 403);
+            }
+
             $quoteSetting = QuotationSetting::forQuotation($quotation);
 
             $pdf = Pdf::loadView('pages.quotations.quotation_format_1', compact('quotation', 'quoteSetting'))

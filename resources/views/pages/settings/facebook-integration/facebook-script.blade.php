@@ -88,7 +88,8 @@
 
                 if ($(this).is(':checked')) {
                     var selectOptions = users.map(function (user) {
-                        return '<option value="' + user.id + '">' + user.name + '</option>';
+                        var branchName = (user.branch && user.branch.name) ? ' (' + user.branch.name + ')' : '';
+                        return '<option value="' + user.id + '">' + user.name + branchName + '</option>';
                     }).join('');
 
                     $container.append(

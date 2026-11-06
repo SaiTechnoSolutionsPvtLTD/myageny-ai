@@ -311,6 +311,7 @@ table.products-table tbody tr:last-child td{ border-bottom:none; }
             <script id="existingItemsData" type="application/json">
                 {!! json_encode($quotation->items->map(fn($item) => [
                     'product_id' => $item->product_id,
+                    'item_name' => $item->item_name ?: ($item->product?->product_name ?: ''),
                     'description' => $item->description ?? '',
                     'qty' => (float) $item->qty,
                     'unit_price' => (float) $item->unit_price,
@@ -457,11 +458,14 @@ $(function () {
                             data-desc="${p.description || ''}"
                             data-price="${p.price}">${p.text}</option>`).join('')}
                     </select>
+                    <input type="text" name="items[${idx}][item_name]"
+                           class="form-control item-name" style="margin-top:6px; font-size:12px; font-weight:600;"
+                           value="${data.item_name || ''}" placeholder="Product Name (Editable)">
                 </td>
                 <td class="td-desc">
-                    <input type="text" name="items[${idx}][description]"
-                           class="form-control item-desc" style="min-width:160px"
-                           value="${data.description || ''}" placeholder="Description">
+                    <textarea name="items[${idx}][description]"
+                              class="form-control item-desc" rows="2" style="min-width:180px; resize:vertical; font-size:12px;"
+                              placeholder="Description">${data.description || ''}</textarea>
                 </td>
                 <td class="td-qty">
                     <input type="number" name="items[${idx}][qty]"
@@ -470,8 +474,8 @@ $(function () {
                 </td>
                 <td class="td-price">
                     <input type="number" name="items[${idx}][unit_price]"
-                           class="form-control item-price input-readonly" min="0" step="any"
-                           value="${data.unit_price !== undefined ? data.unit_price : ''}" placeholder="0.00" required readonly>
+                           class="form-control item-price" min="0" step="any"
+                           value="${data.unit_price !== undefined ? data.unit_price : ''}" placeholder="0.00" required>
                 </td>
                 <td class="td-disc">
                     <input type="number" name="items[${idx}][discount]"
@@ -537,7 +541,8 @@ $(function () {
         let subtotal = 0;
 
         container.find('.row-total-val').each(function () {
-            subtotal += parseFloat($(this).text().replace('₹', '') || 0);
+            const val = parseFloat($(this).text().replace(/[^0-9.]/g, '') || 0);
+            if (!isNaN(val)) subtotal += val;
         });
 
         const customerState = ($('#customerStateInput').val() || '').trim();
@@ -569,6 +574,7 @@ $(function () {
         const prod = productMap[pid];
 
         if (prod) {
+            row.find('.item-name').val(prod.text);
             if (!row.find('.item-desc').val()) {
                 row.find('.item-desc').val(prod.description);
             }
@@ -578,6 +584,7 @@ $(function () {
             row.data('product-discount-value', fnum(prod.discount_value || 0));
             syncDiscountInput(row);
         } else {
+            row.find('.item-name').val('');
             row.find('.item-desc').val('');
             row.find('.item-price').val('');
             row.find('.item-disc').val('0.00');

@@ -361,6 +361,12 @@
     $isHtmlTerms = strip_tags($termsBody) !== $termsBody;
 @endphp
 
+@if(! $quotation->is_approved)
+    <div style="position: fixed; top: 42%; left: 0; right: 0; text-align: center; font-size: 72px; font-weight: bold; color: rgba(220, 38, 38, 0.12); z-index: -1000; letter-spacing: 8px;">
+        MYAGENCI
+    </div>
+@endif
+
 <div class="invoice-sheet">
 
     {{-- 1. Top Header --}}
@@ -497,7 +503,7 @@
             <tr>
                 <td class="td-item" width="5%" style="text-align:center; font-weight:bold;">{{ $index + 1 }}</td>
                 <td class="td-item" width="45%">
-                    <div style="font-weight:bold; color:#000;">{{ $item->product?->product_name ?? ($item->item_name ?? '—') }}</div>
+                    <div style="font-weight:bold; color:#000;">{{ $item->item_name ?: ($item->product?->product_name ?? '—') }}</div>
                     @if(!empty($item->description))
                         <div style="font-size:9.5px; color:#334155; margin-top:2px; line-height:1.35;">
                             {!! nl2br(e($item->description)) !!}
@@ -505,7 +511,7 @@
                     @endif
                 </td>
                 <td class="td-item" width="10%" style="text-align:center;">{{ $item->hsn_sac_code ?? ($item->product?->hsn_code ?: '—') }}</td>
-                <td class="td-item" width="8%" style="text-align:center;">{{ number_format((float) $item->quantity, 2) }}</td>
+                <td class="td-item" width="8%" style="text-align:center;">{{ number_format((float) ($item->quantity ?: $item->qty), 2) }}</td>
                 <td class="td-item" width="16%" style="text-align:right;">{{ number_format((float) $item->unit_price, 2) }}</td>
                 <td class="td-item" width="16%" style="text-align:right;">{{ number_format((float) $item->total, 2) }}</td>
             </tr>

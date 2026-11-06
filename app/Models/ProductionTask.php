@@ -41,9 +41,11 @@ class ProductionTask extends Model
             foreach ($this->attachments as $item) {
                 if (is_array($item) && ! empty($item['path'])) {
                     $path = ltrim((string) $item['path'], '/');
-                    $fullPath = public_path($path);
-                    $exists = file_exists($fullPath);
-                    $size = $item['size'] ?? ($exists ? @filesize($fullPath) : null);
+                    $size = $item['size'] ?? null;
+                    if ($size === null) {
+                        $fullPath = public_path($path);
+                        $size = file_exists($fullPath) ? @filesize($fullPath) : null;
+                    }
                     $list[] = [
                         'path' => $path,
                         'name' => $item['name'] ?? basename($path),
@@ -55,8 +57,7 @@ class ProductionTask extends Model
                 } elseif (is_string($item) && ! empty($item)) {
                     $path = ltrim($item, '/');
                     $fullPath = public_path($path);
-                    $exists = file_exists($fullPath);
-                    $size = $exists ? @filesize($fullPath) : null;
+                    $size = file_exists($fullPath) ? @filesize($fullPath) : null;
                     $list[] = [
                         'path' => $path,
                         'name' => basename($path),

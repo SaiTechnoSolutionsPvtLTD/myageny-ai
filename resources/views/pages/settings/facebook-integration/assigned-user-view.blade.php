@@ -120,7 +120,12 @@
                                             <div class="fb-assign-user">
                                                 <div>
                                                     <h5 class="fb-assign-user-name">{{ $assigned->user_name }}</h5>
-                                                    <p class="fb-assign-user-meta">Campaign ID: {{ $campaign->camp_id }}</p>
+                                                    <p class="fb-assign-user-meta">
+                                                        Campaign ID: {{ $campaign->camp_id }}
+                                                        @if ($assigned->user?->branch)
+                                                            • Branch: {{ $assigned->user->branch->name }}
+                                                        @endif
+                                                    </p>
                                                 </div>
                                                 <span class="fb-assign-badge">Assigned</span>
                                             </div>

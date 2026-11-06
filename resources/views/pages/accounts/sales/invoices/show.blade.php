@@ -2792,6 +2792,10 @@ function searchLeadsForModal(q) {
                         <option value="" disabled selected>— Type in the search box above to find leads —</option>
                     </select>
                 </div>
+                <div style="font-size:11.5px; color:#475569; background:#f1f5f9; padding:9px 12px; border-radius:8px; display:flex; align-items:center; gap:8px; border:1px solid #e2e8f0;">
+                    <i class="bi bi-info-circle-fill" style="color:#2563eb; font-size:14px;"></i>
+                    <span>Mapping this lead will also automatically link this customer and all their other invoices.</span>
+                </div>
             </div>
             <div style="display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:14px 20px; background:#f8fafc; border-top:1px solid #e2e8f0;">
                 <button type="button" onclick="closeMapLeadModal()" class="inv-btn-secondary" style="padding:8px 16px; border-radius:8px; font-size:13px;">Cancel</button>

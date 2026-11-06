@@ -462,15 +462,25 @@ class InvoiceController extends Controller
             'status'             => 'nullable|string|in:draft,created,sent,paid,partially_paid,overdue,cancelled',
         ]);
 
-        if (empty($validated['customer_name']) && !empty($request->customer_id)) {
+        if (!empty($request->customer_id)) {
             $cust = CustomerMaster::find($request->customer_id);
             if ($cust) {
-                $validated['customer_name']  = $cust->customer_name;
+                if (empty($validated['customer_name'])) {
+                    $validated['customer_name']  = $cust->customer_name;
+                }
                 $validated['company_name']   = $validated['company_name'] ?? $cust->company_name;
                 $validated['customer_email']  = $validated['customer_email'] ?? $cust->email;
                 $validated['customer_phone']  = $validated['customer_phone'] ?? $cust->mobile_number;
                 $validated['customer_gstin']  = $validated['customer_gstin'] ?? ($validated['billing_gstin'] ?? $cust->gst_number);
                 $validated['customer_pan']    = $validated['customer_pan'] ?? $cust->pan_number;
+
+                // Auto-inherit lead_id and branch_id from Customer Master if not explicitly provided
+                if (empty($validated['lead_id']) && !empty($cust->lead_id)) {
+                    $validated['lead_id'] = $cust->lead_id;
+                    if (empty($validated['branch_id']) && $cust->lead?->branch_id) {
+                        $validated['branch_id'] = $cust->lead->branch_id;
+                    }
+                }
             }
         }
         if (empty($validated['customer_gstin']) && !empty($validated['billing_gstin'])) {
@@ -533,6 +543,14 @@ class InvoiceController extends Controller
             $invoiceData['status']      = $status;
 
             $invoice = Invoice::create($invoiceData);
+
+            // Sync lead_id to Customer Master if customer had none
+            if (!empty($invoice->lead_id) && $invoice->customer_id) {
+                $cust = CustomerMaster::find($invoice->customer_id);
+                if ($cust && empty($cust->lead_id)) {
+                    $cust->update(['lead_id' => $invoice->lead_id]);
+                }
+            }
 
             // Create line items
             foreach ($validated['items'] as $index => $itemRow) {
@@ -806,15 +824,25 @@ class InvoiceController extends Controller
             'status'             => 'nullable|string|in:draft,sent,paid,partially_paid,overdue,cancelled',
         ]);
 
-        if (empty($validated['customer_name']) && !empty($request->customer_id)) {
+        if (!empty($request->customer_id)) {
             $cust = CustomerMaster::find($request->customer_id);
             if ($cust) {
-                $validated['customer_name']  = $cust->customer_name;
+                if (empty($validated['customer_name'])) {
+                    $validated['customer_name']  = $cust->customer_name;
+                }
                 $validated['company_name']   = $validated['company_name'] ?? $cust->company_name;
                 $validated['customer_email']  = $validated['customer_email'] ?? $cust->email;
                 $validated['customer_phone']  = $validated['customer_phone'] ?? $cust->mobile_number;
                 $validated['customer_gstin']  = $validated['customer_gstin'] ?? ($validated['billing_gstin'] ?? $cust->gst_number);
                 $validated['customer_pan']    = $validated['customer_pan'] ?? $cust->pan_number;
+
+                // Auto-inherit lead_id and branch_id from Customer Master if not explicitly provided
+                if (empty($validated['lead_id']) && !empty($cust->lead_id)) {
+                    $validated['lead_id'] = $cust->lead_id;
+                    if (empty($validated['branch_id']) && $cust->lead?->branch_id) {
+                        $validated['branch_id'] = $cust->lead->branch_id;
+                    }
+                }
             }
         }
         if (empty($validated['customer_gstin']) && !empty($validated['billing_gstin'])) {
@@ -853,6 +881,13 @@ class InvoiceController extends Controller
             $invoiceData['status']      = $status;
 
             $invoice->update($invoiceData);
+
+            if (!empty($invoice->lead_id) && $invoice->customer_id) {
+                $cust = CustomerMaster::find($invoice->customer_id);
+                if ($cust && empty($cust->lead_id)) {
+                    $cust->update(['lead_id' => $invoice->lead_id]);
+                }
+            }
 
             // Re-sync line items
             $invoice->items()->delete();
@@ -1106,7 +1141,7 @@ class InvoiceController extends Controller
     }
 
     /**
-     * Map or change the Lead linked to this invoice.
+     * Map or change the Lead linked to this invoice, and cascade to the customer and all their invoices.
      */
     public function mapLead(Request $request, Invoice $invoice)
     {
@@ -1116,18 +1151,53 @@ class InvoiceController extends Controller
 
         $lead = Lead::withoutGlobalScopes()->findOrFail($request->lead_id);
 
+        // 1. Update the target invoice
         $invoice->update([
-            'lead_id' => $lead->id,
+            'lead_id'   => $lead->id,
             'branch_id' => $invoice->branch_id ?: $lead->branch_id,
         ]);
 
-        if ($invoice->customer && empty($invoice->customer->lead_id)) {
+        // 2. Update Customer Master record
+        if ($invoice->customer) {
             $invoice->customer->update(['lead_id' => $lead->id]);
+        } elseif ($invoice->customer_id) {
+            CustomerMaster::where('id', $invoice->customer_id)->update(['lead_id' => $lead->id]);
+        } elseif (! empty($invoice->customer_phone)) {
+            CustomerMaster::where('mobile_number', $invoice->customer_phone)->update(['lead_id' => $lead->id]);
+        }
+
+        // 3. Cascade to all other invoices for this same customer (by customer_id or matching phone)
+        $otherInvoices = Invoice::where('id', '!=', $invoice->id)
+            ->where(function ($q) use ($invoice) {
+                if ($invoice->customer_id) {
+                    $q->where('customer_id', $invoice->customer_id);
+                }
+                if (! empty($invoice->customer_phone)) {
+                    $q->orWhere(function ($sub) use ($invoice) {
+                        $sub->whereNotNull('customer_phone')
+                            ->where('customer_phone', '!=', '')
+                            ->where('customer_phone', $invoice->customer_phone);
+                    });
+                }
+            })
+            ->get();
+
+        $otherCount = 0;
+        foreach ($otherInvoices as $otherInv) {
+            $otherInv->update([
+                'lead_id'   => $lead->id,
+                'branch_id' => $otherInv->branch_id ?: $lead->branch_id,
+            ]);
+            $otherCount++;
         }
 
         $leadName = $lead->contact_name ?: ($lead->company_name ?: 'Lead #' . $lead->id);
 
-        return redirect()->back()->with('success', "Invoice #{$invoice->invoice_number} successfully mapped to Lead #{$lead->id} ({$leadName})!");
+        $message = $otherCount > 0
+            ? "Invoice #{$invoice->invoice_number} and {$otherCount} other invoice(s) for this customer were successfully mapped to Lead #{$lead->id} ({$leadName})!"
+            : "Invoice #{$invoice->invoice_number} successfully mapped to Lead #{$lead->id} ({$leadName})!";
+
+        return redirect()->back()->with('success', $message);
     }
 
     /**

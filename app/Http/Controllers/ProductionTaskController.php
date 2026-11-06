@@ -68,8 +68,7 @@ class ProductionTaskController extends Controller
         $filterStatus = trim((string) $request->query('filter_status', ''));
         $filterDepartment = strtolower(trim((string) $request->query('filter_department', '')));
 
-        $allTasks = ProductionTask::query()
-            ->with(['creator', 'assignedUser.roles.department', 'lead', 'project.department'])
+        $baseQuery = ProductionTask::query()
             ->when(!$isAdminLike, function ($query) use ($accessibleUserIds, $user) {
                 $query->where(function ($q) use ($accessibleUserIds, $user) {
                     $q->whereIn('assigned_to', $accessibleUserIds)
@@ -115,45 +114,83 @@ class ProductionTaskController extends Controller
             })
             ->when($filterStatus !== '', function ($query) use ($filterStatus) {
                 $query->where('status', $filterStatus);
-            })
-            ->latest('task_date')
-            ->latest('id')
-            ->get();
+            });
+
+        $deptUserMap = $this->getDepartmentUserIds();
 
         // Calculate department counts across all filtered tasks before department-specific filtering
         $deptCounts = [
-            'all' => $allTasks->count(),
-            'development' => 0,
-            'designing' => 0,
-            'digital_marketing' => 0,
+            'all' => (clone $baseQuery)->count(),
+            'development' => $this->countForDepartment(clone $baseQuery, 'development', $deptUserMap),
+            'designing' => $this->countForDepartment(clone $baseQuery, 'designing', $deptUserMap),
+            'digital_marketing' => $this->countForDepartment(clone $baseQuery, 'digital_marketing', $deptUserMap),
         ];
-
-        foreach ($allTasks as $task) {
-            $deptSlug = $this->resolveTaskDepartmentSlug($task);
-            if (isset($deptCounts[$deptSlug])) {
-                $deptCounts[$deptSlug]++;
-            }
-        }
 
         // Filter tasks if department is explicitly selected
         if (in_array($filterDepartment, ['development', 'designing', 'digital_marketing'], true)) {
-            $allTasks = $allTasks->filter(function ($task) use ($filterDepartment) {
-                return $this->resolveTaskDepartmentSlug($task) === $filterDepartment;
-            });
+            $this->applyDepartmentFilter($baseQuery, $filterDepartment, $deptUserMap);
         }
 
-        // Group tasks by Date + Assigned User
-        $groupedTasks = $allTasks->groupBy(function ($task) {
-            return ($task->task_date ? $task->task_date->toDateString() : 'no_date') . '_' . $task->assigned_to;
-        });
+        // Database-level group pagination by task_date + assigned_to
+        $groupQuery = (clone $baseQuery)
+            ->select('task_date', 'assigned_to', DB::raw('MAX(id) as max_id'))
+            ->groupBy('task_date', 'assigned_to')
+            ->orderByDesc('task_date')
+            ->orderByDesc('max_id');
 
-        $page = (int) $request->query('page', 1);
+        $totalGroups = (clone $baseQuery)->select('task_date', 'assigned_to')->groupBy('task_date', 'assigned_to')->get()->count();
+
+        $page = max(1, (int) $request->query('page', 1));
         $perPage = 15;
-        $totalGroups = $groupedTasks->count();
-        $slicedGroups = $groupedTasks->slice(($page - 1) * $perPage, $perPage)->values();
+
+        $pagedGroups = $groupQuery
+            ->forPage($page, $perPage)
+            ->get();
+
+        if ($pagedGroups->isNotEmpty()) {
+            $tasksForPage = (clone $baseQuery)
+                ->where(function ($q) use ($pagedGroups) {
+                    foreach ($pagedGroups as $g) {
+                        $q->orWhere(function ($q2) use ($g) {
+                            if (is_null($g->task_date)) {
+                                $q2->whereNull('task_date')->where('assigned_to', $g->assigned_to);
+                            } else {
+                                $q2->whereDate('task_date', $g->task_date)->where('assigned_to', $g->assigned_to);
+                            }
+                        });
+                    }
+                })
+                ->with([
+                    'creator:id,name,email',
+                    'assignedUser:id,name,email',
+                    'assignedUser.roles:id,name',
+                    'assignedUser.roles.department:id,name',
+                    'lead:id,company_name,contact_name',
+                    'project:id,product_name,company_name,department_id',
+                    'project.department:id,name',
+                ])
+                ->latest('task_date')
+                ->latest('id')
+                ->get();
+
+            $groupedByKeys = $tasksForPage->groupBy(function ($task) {
+                return ($task->task_date ? $task->task_date->toDateString() : 'no_date') . '_' . $task->assigned_to;
+            });
+
+            $orderedGroups = collect();
+            foreach ($pagedGroups as $g) {
+                $dateStr = $g->task_date ? Carbon::parse($g->task_date)->toDateString() : 'no_date';
+                $key = $dateStr . '_' . $g->assigned_to;
+                if ($groupedByKeys->has($key)) {
+                    $orderedGroups->push($groupedByKeys->get($key));
+                }
+            }
+        } else {
+            $orderedGroups = collect();
+        }
 
         $paginatedGroups = new \Illuminate\Pagination\LengthAwarePaginator(
-            $slicedGroups,
+            $orderedGroups,
             $totalGroups,
             $perPage,
             $page,
@@ -191,29 +228,49 @@ class ProductionTaskController extends Controller
         $userDeptId = $userDeptInfo['id'];
         $userDeptName = $userDeptInfo['name'];
 
-        $supportTaskProjects = ProductionInitiation::query()
-            ->with(['lead:id,company_name,contact_name', 'leadProduct:id,product_name', 'department:id,name'])
-            ->where(function ($q) {
-                $q->whereIn('production_approval_status', ['approval', 'approved'])
-                  ->orWhereNull('production_approval_status')
-                  ->orWhere('production_approval_status', '');
-            })
-            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
-            ->whereRaw("LOWER(COALESCE(product_name, '')) NOT IN ('other tasks', 'other task')")
-            ->whereRaw("LOWER(COALESCE(company_name, '')) NOT IN ('other tasks', 'other task')")
-            ->latest('id')
-            ->get()
-            ->map(function ($proj) {
-                $compName = trim($proj->company_name ?: ($proj->lead?->company_name ?: ($proj->client_name ?: ($proj->lead?->contact_name ?: 'No Company'))));
-                $prodName = $proj->product_name ?: ($proj->leadProduct?->product_name ?: 'Product');
-                $proj->resolved_company_name = $compName;
-                $proj->resolved_product_name = $prodName;
-                $proj->department_name = $proj->department?->name ?? 'General / Other';
-                $proj->resolved_department_id = (int) ($proj->department_id ?? 0);
-                return $proj;
-            })
-            ->sortBy('resolved_company_name', SORT_NATURAL | SORT_FLAG_CASE)
-            ->values();
+        $supportTaskProjects = $isCompanyAdmin
+            ? $assignedProjects
+                ->filter(function ($proj) {
+                    $pName = strtolower(trim($proj->product_name ?? ''));
+                    $cName = strtolower(trim($proj->company_name ?? ''));
+                    return !in_array($pName, ['other tasks', 'other task'], true)
+                        && !in_array($cName, ['other tasks', 'other task'], true);
+                })
+                ->map(function ($proj) {
+                    $compName = trim($proj->resolved_company_name ?? ($proj->company_name ?: ($proj->lead?->company_name ?: ($proj->client_name ?: ($proj->lead?->contact_name ?: 'No Company')))));
+                    $prodName = $proj->resolved_product_name ?? ($proj->product_name ?: ($proj->leadProduct?->product_name ?: 'Product'));
+                    $proj->resolved_company_name = $compName;
+                    $proj->resolved_product_name = $prodName;
+                    $proj->department_name = $proj->department_name ?? ($proj->department?->name ?? 'General / Other');
+                    $proj->resolved_department_id = (int) ($proj->resolved_department_id ?? ($proj->department_id ?? 0));
+                    return $proj;
+                })
+                ->sortBy('resolved_company_name', SORT_NATURAL | SORT_FLAG_CASE)
+                ->values()
+            : ProductionInitiation::query()
+                ->select(['id', 'company_id', 'lead_id', 'department_id', 'lead_product_id', 'company_name', 'client_name', 'product_name', 'production_approval_status'])
+                ->with(['lead:id,company_name,contact_name', 'leadProduct:id,product_name', 'department:id,name'])
+                ->where(function ($q) {
+                    $q->whereIn('production_approval_status', ['approval', 'approved'])
+                      ->orWhereNull('production_approval_status')
+                      ->orWhere('production_approval_status', '');
+                })
+                ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                ->whereRaw("LOWER(COALESCE(product_name, '')) NOT IN ('other tasks', 'other task')")
+                ->whereRaw("LOWER(COALESCE(company_name, '')) NOT IN ('other tasks', 'other task')")
+                ->latest('id')
+                ->get()
+                ->map(function ($proj) {
+                    $compName = trim($proj->company_name ?: ($proj->lead?->company_name ?: ($proj->client_name ?: ($proj->lead?->contact_name ?: 'No Company'))));
+                    $prodName = $proj->product_name ?: ($proj->leadProduct?->product_name ?: 'Product');
+                    $proj->resolved_company_name = $compName;
+                    $proj->resolved_product_name = $prodName;
+                    $proj->department_name = $proj->department?->name ?? 'General / Other';
+                    $proj->resolved_department_id = (int) ($proj->department_id ?? 0);
+                    return $proj;
+                })
+                ->sortBy('resolved_company_name', SORT_NATURAL | SORT_FLAG_CASE)
+                ->values();
 
         $supportTaskTeamMembers = $this->getSupportTaskTeamMembers($user);
 
@@ -641,11 +698,20 @@ class ProductionTaskController extends Controller
     private function getAccessibleProjects(User $user): Collection
     {
         $isDevProjectCoordinator = $user->isDevelopmentProjectCoordinator();
-        $isSuperOrCompanyAdmin = $user->isSuperAdmin() || $user->isCompanyAdmin() || $user->isSystemAdmin();
+        $isSuperOrCompanyAdmin = $user->isSuperAdmin() || $user->isCompanyAdmin() || $user->hasAdminLikeRole();
+
+        $selectCols = [
+            'id', 'company_id', 'lead_id', 'department_id', 'lead_product_id',
+            'company_name', 'client_name', 'product_name', 'production_approval_status',
+            'project_allocated_employee_user_ids', 'project_allocated_tl_user_ids',
+            'tl_employee_allocations', 'ovp_allocated_to', 'project_delivery_date'
+        ];
+        $withRelations = ['lead:id,company_name,contact_name', 'leadProduct:id,product_name', 'department:id,name'];
 
         if ($isSuperOrCompanyAdmin) {
             $projects = ProductionInitiation::query()
-                ->with(['lead.branch', 'leadProduct', 'department'])
+                ->select($selectCols)
+                ->with($withRelations)
                 ->whereIn('production_approval_status', ['approval', 'approved'])
                 ->latest('id')
                 ->get();
@@ -659,7 +725,8 @@ class ProductionTaskController extends Controller
                 ->toArray();
 
             $projects = ProductionInitiation::query()
-                ->with(['lead.branch', 'leadProduct', 'department'])
+                ->select($selectCols)
+                ->with($withRelations)
                 ->whereIn('production_approval_status', ['approval', 'approved'])
                 ->where(function ($q) use ($devDeptIds) {
                     if (!empty($devDeptIds)) {
@@ -685,7 +752,8 @@ class ProductionTaskController extends Controller
             // Fallback: if no department tagged, get all approved production projects
             if ($projects->isEmpty()) {
                 $projects = ProductionInitiation::query()
-                    ->with(['lead.branch', 'leadProduct', 'department'])
+                    ->select($selectCols)
+                    ->with($withRelations)
                     ->whereIn('production_approval_status', ['approval', 'approved'])
                     ->latest('id')
                     ->get();
@@ -698,7 +766,8 @@ class ProductionTaskController extends Controller
             $allAccessibleIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values()->all();
 
             $projects = ProductionInitiation::query()
-                ->with(['lead.branch', 'leadProduct', 'department'])
+                ->select($selectCols)
+                ->with($withRelations)
                 ->whereIn('production_approval_status', ['approval', 'approved'])
                 ->where(function ($q) use ($user, $allAccessibleIds) {
                     foreach ($allAccessibleIds as $uId) {
@@ -1007,6 +1076,94 @@ class ProductionTaskController extends Controller
                 ? floor($minutesRemaining / 60) . 'h ' . ($minutesRemaining % 60) . 'm'
                 : $minutesRemaining . 'm',
         ];
+    }
+
+    /**
+     * Cache department user mappings.
+     */
+    protected function getDepartmentUserIds(): array
+    {
+        return cache()->remember('tasks_department_user_ids', 120, function () {
+            $users = User::with(['roles:id,name,department_id', 'roles.department:id,name'])->get(['id']);
+            $map = [
+                'development' => [],
+                'designing' => [],
+                'digital_marketing' => [],
+                'all_specialized' => [],
+            ];
+            foreach ($users as $u) {
+                $depts = $u->roles->map(fn($r) => strtolower(trim($r->department?->name ?? '')))->filter()->all();
+                foreach ($depts as $deptName) {
+                    if (str_contains($deptName, 'develop') || str_contains($deptName, 'software') || str_contains($deptName, 'web') || str_contains($deptName, 'app')) {
+                        $map['development'][] = $u->id;
+                        $map['all_specialized'][] = $u->id;
+                        break;
+                    }
+                    if (str_contains($deptName, 'design') || str_contains($deptName, 'video')) {
+                        $map['designing'][] = $u->id;
+                        $map['all_specialized'][] = $u->id;
+                        break;
+                    }
+                    if (str_contains($deptName, 'digital') || str_contains($deptName, 'marketing') || str_contains($deptName, 'dm') || str_contains($deptName, 'smm') || str_contains($deptName, 'seo')) {
+                        $map['digital_marketing'][] = $u->id;
+                        $map['all_specialized'][] = $u->id;
+                        break;
+                    }
+                }
+            }
+            return $map;
+        });
+    }
+
+    /**
+     * Apply department filter to query.
+     */
+    protected function applyDepartmentFilter($query, string $deptSlug, array $deptUserMap): void
+    {
+        $query->where(function ($q) use ($deptSlug, $deptUserMap) {
+            $uids = $deptUserMap[$deptSlug] ?? [];
+            if (!empty($uids)) {
+                $q->whereIn('assigned_to', $uids);
+            }
+
+            $allSpecialized = $deptUserMap['all_specialized'] ?? [];
+            $q->orWhere(function ($fallbackQ) use ($deptSlug, $allSpecialized) {
+                if (!empty($allSpecialized)) {
+                    $fallbackQ->whereNotIn('assigned_to', $allSpecialized);
+                }
+                if ($deptSlug === 'development') {
+                    $fallbackQ->where(function ($sub) {
+                        $sub->whereHas('project', function ($pq) {
+                            $pq->where('department_id', 1)
+                               ->orWhereHas('department', fn($dq) => $dq->whereRaw("LOWER(name) LIKE '%develop%' OR LOWER(name) LIKE '%software%' OR LOWER(name) LIKE '%web%' OR LOWER(name) LIKE '%app%'"));
+                        })->orWhereRaw("LOWER(product_name) LIKE '%develop%' OR LOWER(product_name) LIKE '%website%' OR LOWER(product_name) LIKE '%app%' OR LOWER(product_name) LIKE '%software%'");
+                    });
+                } elseif ($deptSlug === 'designing') {
+                    $fallbackQ->where(function ($sub) {
+                        $sub->whereHas('project', function ($pq) {
+                            $pq->where('department_id', 2)
+                               ->orWhereHas('department', fn($dq) => $dq->whereRaw("LOWER(name) LIKE '%design%' OR LOWER(name) LIKE '%video%'"));
+                        })->orWhereRaw("LOWER(product_name) LIKE '%design%' OR LOWER(product_name) LIKE '%poster%' OR LOWER(product_name) LIKE '%logo%' OR LOWER(product_name) LIKE '%video%' OR LOWER(product_name) LIKE '%creative%'");
+                    });
+                } elseif ($deptSlug === 'digital_marketing') {
+                    $fallbackQ->where(function ($sub) {
+                        $sub->whereHas('project', function ($pq) {
+                            $pq->where('department_id', 3)
+                               ->orWhereHas('department', fn($dq) => $dq->whereRaw("LOWER(name) LIKE '%digital%' OR LOWER(name) LIKE '%marketing%' OR LOWER(name) LIKE '%dm%' OR LOWER(name) LIKE '%smm%' OR LOWER(name) LIKE '%seo%'"));
+                        })->orWhereRaw("LOWER(product_name) LIKE '%seo%' OR LOWER(product_name) LIKE '%social media%' OR LOWER(product_name) LIKE '%smm%' OR LOWER(product_name) LIKE '%campaign%' OR LOWER(product_name) LIKE '%marketing%'");
+                    });
+                }
+            });
+        });
+    }
+
+    /**
+     * Count tasks for a department.
+     */
+    protected function countForDepartment($query, string $deptSlug, array $deptUserMap): int
+    {
+        $this->applyDepartmentFilter($query, $deptSlug, $deptUserMap);
+        return $query->count();
     }
 
     /**

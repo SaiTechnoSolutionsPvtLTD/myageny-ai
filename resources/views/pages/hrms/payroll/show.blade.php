@@ -428,7 +428,7 @@
                     <i class="bi bi-arrow-left"></i> All Payroll Batches
                 </a>
                 <div class="inv-breadcrumbs">
-                    <a href="{{ route('home') }}"><i class="bi bi-house-door"></i></a>
+                    <a href="{{ route('dashboard') }}"><i class="bi bi-house-door"></i></a>
                     <span>/</span>
                     <a href="{{ route('payroll.index') }}">HRMS</a>
                     <span>/</span>

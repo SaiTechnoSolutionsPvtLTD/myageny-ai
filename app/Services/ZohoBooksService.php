@@ -2445,8 +2445,13 @@ class ZohoBooksService
             $lead = $this->findMatchingLead($phones, $emails, $cust?->company_name, $cust?->customer_name);
             if ($lead) {
                 $inv->update(['lead_id' => $lead->id]);
-                if ($cust && empty($cust->lead_id)) {
+                if ($cust) {
                     $cust->update(['lead_id' => $lead->id]);
+                    $otherUpdated = Invoice::where('id', '!=', $inv->id)
+                        ->where('customer_id', $cust->id)
+                        ->whereNull('lead_id')
+                        ->update(['lead_id' => $lead->id]);
+                    $invoicesUpdated += $otherUpdated;
                 }
                 $invoicesUpdated++;
             }

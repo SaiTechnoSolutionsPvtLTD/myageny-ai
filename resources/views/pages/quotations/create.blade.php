@@ -234,7 +234,7 @@ table.products-table tbody tr:last-child td{ border-bottom:none; }
                 <div class="form-group">
                     <label class="form-label">Client GST Number</label>
                     <input type="text" name="gst_number" id="gstNumberInput" class="form-control @error('gst_number') is-invalid @enderror"
-                           value="{{ old('gst_number') }}" placeholder="33ABCDE1234F1Z5" maxlength="20">
+                           value="{{ old('gst_number', $defaults['gst_number'] ?? '') }}" placeholder="33ABCDE1234F1Z5" maxlength="20">
                     @error('gst_number')<div class="error-text">{{ $message }}</div>@enderror
                 </div>
                 <div class="form-group">
@@ -257,7 +257,7 @@ table.products-table tbody tr:last-child td{ border-bottom:none; }
             </div>
             <div class="form-group">
                 <div class="address-meta">Enter the billing address exactly as it should appear on the quotation.</div>
-                <textarea name="bill_to_address" id="billToAddress" class="form-control" placeholder="Address">{{ old('bill_to_address') }}</textarea>
+                <textarea name="bill_to_address" id="billToAddress" class="form-control" placeholder="Address">{{ old('bill_to_address', $defaults['bill_to_address'] ?? '') }}</textarea>
             </div>
             <div class="address-toggle-card">
                 <div class="address-toggle-title">Shipping Preference</div>
@@ -277,7 +277,7 @@ table.products-table tbody tr:last-child td{ border-bottom:none; }
             </div>
             <div class="form-group">
                 <div class="address-meta">Use a separate shipping destination only when delivery differs from billing.</div>
-                <textarea name="ship_to_address" id="shipToAddress" class="form-control" placeholder="Address">{{ old('ship_to_address') }}</textarea>
+                <textarea name="ship_to_address" id="shipToAddress" class="form-control" placeholder="Address">{{ old('ship_to_address', $defaults['ship_to_address'] ?? '') }}</textarea>
             </div>
         </div>
         </div>
@@ -300,6 +300,11 @@ table.products-table tbody tr:last-child td{ border-bottom:none; }
                     'discount_type'  => $p->discount_type ?? 'fixed',
                     'discount_value' => (float) ($p->discount_value ?? 0),
                 ])) !!}
+            </script>
+
+            {{-- Embed initial items as JS data --}}
+            <script id="initialItemsData" type="application/json">
+                {!! json_encode($initialItems ?? []) !!}
             </script>
 
             <div class="products-table-wrapper">
@@ -347,7 +352,7 @@ table.products-table tbody tr:last-child td{ border-bottom:none; }
                     </div>  --}}
                     <div class="totals-line" id="igstLine" style="display:none;">
                         <span>IGST (<span id="displayTaxPctIgst">0</span>%)</span>
-                        <span id="displayTaxAmtIgst">â‚¹0.00</span>
+                        <span id="displayTaxAmtIgst">₹0.00</span>
                     </div>
                     <div class="totals-line grand">
                         <span>Grand Total</span>
@@ -365,7 +370,7 @@ table.products-table tbody tr:last-child td{ border-bottom:none; }
                 <i class="bi bi-sticky-fill"></i> Payment Terms
             </div>
             <div class="form-group">
-                <textarea name="payment_terms" class="form-control" placeholder="Payment Terms…">{{ old('notes') }}</textarea>
+                <textarea name="payment_terms" class="form-control" placeholder="Payment Terms…">{{ old('payment_terms', $defaults['payment_terms'] ?? '') }}</textarea>
             </div>
         </div>
 
@@ -474,26 +479,29 @@ $(function () {
                             data-desc="${p.description || ''}"
                             data-price="${p.price}">${p.text}</option>`).join('')}
                     </select>
+                    <input type="text" name="items[${idx}][item_name]"
+                           class="form-control item-name" style="margin-top:6px; font-size:12px; font-weight:600;"
+                           value="${data.item_name || ''}" placeholder="Product Name (Editable)">
                 </td>
                 <td class="td-desc">
-                    <input type="text" name="items[${idx}][description]"
-                           class="form-control item-desc" style="min-width:160px"
-                           value="${data.description || ''}" placeholder="Description">
+                    <textarea name="items[${idx}][description]"
+                              class="form-control item-desc" rows="2" style="min-width:180px; resize:vertical; font-size:12px;"
+                              placeholder="Description">${data.description || ''}</textarea>
                 </td>
                 <td class="td-qty">
                     <input type="number" name="items[${idx}][qty]"
-                           class="form-control item-qty" min="1" step="1"
+                           class="form-control item-qty" min="0.01" step="any"
                            value="${data.qty || 1}" required>
                 </td>
                 <td class="td-price">
                     <input type="number" name="items[${idx}][unit_price]"
-                           class="form-control item-price input-readonly" min="0" step="1"
-                           value="${data.unit_price || ''}" placeholder="0.00" required readonly>
+                           class="form-control item-price" min="0" step="any"
+                           value="${data.unit_price !== undefined ? data.unit_price : ''}" placeholder="0.00" required>
                 </td>
                 <td class="td-disc">
                     <input type="number" name="items[${idx}][discount]"
-                           class="form-control item-disc" min="0" step="1"
-                           value="${data.discount || 0}">
+                           class="form-control item-disc" min="0" step="any"
+                           value="${data.discount !== undefined ? data.discount : 0}">
                 </td>
                 <td class="td-total" style="text-align:right">
                     <span class="row-total-val" id="row-total-${idx}">₹0.00</span>
@@ -566,7 +574,8 @@ $(function () {
         let subtotal = 0;
 
         container.find('.row-total-val').each(function () {
-            subtotal += parseFloat($(this).text().replace('₹', '') || 0);
+            const val = parseFloat($(this).text().replace(/[^0-9.]/g, '') || 0);
+            if (!isNaN(val)) subtotal += val;
         });
 
         const customerState = ($('#customerStateInput').val() || '').trim();
@@ -602,6 +611,7 @@ $(function () {
     const prod = productMap[pid];
 
     if (prod) {
+        row.find('.item-name').val(prod.text);
         row.find('.item-desc').val(prod.description);
         row.find('.item-price').val(parseFloat(prod.price).toFixed(2));
         row.data('discount-mode', 'product');
@@ -609,6 +619,7 @@ $(function () {
         row.data('product-discount-value', fnum(prod.discount_value || 0));
         syncDiscountInput(row);
     } else {
+        row.find('.item-name').val('');
         row.find('.item-desc').val('');
         row.find('.item-price').val('');
         row.find('.item-disc').val('0.00');
@@ -708,10 +719,17 @@ $(function () {
         syncAddressVisibility();
     }
 
-if ($('#itemsBody tr').length === 0) {
-    addRow();
-}
-recalcTotals();
+    const INITIAL_ITEMS = JSON.parse(document.getElementById('initialItemsData')?.textContent || '[]');
+
+    if (INITIAL_ITEMS && INITIAL_ITEMS.length > 0) {
+        INITIAL_ITEMS.forEach(item => {
+            isAddingRow = false;
+            addRow(item);
+        });
+    } else if ($('#itemsBody tr').length === 0) {
+        addRow();
+    }
+    recalcTotals();
 
     /* ── Form submit guard ───────────────────────────────────────────────── */
     $('#quotationForm').on('submit', function () {

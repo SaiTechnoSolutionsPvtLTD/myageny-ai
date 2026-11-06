@@ -1059,6 +1059,12 @@
     </a>
     @endcan
 
+    @can('leads.view')
+    <a href="{{ route('leads.duplicates') }}" class="submenu-item {{ request()->is('leads/duplicates*') ? 'active' : '' }}">
+        Duplicate Leads
+    </a>
+    @endcan
+
      @can('leads.create')
     <a href="{{ url('/leads/create') }}" class="submenu-item {{ request()->is('leads/create') ? 'active' : '' }}">
         Add Lead

@@ -153,7 +153,7 @@
                         @foreach ($cams as $cam)
                             @php
                                 $campaign = App\Models\CampaignMaster::where('id', $cam)->first();
-                                $users = App\Models\User::where(function ($q) {
+                                $users = App\Models\User::with('branch')->where(function ($q) {
                                     $q->where('user_status', 'active')
                                       ->orWhere('is_active', true);
                                 })->orderBy('name')->get();
@@ -172,7 +172,7 @@
                                     <select class="chosen-select" multiple name="fbassignleads[]" id="fbassignleads-{{ $cam }}" data-placeholder="Click to select users...">
                                         @foreach ($users as $user)
                                             <option value="{{ $user->id }}" @selected(in_array($user->id, $assignedUserIds))>
-                                                {{ $user->name }}
+                                                {{ $user->name }}{{ $user->branch ? ' (' . $user->branch->name . ')' : '' }}
                                             </option>
                                         @endforeach
                                     </select>

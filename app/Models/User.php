@@ -325,12 +325,65 @@ class User extends Authenticatable
         ])->isNotEmpty();
     }
 
+    /**
+     * Determine if user is HR Admin (to be excluded from quotation approval & quotation notifications).
+     */
+    public function isHrAdmin(): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return false;
+        }
+
+        $keys = collect($this->roleKeys()->all());
+        if ($keys->contains('hr_admin')) {
+            return true;
+        }
+
+        $email = strtolower(trim((string) $this->email));
+        if ($email === 'admin@saitechnosolutions.net' || str_starts_with($email, 'hr_admin@') || str_starts_with($email, 'hradmin@')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine if user can approve quotations.
+     * Allowed: Super Admin, Company Admin, System Admin, HR.
+     * Prohibited: Branch Manager, Branch Admin, HR Admin, Sales Executive/Intern/TL/Manager, etc.
+     */
+    public function canApproveQuotation(): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        // Branch Admin, Branch Manager, and HR Admin are explicitly prohibited from approving quotations
+        if ($this->isBranchAdmin() || $this->isBranchManager() || $this->isHrAdmin()) {
+            return false;
+        }
+
+        $keys = collect($this->roleKeys()->all());
+        if ($keys->intersect(['branch_admin', 'branch_manager', 'bm', 'hr_admin'])->isNotEmpty()) {
+            return false;
+        }
+
+        // Super Admin, System Admin, Company Admin
+        if ($this->isSystemAdmin() || $this->isCompanyAdmin() || $this->isCompanyAdminRole()) {
+            return true;
+        }
+
+        // HR roles or HR department (pure HR, excluding HR Admin)
+        if ($this->hasHrLikeRole() || $this->belongsToHrDepartment()) {
+            return true;
+        }
+
+        return false;
+    }
+
     public function canAutoApproveQuotation(): bool
     {
-        return $this->isSuperAdmin()
-            || $this->isSystemAdmin()
-            || $this->isCompanyAdminRole()
-            || $this->isCbo();
+        return $this->canApproveQuotation();
     }
 
     public function canViewCampaignDailyBudget(): bool

@@ -23,6 +23,7 @@ use App\Services\DataVisibilityService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class LeadController extends Controller
@@ -480,6 +481,189 @@ class LeadController extends Controller
             'sourceOptions',
             'statusOptions'
         ));
+    }
+
+    /**
+     * Duplicate Leads View (Self and Others navtabs).
+     */
+    public function duplicatesIndex(Request $request)
+    {
+        $user = auth()->user();
+        $isAdminLike = $user->hasAdminLikeRole();
+        $companyId = $user->company_id;
+
+        // Target User: by default the logged-in user
+        $targetUserId = (int) ($request->filled('assigned_to') && $isAdminLike ? $request->input('assigned_to') : $user->id);
+        $targetUser = $targetUserId === $user->id ? $user : (User::find($targetUserId) ?? $user);
+
+        // Tab selection: 'self' or 'others'
+        $tab = strtolower(trim((string) $request->query('tab', 'self')));
+        if (!in_array($tab, ['self', 'others'], true)) {
+            $tab = 'self';
+        }
+
+        // Quick date & date range handling
+        $defaultFromDate = now()->startOfMonth()->toDateString();
+        $defaultToDate   = now()->endOfMonth()->toDateString();
+        $this->resolveQuickDate($request, $defaultFromDate, $defaultToDate);
+
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+        $search = trim((string) $request->input('search', ''));
+        $branchId = $request->filled('branch_id') ? (int) $request->input('branch_id') : null;
+        $statusId = $request->filled('lead_status_id') ? (int) $request->input('lead_status_id') : null;
+
+        // Clean phone expression in MySQL (last 10 digits)
+        $cleanPhoneExpr = "RIGHT(REGEXP_REPLACE(mobile_number, '[^0-9]', ''), 10)";
+
+        // Common filter conditions for leads
+        $applyFilters = function ($q) use ($dateFrom, $dateTo, $search, $branchId, $statusId) {
+            if (!empty($dateFrom)) {
+                $q->whereDate('lead_date', '>=', $dateFrom);
+            }
+            if (!empty($dateTo)) {
+                $q->whereDate('lead_date', '<=', $dateTo);
+            }
+            if (!empty($branchId)) {
+                $q->where('branch_id', $branchId);
+            }
+            if (!empty($statusId)) {
+                $q->where('lead_status_id', $statusId);
+            }
+            if (!empty($search)) {
+                $q->where(function ($sub) use ($search) {
+                    $sub->where('company_name', 'like', "%{$search}%")
+                        ->orWhere('contact_name', 'like', "%{$search}%")
+                        ->orWhere('mobile_number', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                });
+            }
+        };
+
+        // 1. Calculate Tab Counts (Self and Others)
+        // Self duplicate phone groups:
+        $selfQuery = DB::table('leads')
+            ->selectRaw("{$cleanPhoneExpr} as norm_phone, COUNT(*) as c")
+            ->whereNotNull('mobile_number')
+            ->where('mobile_number', '!=', '')
+            ->whereNull('deleted_at')
+            ->where('assigned_to', $targetUserId)
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+            ->tap($applyFilters)
+            ->groupByRaw($cleanPhoneExpr)
+            ->havingRaw("LENGTH(norm_phone) >= 7 AND norm_phone NOT IN ('0000000000', '0000000') AND c > 1");
+
+        $selfCount = $selfQuery->get()->count();
+
+        // Others duplicate phone groups:
+        $othersQuery = DB::table('leads')
+            ->selectRaw("
+                {$cleanPhoneExpr} as norm_phone,
+                COUNT(CASE WHEN assigned_to = {$targetUserId} THEN 1 END) as self_c,
+                COUNT(CASE WHEN (assigned_to != {$targetUserId} OR assigned_to IS NULL) THEN 1 END) as other_c,
+                COUNT(*) as c
+            ")
+            ->whereNotNull('mobile_number')
+            ->where('mobile_number', '!=', '')
+            ->whereNull('deleted_at')
+            ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+            ->tap($applyFilters)
+            ->groupByRaw($cleanPhoneExpr)
+            ->havingRaw("LENGTH(norm_phone) >= 7 AND norm_phone NOT IN ('0000000000', '0000000') AND self_c > 0 AND other_c > 0");
+
+        $othersCount = $othersQuery->get()->count();
+
+        // 2. Paginate Active Tab
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = 10;
+
+        if ($tab === 'self') {
+            $totalGroups = $selfCount;
+            $activePhoneQuery = (clone $selfQuery)->orderByDesc('c');
+        } else {
+            $totalGroups = $othersCount;
+            $activePhoneQuery = (clone $othersQuery)->orderByDesc('c');
+        }
+
+        $pagedPhones = $activePhoneQuery
+            ->forPage($page, $perPage)
+            ->get();
+
+        $phoneList = $pagedPhones->pluck('norm_phone')->all();
+
+        // 3. Fetch all leads for these paged phones
+        if (!empty($phoneList)) {
+            $leadQuery = Lead::query()
+                ->with(['branch', 'assignedTo.roles', 'createdBy', 'preSaleExecutive', 'leadStatus', 'leadSource'])
+                ->whereNotNull('mobile_number')
+                ->whereNull('deleted_at')
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->whereIn(DB::raw($cleanPhoneExpr), $phoneList);
+
+            if ($tab === 'self') {
+                $leadQuery->where('assigned_to', $targetUserId);
+            }
+
+            $leads = $leadQuery->latest('id')->get();
+
+            // Group by norm_phone
+            $leadsByPhone = $leads->groupBy(function ($l) {
+                $digits = preg_replace('/[^0-9]/', '', (string) $l->mobile_number);
+                return strlen($digits) >= 10 ? substr($digits, -10) : $digits;
+            });
+        } else {
+            $leadsByPhone = collect();
+        }
+
+        // Build paginator for the phone groups
+        $paginatedGroups = new \Illuminate\Pagination\LengthAwarePaginator(
+            $pagedPhones,
+            $totalGroups,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        $branches = $this->visibility->visibleBranches($request->user());
+        $users    = $this->visibility->visibleAssignableUsers($request->user())
+            ->reject(fn ($u) => $u->hasPreSalesLikeRole())
+            ->values();
+
+        $statusOptions = LeadStatus::orderBy('name')->get(['id', 'name']);
+
+        $filterPanelOpen = !$request->has('reset') && (
+            $request->filled('search')
+            || $request->filled('branch_id')
+            || $request->filled('lead_status_id')
+            || $request->filled('assigned_to')
+            || ($request->filled('quick_date') && $request->input('quick_date') !== 'all')
+            || $request->filled('date_from')
+            || $request->filled('date_to')
+        );
+
+        return view('pages.leads.duplicates', [
+            'tab' => $tab,
+            'selfCount' => $selfCount,
+            'othersCount' => $othersCount,
+            'paginatedGroups' => $paginatedGroups,
+            'leadsByPhone' => $leadsByPhone,
+            'targetUser' => $targetUser,
+            'targetUserId' => $targetUserId,
+            'branches' => $branches,
+            'users' => $users,
+            'statusOptions' => $statusOptions,
+            'filterPanelOpen' => $filterPanelOpen,
+            'filters' => [
+                'tab' => $tab,
+                'search' => $search,
+                'branch_id' => $branchId,
+                'lead_status_id' => $statusId,
+                'assigned_to' => $request->input('assigned_to'),
+                'quick_date' => $request->input('quick_date'),
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+            ],
+        ]);
     }
 
     /**
