@@ -10,6 +10,9 @@
 .pts-breadcrumb { font-size:12px; color:#64748b; margin-top:4px; }
 .pts-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .pts-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 16px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#111827; font-size:13px; font-weight:800; text-decoration:none; cursor:pointer; transition:all 0.2s; }
+.pts-btn.is-loading { opacity: 0.75 !important; cursor: not-allowed !important; pointer-events: none !important; }
+@keyframes pts-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.pts-spin { display: inline-block; animation: pts-spin 0.8s linear infinite; flex-shrink: 0; }
 .pts-btn-primary { background:#ea580c; border-color:#ea580c; color:#fff; }
 .pts-btn-primary:hover { background:#c2410c; border-color:#c2410c; color:#fff; }
 .pts-btn-outline { border-color:#ea580c; color:#ea580c; background:#fff; }
@@ -420,7 +423,7 @@
 
                         <div style="display:flex; align-items:center; gap:12px;">
                             <a href="{{ route('projects.tasks.index') }}" class="pts-btn">Cancel</a>
-                            <button type="submit" class="pts-btn pts-btn-primary" style="padding:10px 24px; font-size:14px;">
+                            <button type="submit" class="pts-btn pts-btn-primary" id="taskSubmitBtn" style="padding:10px 24px; font-size:14px;">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
                                 <span>Save &amp; Assign Tasks</span>
                             </button>
@@ -917,10 +920,24 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Form submit validation: ensure each task description is >= 30 characters
+    // Form submit validation & double-submission lock with button loading state
     const form = document.getElementById('taskCreationForm');
+    const submitBtn = document.getElementById('taskSubmitBtn');
+    let isTaskSubmitting = false;
+
     if (form) {
         form.addEventListener('submit', function (e) {
+            if (isTaskSubmitting) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+
+            // Check standard browser validity first (empty required selects, inputs, etc.)
+            if (!form.checkValidity()) {
+                return; // Let browser display native validation tooltip
+            }
+
             const textareas = form.querySelectorAll('.task-desc-input');
             for (let i = 0; i < textareas.length; i++) {
                 const ta = textareas[i];
@@ -934,8 +951,39 @@ document.addEventListener('DOMContentLoaded', function () {
                     return false;
                 }
             }
+
+            // All validations passed: lock form to prevent multiple submits and show loading spinner
+            isTaskSubmitting = true;
+            if (submitBtn) {
+                submitBtn.classList.add('is-loading');
+                submitBtn.disabled = true;
+                submitBtn.style.pointerEvents = 'none';
+                submitBtn.innerHTML = `
+                    <svg class="pts-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25"></circle>
+                        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor"></path>
+                    </svg>
+                    <span>Allocating Tasks...</span>
+                `;
+            }
         });
     }
+
+    // Reset button state if user navigates back using browser history (bfcache)
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted) {
+            isTaskSubmitting = false;
+            if (submitBtn) {
+                submitBtn.classList.remove('is-loading');
+                submitBtn.disabled = false;
+                submitBtn.style.pointerEvents = '';
+                submitBtn.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    <span>Save &amp; Assign Tasks</span>
+                `;
+            }
+        }
+    });
 
     // Init existing rows
     container.querySelectorAll('.task-item-row').forEach(row => {

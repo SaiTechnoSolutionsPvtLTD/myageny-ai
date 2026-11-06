@@ -307,6 +307,48 @@
 @endpush
 
 @section('content')
+@php
+    $user = auth()->user();
+
+    // 1. Invoices Permission (Total Receivables card, Recent Invoices, Receivables Modal, Create Invoice button)
+    $canInvoiceView = $user?->can('accounts_invoices.menuview')
+        || $user?->can('accounts_invoices.view')
+        || $user?->can('accounts_sales.menuview')
+        || $user?->can('accounts_sales.view')
+        || $user?->isSuperAdmin();
+
+    $canInvoiceCreate = $user?->can('accounts_invoices.create')
+        || $user?->can('accounts_sales.create')
+        || $user?->isSuperAdmin();
+
+    // 2. Expenses Permission (Expenses This Month card, Top Expenses Chart, Expenses Modal, Add Expense button)
+    $canExpenseView = $user?->can('accounts_expenses.menuview')
+        || $user?->can('accounts_expenses.view')
+        || $user?->isSuperAdmin();
+
+    $canExpenseCreate = $user?->can('accounts_expenses.create')
+        || $user?->isSuperAdmin();
+
+    // 3. Purchase Orders (Payables) Permission (Total Payables card, Recent POs, Payables Modal, Create PO button)
+    $canPoView = $user?->can('accounts_purchase_orders.menuview')
+        || $user?->can('accounts_purchase_orders.view')
+        || $user?->isSuperAdmin();
+
+    $canPoCreate = $user?->can('accounts_purchase_orders.create')
+        || $user?->isSuperAdmin();
+
+    // 4. Payments (Income) Permission (Income This Month card, Income Modal)
+    $canPaymentView = $user?->can('accounts_payments.menuview')
+        || $user?->can('accounts_payments.view')
+        || $canInvoiceView
+        || $user?->isSuperAdmin();
+
+    // 5. Ad Budget Permission
+    $canAdBudgetView = $user?->can('accounts_ad_budget.menuview')
+        || $user?->can('accounts_ad_budget.view')
+        || $user?->isSuperAdmin();
+@endphp
+
 <div class="acc-dash-page">
 
     {{-- Topbar --}}
@@ -323,25 +365,33 @@
             </div>
         </div>
         <div class="acc-actions">
+            @if($canInvoiceCreate)
             <a href="{{ route('accounts.sales.invoices.create') }}" class="acc-btn acc-btn-primary">
                 <i class="bi bi-receipt-cutoff"></i> Create Invoice
             </a>
+            @endif
+            @if($canPoCreate)
             <a href="{{ route('accounts.purchase-orders.create') }}" class="acc-btn acc-btn-indigo">
                 <i class="bi bi-bag-plus"></i> Create PO
             </a>
+            @endif
+            @if($canExpenseCreate)
             <a href="{{ route('accounts.expenses.create') }}" class="acc-btn acc-btn-emerald">
                 <i class="bi bi-plus-circle"></i> Add Expense
             </a>
+            @endif
+            @if($canAdBudgetView)
             <a href="{{ route('accounts.ad-budget.clients') }}" class="acc-btn acc-btn-outline">
                 <i class="bi bi-megaphone"></i> Ad Budget
             </a>
+            @endif
         </div>
     </div>
 
     <div class="acc-body">
 
         {{-- Pending Alert Banner (If Any Pending Ad Budgets) --}}
-        @if(($pendingAccountsCount ?? 0) > 0 || ($pendingApprovalsCount ?? 0) > 0)
+        @if($canAdBudgetView && (($pendingAccountsCount ?? 0) > 0 || ($pendingApprovalsCount ?? 0) > 0))
         <div class="acc-alert-banner">
             <div style="display:flex; align-items:center; gap:14px;">
                 <div style="width:42px; height:42px; border-radius:10px; background:#f59e0b; color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;">
@@ -360,10 +410,12 @@
         </div>
         @endif
 
-        {{-- Core Financial KPI Cards (4 Clickable Cards to Open Detailed Modals) --}}
+        {{-- Core Financial KPI Cards (Clickable Cards to Open Detailed Modals) --}}
+        @if($canInvoiceView || $canPoView || $canPaymentView || $canExpenseView)
         <div class="acc-kpi-grid">
 
-            {{-- 1. Total Receivables Card --}}
+            {{-- 1. Total Receivables Card (Invoices) --}}
+            @if($canInvoiceView)
             <div class="acc-kpi-card kpi-receivable" onclick="openModal('receivablesModal')" title="Click to view all outstanding receivables">
                 <i class="bi bi-receipt acc-kpi-watermark"></i>
                 <div>
@@ -386,8 +438,10 @@
                     </span>
                 </div>
             </div>
+            @endif
 
-            {{-- 2. Total Payables Card --}}
+            {{-- 2. Total Payables Card (Purchase Orders) --}}
+            @if($canPoView)
             <div class="acc-kpi-card kpi-payable" onclick="openModal('payablesModal')" title="Click to view all purchase order payables">
                 <i class="bi bi-bag-check-fill acc-kpi-watermark"></i>
                 <div>
@@ -410,8 +464,10 @@
                     </span>
                 </div>
             </div>
+            @endif
 
             {{-- 3. Income This Month Card --}}
+            @if($canPaymentView)
             <div class="acc-kpi-card kpi-income" onclick="openModal('incomeModal')" title="Click to view all income collections this month">
                 <i class="bi bi-wallet-fill acc-kpi-watermark"></i>
                 <div>
@@ -434,8 +490,10 @@
                     </span>
                 </div>
             </div>
+            @endif
 
-            {{-- 4. Expenses This Month Card --}}
+            {{-- 4. Expenses This Month Card (Expenses) --}}
+            @if($canExpenseView)
             <div class="acc-kpi-card kpi-expense" onclick="openModal('expensesModal')" title="Click to view all recorded expenses this month">
                 <i class="bi bi-credit-card-fill acc-kpi-watermark"></i>
                 <div>
@@ -458,13 +516,22 @@
                     </span>
                 </div>
             </div>
+            @endif
 
         </div>
+        @endif
 
         {{-- Financial Charts Row: Income & Expense (Left) vs Top Expenses (Right) --}}
-        <div class="acc-charts-row">
+        @php
+            $canShowIncomeExpenseChart = $canInvoiceView || $canExpenseView || $canPaymentView;
+            $canShowTopExpensesChart = $canExpenseView;
+        @endphp
+
+        @if($canShowIncomeExpenseChart || $canShowTopExpensesChart)
+        <div class="acc-charts-row" style="{{ (!$canShowIncomeExpenseChart || !$canShowTopExpensesChart) ? 'grid-template-columns: 1fr;' : '' }}">
 
             {{-- Income and Expense Comparison Chart --}}
+            @if($canShowIncomeExpenseChart)
             <div class="acc-card">
                 <div class="acc-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
                     <div>
@@ -501,8 +568,10 @@
                 </div>
                 <div id="chart-income-expense" style="min-height:330px; transition:opacity 0.2s;"></div>
             </div>
+            @endif
 
             {{-- Top Expenses Breakdown Chart --}}
+            @if($canShowTopExpensesChart)
             <div class="acc-card">
                 <div class="acc-card-header" style="flex-wrap:wrap; gap:12px; align-items:center;">
                     <div>
@@ -530,17 +599,22 @@
                             </select>
                             <i class="bi bi-chevron-down acc-arrow-icon"></i>
                         </div>
+                        @if($canExpenseCreate)
                         <a href="{{ route('accounts.expenses.index') }}" class="acc-btn acc-btn-outline" style="padding:6px 10px; font-size:12px; height:32px; border-radius:9px;" title="Manage Expenses">
                             <i class="bi bi-gear-fill"></i>
                         </a>
+                        @endif
                     </div>
                 </div>
                 <div id="chart-top-expenses" style="min-height:330px; display:flex; align-items:center; justify-content:center; transition:opacity 0.2s;"></div>
             </div>
+            @endif
 
         </div>
+        @endif
 
         {{-- Ad Budget Overview Secondary Grid --}}
+        @if($canAdBudgetView)
         <div class="acc-card" style="padding:18px 22px;">
             <div class="acc-card-header" style="margin-bottom:14px;">
                 <div>
@@ -594,11 +668,14 @@
                 </div>
             </div>
         </div>
+        @endif
 
         {{-- Tables Row: Recent Invoices & Recent Purchase Orders --}}
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;" class="recent-tables-grid">
+        @if($canInvoiceView || $canPoView)
+        <div style="display:grid; grid-template-columns: {{ ($canInvoiceView && $canPoView) ? '1fr 1fr' : '1fr' }}; gap:20px;" class="recent-tables-grid">
 
             {{-- Recent Invoices --}}
+            @if($canInvoiceView)
             <div class="acc-card">
                 <div class="acc-card-header">
                     <div>
@@ -672,8 +749,10 @@
                     </div>
                 @endif
             </div>
+            @endif
 
             {{-- Recent Purchase Orders --}}
+            @if($canPoView)
             <div class="acc-card">
                 <div class="acc-card-header">
                     <div>
@@ -739,10 +818,13 @@
                     </div>
                 @endif
             </div>
+            @endif
 
         </div>
+        @endif
 
         {{-- Recent Ad Budget Requests Table (Preserved from existing view) --}}
+        @if($canAdBudgetView)
         <div class="acc-card">
             <div class="acc-card-header">
                 <div>
@@ -810,6 +892,7 @@
                 </div>
             @endif
         </div>
+        @endif
 
     </div>
 </div>
@@ -817,6 +900,7 @@
 {{-- ========================================================================= --}}
 {{-- MODAL 1: TOTAL RECEIVABLES DETAILS                                        --}}
 {{-- ========================================================================= --}}
+@if($canInvoiceView)
 <div id="receivablesModal" class="modal-overlay">
     <div class="modal-box-lg">
         <div class="modal-header-custom">
@@ -953,10 +1037,12 @@
         </div>
     </div>
 </div>
+@endif
 
 {{-- ========================================================================= --}}
 {{-- MODAL 2: TOTAL PAYABLES DETAILS                                           --}}
 {{-- ========================================================================= --}}
+@if($canPoView)
 <div id="payablesModal" class="modal-overlay">
     <div class="modal-box-lg">
         <div class="modal-header-custom">
@@ -1079,10 +1165,12 @@
         </div>
     </div>
 </div>
+@endif
 
 {{-- ========================================================================= --}}
 {{-- MODAL 3: INCOME (THIS MONTH) DETAILS                                      --}}
 {{-- ========================================================================= --}}
+@if($canPaymentView)
 <div id="incomeModal" class="modal-overlay">
     <div class="modal-box-lg">
         <div class="modal-header-custom">
@@ -1193,10 +1281,12 @@
         </div>
     </div>
 </div>
+@endif
 
 {{-- ========================================================================= --}}
 {{-- MODAL 4: EXPENSES (THIS MONTH) DETAILS                                    --}}
 {{-- ========================================================================= --}}
+@if($canExpenseView)
 <div id="expensesModal" class="modal-overlay">
     <div class="modal-box-lg">
         <div class="modal-header-custom">
@@ -1307,6 +1397,7 @@
         </div>
     </div>
 </div>
+@endif
 
 @endsection
 

@@ -744,16 +744,11 @@ class AccountsApiController extends Controller
             $paginated = $query->latest()->paginate($perPage);
 
             $now = Carbon::now('Asia/Kolkata');
-            $requestCutoff = $now->copy()->setTime(11, 30, 0);
-            $isRequestAllowed = $now->lessThan($requestCutoff);
-            $approvalCutoff = $now->copy()->setTime(12, 30, 0);
-            $isApprovalAllowed = $now->lessThan($approvalCutoff);
-
             $cutoffInfo = [
-                'is_request_allowed'   => $isRequestAllowed,
-                'request_cutoff_time'  => '11:30 AM',
-                'is_approval_allowed'  => $isApprovalAllowed,
-                'approval_cutoff_time' => '12:30 PM',
+                'is_request_allowed'   => true,
+                'request_cutoff_time'  => null,
+                'is_approval_allowed'  => true,
+                'approval_cutoff_time' => null,
                 'current_time'         => $now->format('h:i A'),
             ];
 
@@ -802,14 +797,6 @@ class AccountsApiController extends Controller
 
     public function raiseClientBudget(Request $request): JsonResponse
     {
-        $now = Carbon::now('Asia/Kolkata');
-        if ($now->greaterThanOrEqualTo($now->copy()->setTime(11, 30, 0))) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Daily Ad Budget Request creation is closed for today. Requests must be submitted before 11:30 AM IST.',
-            ], 422);
-        }
-
         $validated = $request->validate([
             'ad_account_id'  => 'required|exists:ad_account_masters,id',
             'amount'         => 'required|numeric|min:1',
@@ -862,14 +849,6 @@ class AccountsApiController extends Controller
 
     public function tlApproveAdBudget(Request $request, AdBudgetRequest $adBudgetRequest): JsonResponse
     {
-        $now = Carbon::now('Asia/Kolkata');
-        if ($now->greaterThanOrEqualTo($now->copy()->setTime(12, 30, 0))) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Ad Budget Approval window is closed for today. Approvals are allowed only until 12:30 PM IST.',
-            ], 422);
-        }
-
         $action = $request->input('action', 'approve');
 
         $validated = $request->validate([
@@ -915,14 +894,6 @@ class AccountsApiController extends Controller
 
     public function accountsApproveAdBudget(Request $request, AdBudgetRequest $adBudgetRequest): JsonResponse
     {
-        $now = Carbon::now('Asia/Kolkata');
-        if ($now->greaterThanOrEqualTo($now->copy()->setTime(12, 30, 0))) {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Ad Budget Approval window is closed for today. Approvals are allowed only until 12:30 PM IST.',
-            ], 422);
-        }
-
         $action = $request->input('action', 'approve');
         $user = $request->user();
 

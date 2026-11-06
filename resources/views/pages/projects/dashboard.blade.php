@@ -700,7 +700,7 @@
                     </div>
 
                     <div class="ps-actions">
-                        <button type="submit" class="ps-btn ps-btn-primary" style="background:#3b82f6; border-color:#3b82f6; color:#fff;">Allocate Task</button>
+                        <button type="submit" class="ps-btn ps-btn-primary" id="btnAllocateDailyTask" style="background:#3b82f6; border-color:#3b82f6; color:#fff;">Allocate Task</button>
                         <button type="button" class="ps-btn" data-close-allocate-modal>Cancel</button>
                     </div>
                 </form>
@@ -2190,8 +2190,13 @@
             allocateUserSelectVal.addEventListener('change', validateDailyTargets);
         }
 
+        let isDailyAllocateSubmitting = false;
         if (allocateTaskForm) {
             allocateTaskForm.addEventListener('submit', function (e) {
+                if (isDailyAllocateSubmitting) {
+                    e.preventDefault();
+                    return;
+                }
                 // Ensure at least one project checkbox is checked
                 const checkedCount = document.querySelectorAll('.allocate-project-checkbox:checked').length;
                 if (checkedCount === 0) {
@@ -2207,6 +2212,16 @@
                         invalidInput.focus();
                         invalidInput.reportValidity();
                     }
+                    return;
+                }
+
+                isDailyAllocateSubmitting = true;
+                const btn = document.getElementById('btnAllocateDailyTask');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.style.pointerEvents = 'none';
+                    btn.style.opacity = '0.75';
+                    btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" style="width:14px; height:14px; margin-right:6px; display:inline-block; vertical-align:text-bottom; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:spinner-border .75s linear infinite;"></span> Allocating...`;
                 }
             });
         }

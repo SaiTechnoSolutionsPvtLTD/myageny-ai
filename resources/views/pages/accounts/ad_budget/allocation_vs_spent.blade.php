@@ -145,32 +145,40 @@
     margin-bottom: -1px;
 }
 
-/* Filter Bar */
-.adb-filter-bar {
+/* Filter Section & Unified Controls */
+.adb-filter-container {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 16px 20px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.adb-filter-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px 20px;
-    border-bottom: 1px solid #e2e8f0;
-    background: #ffffff;
+    gap: 10px;
     flex-wrap: wrap;
 }
 .adb-search-wrap {
     position: relative;
-    flex: 1;
-    min-width: 220px;
+    flex: 1 1 240px;
+    min-width: 200px;
     max-width: 320px;
 }
 .adb-search-input {
     width: 100%;
-    padding: 9px 12px 9px 38px;
+    height: 38px;
+    padding: 0 32px 0 36px;
     border: 1px solid #cbd5e1;
-    border-radius: 10px;
+    border-radius: 9px;
     font-size: 13px;
     outline: none;
     font-family: inherit;
     background: #ffffff;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    color: #0f172a;
+    transition: all 0.15s ease;
+    box-sizing: border-box;
 }
 .adb-search-input:focus {
     border-color: #fe5f04;
@@ -183,21 +191,195 @@
     transform: translateY(-50%);
     color: #94a3b8;
     font-size: 14px;
+    pointer-events: none;
+}
+.adb-search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    line-height: 1;
+    border-radius: 4px;
+}
+.adb-search-clear:hover {
+    color: #ef4444;
+}
+
+.adb-select-wrap {
+    position: relative;
+    flex: 0 1 220px;
+    min-width: 170px;
+}
+.adb-control-ico {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    font-size: 13px;
+    pointer-events: none;
 }
 .adb-select {
-    padding: 9px 14px;
+    width: 100%;
+    height: 38px;
+    padding: 0 28px 0 34px;
     border: 1px solid #cbd5e1;
-    border-radius: 10px;
+    border-radius: 9px;
     font-size: 13px;
     font-family: inherit;
     outline: none;
     background: #ffffff;
     color: #1e293b;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: all 0.15s ease;
+    box-sizing: border-box;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
 }
 .adb-select:focus {
     border-color: #fe5f04;
     box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12);
+}
+
+/* Date Range Combined Capsule */
+.adb-date-range-box {
+    display: inline-flex;
+    align-items: center;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    height: 38px;
+    padding: 0 8px;
+    gap: 6px;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+}
+.adb-date-range-box:focus-within {
+    border-color: #fe5f04;
+    box-shadow: 0 0 0 3px rgba(254, 95, 4, 0.12);
+}
+.adb-date-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.adb-date-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    user-select: none;
+}
+.adb-date-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #0f172a;
+    padding: 0 2px;
+    cursor: pointer;
+    height: 34px;
+}
+.adb-date-arrow {
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 700;
+    user-select: none;
+    padding: 0 2px;
+}
+
+/* Filter Actions */
+.adb-filter-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+@media (max-width: 900px) {
+    .adb-filter-actions {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+
+/* Presets Bar */
+.adb-presets-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    border-top: 1px dashed #e2e8f0;
+}
+.adb-presets-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.adb-presets-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 4px;
+}
+.adb-preset-pill {
+    padding: 4px 10px;
+    border-radius: 7px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #475569;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1.2;
+}
+.adb-preset-pill:hover {
+    background: #fff7ed;
+    border-color: #fdba74;
+    color: #ea580c;
+}
+.adb-preset-pill.active {
+    background: #fff7ed;
+    border-color: #fe5f04;
+    color: #fe5f04;
+    font-weight: 700;
+    box-shadow: 0 1px 3px rgba(254, 95, 4, 0.1);
+}
+.adb-filter-count-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0369a1;
+    background: #e0f2fe;
+    border: 1px solid #bae6fd;
+    padding: 3px 9px;
+    border-radius: 999px;
 }
 
 /* Buttons */
@@ -431,37 +613,96 @@
             </a>
         </div>
 
-        {{-- Filter Bar --}}
+        {{-- Unified Filter Section --}}
+        @php
+            $activeFilterCount = 0;
+            if (request('search')) $activeFilterCount++;
+            if (request('ad_account_id')) $activeFilterCount++;
+            if ($dateFrom) $activeFilterCount++;
+            if ($dateTo) $activeFilterCount++;
+        @endphp
         <form method="GET" action="{{ route('accounts.ad-budget.allocation-vs-spent') }}" id="adbFilterForm">
-            <div class="adb-filter-bar">
-                <div class="adb-search-wrap">
-                    <i class="bi bi-search adb-search-ico"></i>
-                    <input type="text" name="search" class="adb-search-input" placeholder="Search particulars, account, user…" value="{{ request('search') }}">
+            <div class="adb-filter-container">
+                {{-- Row 1: Unified Filter Controls --}}
+                <div class="adb-filter-row">
+                    {{-- Search Input --}}
+                    <div class="adb-search-wrap">
+                        <i class="bi bi-search adb-search-ico"></i>
+                        <input type="text" name="search" id="filterSearchInput" class="adb-search-input" placeholder="Search particulars, account, ref…" value="{{ request('search') }}">
+                        @if(request('search'))
+                            <button type="button" class="adb-search-clear" onclick="clearFilterSearch()" title="Clear search">✕</button>
+                        @endif
+                    </div>
+
+                    {{-- Ad Account Dropdown --}}
+                    <div class="adb-select-wrap">
+                        <i class="bi bi-megaphone adb-control-ico"></i>
+                        <select name="ad_account_id" class="adb-select" onchange="this.form.submit()">
+                            <option value="">All Ad Accounts</option>
+                            @foreach($adAccounts as $acc)
+                                <option value="{{ $acc->id }}" {{ request('ad_account_id') == $acc->id ? 'selected' : '' }}>
+                                    {{ $acc->account_name }} ({{ $acc->platform }})
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    {{-- Date Range Capsule --}}
+                    <div class="adb-date-range-box">
+                        <div class="adb-date-field">
+                            <span class="adb-date-label">
+                                <i class="bi bi-calendar3" style="color:#fe5f04;"></i> From
+                            </span>
+                            <input type="date" name="date_from" id="filterDateFrom" class="adb-date-input" value="{{ $dateFrom }}" onchange="this.form.submit()" title="Start Date">
+                        </div>
+                        <span class="adb-date-arrow">➔</span>
+                        <div class="adb-date-field">
+                            <span class="adb-date-label">
+                                <i class="bi bi-calendar3" style="color:#fe5f04;"></i> To
+                            </span>
+                            <input type="date" name="date_to" id="filterDateTo" class="adb-date-input" value="{{ $dateTo }}" onchange="this.form.submit()" title="End Date">
+                        </div>
+                    </div>
+
+                    {{-- Filter Actions --}}
+                    <div class="adb-filter-actions">
+                        <button type="submit" class="adb-btn adb-btn-primary" style="height:38px; padding:0 16px; font-size:12.5px;">
+                            <i class="bi bi-funnel-fill"></i>
+                            <span>Filter</span>
+                        </button>
+                        @if(request()->hasAny(['search','ad_account_id','date_from','date_to']))
+                            <a href="{{ route('accounts.ad-budget.allocation-vs-spent') }}" class="adb-btn adb-btn-secondary" style="height:38px; padding:0 14px; font-size:12.5px; background:#fff;" title="Reset All Filters">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                                <span>Reset</span>
+                            </a>
+                        @endif
+                    </div>
                 </div>
 
-                <select name="ad_account_id" class="adb-select" style="min-width:190px;" onchange="this.form.submit()">
-                    <option value="">All Ad Accounts</option>
-                    @foreach($adAccounts as $acc)
-                        <option value="{{ $acc->id }}" {{ request('ad_account_id') == $acc->id ? 'selected' : '' }}>
-                            {{ $acc->account_name }} ({{ $acc->platform }})
-                        </option>
-                    @endforeach
-                </select>
+                {{-- Row 2: Quick Date Presets Bar --}}
+                <div class="adb-presets-bar">
+                    <div class="adb-presets-left">
+                        <span class="adb-presets-title">
+                            <i class="bi bi-lightning-charge-fill" style="color:#fe5f04;"></i>
+                            <span>Quick Ranges:</span>
+                        </span>
+                        <button type="button" class="adb-preset-pill" data-preset="today" onclick="applyDatePreset('today')">Today</button>
+                        <button type="button" class="adb-preset-pill" data-preset="this_week" onclick="applyDatePreset('this_week')">This Week</button>
+                        <button type="button" class="adb-preset-pill" data-preset="this_month" onclick="applyDatePreset('this_month')">This Month</button>
+                        <button type="button" class="adb-preset-pill" data-preset="last_month" onclick="applyDatePreset('last_month')">Last Month</button>
+                        <button type="button" class="adb-preset-pill" data-preset="this_fy" onclick="applyDatePreset('this_fy')">Financial Year</button>
+                        <button type="button" class="adb-preset-pill" data-preset="all_time" onclick="applyDatePreset('all_time')">All Time</button>
+                    </div>
 
-                <div style="display:flex; align-items:center; gap:6px;">
-                    <span style="font-size:12px; color:#64748b; font-weight:700;">From:</span>
-                    <input type="date" name="date_from" class="adb-select" value="{{ $dateFrom }}" onchange="this.form.submit()">
+                    @if($activeFilterCount > 0)
+                        <div class="adb-active-badge-wrap">
+                            <span class="adb-filter-count-badge">
+                                <i class="bi bi-check2-circle"></i>
+                                <span>{{ $activeFilterCount }} {{ \Illuminate\Support\Str::plural('filter', $activeFilterCount) }} active</span>
+                            </span>
+                        </div>
+                    @endif
                 </div>
-
-                <div style="display:flex; align-items:center; gap:6px;">
-                    <span style="font-size:12px; color:#64748b; font-weight:700;">To:</span>
-                    <input type="date" name="date_to" class="adb-select" value="{{ $dateTo }}" onchange="this.form.submit()">
-                </div>
-
-                <button type="submit" class="adb-btn adb-btn-secondary" style="padding:9px 15px; font-size:12.5px;">Apply Filter</button>
-                @if(request()->hasAny(['search','ad_account_id','date_from','date_to']))
-                    <a href="{{ route('accounts.ad-budget.allocation-vs-spent') }}" class="adb-btn adb-btn-secondary" style="padding:9px 15px; font-size:12.5px; background:#fff;">Reset</a>
-                @endif
             </div>
         </form>
 
@@ -615,5 +856,101 @@ function openPassbookPdf(download = false) {
         window.open(url, '_blank');
     }
 }
+
+function clearFilterSearch() {
+    const input = document.getElementById('filterSearchInput');
+    if (input) {
+        input.value = '';
+        document.getElementById('adbFilterForm').submit();
+    }
+}
+
+function applyDatePreset(type) {
+    const today = new Date();
+    function fmt(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    let from = '';
+    let to = fmt(today);
+
+    if (type === 'today') {
+        from = fmt(today);
+        to = fmt(today);
+    } else if (type === 'this_week') {
+        const currentDay = today.getDay(); // 0 is Sun, 1 is Mon...
+        const diff = (currentDay === 0 ? -6 : 1) - currentDay;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() + diff);
+        from = fmt(monday);
+        to = fmt(today);
+    } else if (type === 'this_month') {
+        const start = new Date(today.getFullYear(), today.getMonth(), 1);
+        const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        from = fmt(start);
+        to = fmt(end);
+    } else if (type === 'last_month') {
+        const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const end = new Date(today.getFullYear(), today.getMonth(), 0);
+        from = fmt(start);
+        to = fmt(end);
+    } else if (type === 'this_fy') {
+        const m = today.getMonth() + 1; // 1-12
+        const fyStart = m >= 4 ? today.getFullYear() : today.getFullYear() - 1;
+        from = `${fyStart}-04-01`;
+        to = `${fyStart + 1}-03-31`;
+    } else if (type === 'all_time') {
+        from = '';
+        to = '';
+    }
+
+    const fromInput = document.getElementById('filterDateFrom');
+    const toInput = document.getElementById('filterDateTo');
+    if (fromInput) fromInput.value = from;
+    if (toInput) toInput.value = to;
+
+    document.getElementById('adbFilterForm').submit();
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    const fromVal = (document.getElementById('filterDateFrom') || {}).value || '';
+    const toVal = (document.getElementById('filterDateTo') || {}).value || '';
+    const today = new Date();
+    function fmt(d) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    const todayStr = fmt(today);
+    const thisMonthStart = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+    const thisMonthEnd = fmt(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+    const lastMonthStart = fmt(new Date(today.getFullYear(), today.getMonth() - 1, 1));
+    const lastMonthEnd = fmt(new Date(today.getFullYear(), today.getMonth(), 0));
+
+    const m = today.getMonth() + 1;
+    const fyStart = m >= 4 ? today.getFullYear() : today.getFullYear() - 1;
+    const fyStartStr = `${fyStart}-04-01`;
+    const fyEndStr = `${fyStart + 1}-03-31`;
+
+    let activePreset = null;
+    if (!fromVal && !toVal) {
+        activePreset = 'all_time';
+    } else if (fromVal === todayStr && toVal === todayStr) {
+        activePreset = 'today';
+    } else if (fromVal === thisMonthStart && (toVal === thisMonthEnd || toVal === todayStr)) {
+        activePreset = 'this_month';
+    } else if (fromVal === lastMonthStart && toVal === lastMonthEnd) {
+        activePreset = 'last_month';
+    } else if (fromVal === fyStartStr && (toVal === fyEndStr || toVal === todayStr)) {
+        activePreset = 'this_fy';
+    }
+
+    if (activePreset) {
+        const pill = document.querySelector(`.adb-preset-pill[data-preset="${activePreset}"]`);
+        if (pill) pill.classList.add('active');
+    }
+});
 </script>
 @endpush

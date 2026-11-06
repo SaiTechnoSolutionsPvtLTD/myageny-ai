@@ -30,6 +30,9 @@
 .pts-notice-banner.closed .pts-notice-pill { background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; }
 .pts-pulse-dot { width:7px; height:7px; border-radius:50%; background:currentColor; display:inline-block; animation:pts-pulse 1.8s infinite; }
 @keyframes pts-pulse { 0%, 100% { opacity:1; transform:scale(1); } 50% { opacity:0.3; transform:scale(0.85); } }
+.pts-btn.is-loading { opacity: 0.75 !important; cursor: not-allowed !important; pointer-events: none !important; }
+@keyframes pts-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.pts-spin { display: inline-block; animation: pts-spin 0.8s linear infinite; flex-shrink: 0; }
 .pts-body { padding:22px 28px 34px; display:grid; gap:18px; }
 .pts-card { background:#fff; border:1px solid #e6edf5; border-radius:14px; overflow:hidden; box-shadow:0 14px 34px rgba(15,23,42,.05); }
 .pts-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:18px 20px; border-bottom:1px solid #edf2f7; background:#fbfdff; }
@@ -1258,10 +1261,30 @@ document.addEventListener('DOMContentLoaded', function () {
     // ─────────────────────────────────────────────────────────────
     //  Support Task Modal Functions & Live Validation
     // ─────────────────────────────────────────────────────────────
+    let isStSubmitting = false;
+
+    window.resetSupportTaskBtn = function() {
+        isStSubmitting = false;
+        const submitBtn = document.getElementById('st_submit_btn');
+        if (submitBtn) {
+            submitBtn.classList.remove('is-loading');
+            submitBtn.disabled = false;
+            submitBtn.style.pointerEvents = '';
+            submitBtn.innerHTML = `
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span>Allocate Support Task</span>
+            `;
+        }
+    };
+
     window.openSupportTaskModal = function() {
         const modal = document.getElementById('ptsSupportTaskModal');
         const overlay = document.getElementById('ptsSupportTaskOverlay');
         if (!modal || !overlay) return;
+
+        resetSupportTaskBtn();
 
         modal.style.display = 'block';
         overlay.style.display = 'block';
@@ -1290,6 +1313,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const modal = document.getElementById('ptsSupportTaskModal');
         const overlay = document.getElementById('ptsSupportTaskOverlay');
         if (!modal || !overlay) return;
+
+        resetSupportTaskBtn();
 
         modal.style.display = 'none';
         overlay.style.display = 'none';
@@ -1339,6 +1364,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     window.validateSupportTaskForm = function(e) {
+        if (isStSubmitting) {
+            e.preventDefault();
+            return false;
+        }
+
+        const form = document.getElementById('ptsSupportTaskForm');
+        if (form && !form.checkValidity()) {
+            return true; // Let browser trigger native validation tooltips
+        }
+
         const errBox = document.getElementById('st_client_error');
         if (errBox) errBox.style.display = 'none';
 
@@ -1355,12 +1390,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (!proj || !proj.value) {
             e.preventDefault();
+            resetSupportTaskBtn();
             showStModalError('Please select a project for this support task.');
             return false;
         }
 
         if (!selectedUsers || selectedUsers.length === 0) {
             e.preventDefault();
+            resetSupportTaskBtn();
             showStModalError('Please select at least one team member in Allocation.');
             return false;
         }
@@ -1368,18 +1405,35 @@ document.addEventListener('DOMContentLoaded', function () {
         const descText = desc ? desc.value.trim() : '';
         if (descText.length < 40) {
             e.preventDefault();
+            resetSupportTaskBtn();
             showStModalError(`Task Description must be at least 40 characters. (Current length: ${descText.length})`);
             if (desc) desc.focus();
             return false;
         }
 
+        // Lock submission and display loading spinner
+        isStSubmitting = true;
         const submitBtn = document.getElementById('st_submit_btn');
         if (submitBtn) {
+            submitBtn.classList.add('is-loading');
             submitBtn.disabled = true;
-            submitBtn.innerHTML = `<span>Saving...</span>`;
+            submitBtn.style.pointerEvents = 'none';
+            submitBtn.innerHTML = `
+                <svg class="pts-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25"></circle>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor"></path>
+                </svg>
+                <span>Allocating Support Task...</span>
+            `;
         }
         return true;
     };
+
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted) {
+            resetSupportTaskBtn();
+        }
+    });
 
     function showStModalError(msg) {
         const errBox = document.getElementById('st_client_error');

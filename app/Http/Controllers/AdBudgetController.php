@@ -24,9 +24,6 @@ class AdBudgetController extends Controller
      */
     public function clients(Request $request)
     {
-        $cutoffInfo = $this->getCutoffInfo();
-        $isRequestAllowed = $cutoffInfo['is_request_allowed'];
-        $isApprovalAllowed = $cutoffInfo['is_approval_allowed'];
         $query = AdBudgetRequest::with(['adAccount', 'requester', 'tlApprover', 'approver'])
             ->where('type', 'client')
             ->when($request->search, function ($q) use ($request) {
@@ -72,10 +69,7 @@ class AdBudgetController extends Controller
             'totalApproved',
             'pendingTlCount',
             'pendingAccCount',
-            'statusCounts',
-            'isRequestAllowed',
-            'isApprovalAllowed',
-            'cutoffInfo'
+            'statusCounts'
         ));
     }
 
@@ -84,10 +78,6 @@ class AdBudgetController extends Controller
      */
     public function storeClientRequest(Request $request)
     {
-        if (! $this->isRequestAllowed()) {
-            return redirect()->back()->withInput()->with('error', 'Daily Ad Budget Request creation is closed for today. Requests must be submitted before 11:30 AM IST.');
-        }
-
         $validated = $request->validate([
             'ad_account_id'          => 'required|exists:ad_account_masters,id',
             'amount'                 => 'required|numeric|min:1',
@@ -290,10 +280,6 @@ class AdBudgetController extends Controller
      */
     public function tlApprove(Request $request, AdBudgetRequest $adBudgetRequest)
     {
-        if (! $this->isApprovalAllowed()) {
-            return redirect()->back()->with('error', 'Ad Budget Approval window is closed for today. Approvals are allowed only until 12:30 PM IST.');
-        }
-
         $action = $request->input('action', 'approve');
 
         $validated = $request->validate([
@@ -332,10 +318,6 @@ class AdBudgetController extends Controller
      */
     public function accountsApprove(Request $request, AdBudgetRequest $adBudgetRequest)
     {
-        if (! $this->isApprovalAllowed()) {
-            return redirect()->back()->with('error', 'Ad Budget Approval window is closed for today. Approvals are allowed only until 12:30 PM IST.');
-        }
-
         $action = $request->input('action', 'approve');
 
         if ($action === 'reject') {
@@ -658,20 +640,16 @@ class AdBudgetController extends Controller
      */
     protected function isRequestAllowed(): bool
     {
-        $now = Carbon::now('Asia/Kolkata');
-        $cutoff = $now->copy()->setTime(11, 30, 0);
-        return $now->lessThan($cutoff);
+        return true;
     }
 
     /**
      * Check if ad budget approval (TL / Accounts) is allowed today.
-     * Allowed only until 12:30 PM daily (Asia/Kolkata timezone).
+     * Allowed anytime.
      */
     protected function isApprovalAllowed(): bool
     {
-        $now = Carbon::now('Asia/Kolkata');
-        $cutoff = $now->copy()->setTime(12, 30, 0);
-        return $now->lessThan($cutoff);
+        return true;
     }
 
     /**

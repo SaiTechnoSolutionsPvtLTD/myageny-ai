@@ -386,6 +386,20 @@ class ProductionTaskController extends Controller
         $projectIds = collect($validated['tasks'])->pluck('production_initiation_id')->unique()->all();
         $projects = ProductionInitiation::whereIn('id', $projectIds)->get()->keyBy('id');
 
+        // Prevent duplicate task creation if user double-clicks submit
+        $taskSignature = md5(json_encode(collect($validated['tasks'])->map(function ($t) {
+            return [
+                'p' => $t['production_initiation_id'],
+                'd' => trim((string) $t['task_description']),
+            ];
+        })->all()));
+        $lockKey = "prod_task_store_lock_{$user->id}_{$assignedUserId}_{$taskDate}_{$taskSignature}";
+        if (! cache()->add($lockKey, true, 5)) {
+            return redirect()
+                ->route('projects.tasks.index')
+                ->with('warning', 'Task allocation is already being processed.');
+        }
+
         DB::transaction(function () use ($validated, $user, $taskDate, $assignedUserId, $projects, $request) {
             foreach ($validated['tasks'] as $index => $taskRow) {
                 $projectId = (int) $taskRow['production_initiation_id'];
@@ -573,6 +587,21 @@ class ProductionTaskController extends Controller
                     ];
                 }
             }
+        }
+
+        // Prevent duplicate support task creation if user double-clicks submit
+        $stSignature = md5(implode(',', $assignedUserIds) . "_{$taskDate}_" . ($project?->id ?? '0') . "_{$taskDesc}");
+        $lockKey = "prod_st_store_lock_{$user->id}_{$stSignature}";
+        if (! cache()->add($lockKey, true, 5)) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Support task allocation is already being processed.',
+                ]);
+            }
+            return redirect()
+                ->route('projects.tasks.index')
+                ->with('warning', 'Support task allocation is already being processed.');
         }
 
         DB::transaction(function () use ($user, $project, $productName, $leadId, $taskDate, $taskDesc, $storedAttachments, $assignedUserIds, $deliveryDate) {
