@@ -281,7 +281,7 @@ class OdRequestController extends Controller
                     'login_latitude' => 0,
                     'login_longitude' => 0,
                     'login_time' => null,
-                    'logout_location' => 'On Duty (OD)',
+                    'logout_location' => null,
                     'logout_latitude' => 0,
                     'logout_longitude' => 0,
                     'logout_time' => null,

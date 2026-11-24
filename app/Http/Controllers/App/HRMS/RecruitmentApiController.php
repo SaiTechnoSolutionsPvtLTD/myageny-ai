@@ -624,16 +624,42 @@ class RecruitmentApiController extends Controller
         }
 
         $request->validate([
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
-            'page'     => ['nullable', 'integer', 'min:1'],
+            'per_page'  => ['nullable', 'integer', 'min:1', 'max:50'],
+            'page'      => ['nullable', 'integer', 'min:1'],
+            'status'    => ['nullable', 'string'],
+            'bucket'    => ['nullable', 'string'],
+            'date_from' => ['nullable', 'date'],
+            'date_to'   => ['nullable', 'date'],
         ]);
 
         $employee = $this->currentEmployee($user);
 
+        $dateFrom = $request->query('date_from');
+        $dateTo = $request->query('date_to');
+        $status = $request->query('status');
+        $bucket = $request->query('bucket');
+
+        $effectiveStatus = $status ?: match ($bucket) {
+            'selected' => RecruitmentCandidate::STATUS_SELECTED,
+            'rejected' => RecruitmentCandidate::STATUS_REJECTED,
+            default => null,
+        };
+
         $query = RecruitmentCandidate::query()
             ->withCount(['callUpdates', 'interviews'])
-            ->with(['latestInterview'])
-            ->latest();
+            ->with(['latestInterview']);
+
+        if ($effectiveStatus === RecruitmentCandidate::STATUS_INTERVIEW_SCHEDULED) {
+            $query->orderBy(
+                RecruitmentInterview::select('scheduled_at')
+                    ->whereColumn('recruitment_interviews.recruitment_candidate_id', 'recruitment_candidates.id')
+                    ->latest('scheduled_at')
+                    ->take(1),
+                'asc'
+            )->latest('id');
+        } else {
+            $query->latest();
+        }
 
         if ($request->filled('search')) {
             $search = trim((string) $request->query('search'));
@@ -647,12 +673,12 @@ class RecruitmentApiController extends Controller
             });
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->query('status'));
+        if ($status) {
+            $query->where('status', $status);
         }
 
-        if ($request->filled('bucket')) {
-            match ($request->query('bucket')) {
+        if ($bucket) {
+            match ($bucket) {
                 'selected' => $query->where('status', RecruitmentCandidate::STATUS_SELECTED),
                 'rejected' => $query->where('status', RecruitmentCandidate::STATUS_REJECTED),
                 'active'   => $query->whereNotIn('status', [
@@ -662,6 +688,8 @@ class RecruitmentApiController extends Controller
                 default => null,
             };
         }
+
+        $this->applyStatusDateFilter($query, $effectiveStatus, $dateFrom, $dateTo);
 
         $applyAssignedFilter = function ($q) use ($user, $employee) {
             $q->whereHas('interviews', function ($iq) use ($user, $employee) {
@@ -1152,5 +1180,138 @@ class RecruitmentApiController extends Controller
         })
         ->latest('id')
         ->first();
+    }
+
+    private function applyStatusDateFilter($query, ?string $status, ?string $dateFrom, ?string $dateTo): void
+    {
+        if (! $dateFrom && ! $dateTo) {
+            return;
+        }
+
+        switch ($status) {
+            case RecruitmentCandidate::STATUS_INTERVIEW_SCHEDULED:
+                // Map date filter to Interview scheduled_at date
+                $query->where(function ($q) use ($dateFrom, $dateTo) {
+                    $q->whereHas('interviews', function ($iq) use ($dateFrom, $dateTo) {
+                        if ($dateFrom) {
+                            $iq->whereDate('scheduled_at', '>=', $dateFrom);
+                        }
+                        if ($dateTo) {
+                            $iq->whereDate('scheduled_at', '<=', $dateTo);
+                        }
+                    })->orWhere(function ($fallbackQ) use ($dateFrom, $dateTo) {
+                        $fallbackQ->whereDoesntHave('interviews')
+                            ->where(function ($sq) use ($dateFrom, $dateTo) {
+                                if ($dateFrom) {
+                                    $sq->whereDate(DB::raw('COALESCE(status_updated_at, created_at)'), '>=', $dateFrom);
+                                }
+                                if ($dateTo) {
+                                    $sq->whereDate(DB::raw('COALESCE(status_updated_at, created_at)'), '<=', $dateTo);
+                                }
+                            });
+                    });
+                });
+                break;
+
+            case RecruitmentCandidate::STATUS_FOLLOW_UP:
+                // Map date filter to Follow-up date (next_follow_up_at, remind_at, or called_at)
+                $query->where(function ($q) use ($dateFrom, $dateTo) {
+                    $q->whereHas('callUpdates', function ($cq) use ($dateFrom, $dateTo) {
+                        if ($dateFrom) {
+                            $cq->where(function ($sub) use ($dateFrom) {
+                                $sub->whereDate('next_follow_up_at', '>=', $dateFrom)
+                                    ->orWhere(function ($fb) use ($dateFrom) {
+                                        $fb->whereNull('next_follow_up_at')->whereDate('called_at', '>=', $dateFrom);
+                                    });
+                            });
+                        }
+                        if ($dateTo) {
+                            $cq->where(function ($sub) use ($dateTo) {
+                                $sub->whereDate('next_follow_up_at', '<=', $dateTo)
+                                    ->orWhere(function ($fb) use ($dateTo) {
+                                        $fb->whereNull('next_follow_up_at')->whereDate('called_at', '<=', $dateTo);
+                                    });
+                            });
+                        }
+                    })->orWhereHas('reminders', function ($rq) use ($dateFrom, $dateTo) {
+                        if ($dateFrom) {
+                            $rq->whereDate('remind_at', '>=', $dateFrom);
+                        }
+                        if ($dateTo) {
+                            $rq->whereDate('remind_at', '<=', $dateTo);
+                        }
+                    })->orWhere(function ($fallbackQ) use ($dateFrom, $dateTo) {
+                        $fallbackQ->whereDoesntHave('callUpdates')
+                            ->whereDoesntHave('reminders')
+                            ->where(function ($sq) use ($dateFrom, $dateTo) {
+                                if ($dateFrom) {
+                                    $sq->whereDate(DB::raw('COALESCE(status_updated_at, created_at)'), '>=', $dateFrom);
+                                }
+                                if ($dateTo) {
+                                    $sq->whereDate(DB::raw('COALESCE(status_updated_at, created_at)'), '<=', $dateTo);
+                                }
+                            });
+                    });
+                });
+                break;
+
+            case RecruitmentCandidate::STATUS_RNR:
+                // Map date filter to Call / RNR date
+                $query->where(function ($q) use ($dateFrom, $dateTo) {
+                    $q->whereHas('callUpdates', function ($cq) use ($dateFrom, $dateTo) {
+                        if ($dateFrom) {
+                            $cq->whereDate('called_at', '>=', $dateFrom);
+                        }
+                        if ($dateTo) {
+                            $cq->whereDate('called_at', '<=', $dateTo);
+                        }
+                    })->orWhere(function ($fallbackQ) use ($dateFrom, $dateTo) {
+                        if ($dateFrom) {
+                            $fallbackQ->whereDate(DB::raw('COALESCE(status_updated_at, created_at)'), '>=', $dateFrom);
+                        }
+                        if ($dateTo) {
+                            $fallbackQ->whereDate(DB::raw('COALESCE(status_updated_at, created_at)'), '<=', $dateTo);
+                        }
+                    });
+                });
+                break;
+
+            case RecruitmentCandidate::STATUS_SELECTED:
+            case RecruitmentCandidate::STATUS_REJECTED:
+                // Map date filter to when status was changed
+                $query->where(function ($q) use ($dateFrom, $dateTo) {
+                    if ($dateFrom) {
+                        $q->whereDate(DB::raw('COALESCE(status_updated_at, updated_at, created_at)'), '>=', $dateFrom);
+                    }
+                    if ($dateTo) {
+                        $q->whereDate(DB::raw('COALESCE(status_updated_at, updated_at, created_at)'), '<=', $dateTo);
+                    }
+                });
+                break;
+
+            case RecruitmentCandidate::STATUS_SHORTLIST:
+            case RecruitmentCandidate::STATUS_APPLIED:
+            case RecruitmentCandidate::STATUS_SCREENING:
+                // Map date filter to Shortlisted / Created date
+                $query->where(function ($q) use ($dateFrom, $dateTo) {
+                    if ($dateFrom) {
+                        $q->whereDate(DB::raw('COALESCE(status_updated_at, created_at)'), '>=', $dateFrom);
+                    }
+                    if ($dateTo) {
+                        $q->whereDate(DB::raw('COALESCE(status_updated_at, created_at)'), '<=', $dateTo);
+                    }
+                });
+                break;
+
+            default:
+                // Default: filter by candidate creation date (created_at)
+                if ($dateFrom) {
+                    $query->whereDate('created_at', '>=', $dateFrom);
+                }
+                if ($dateTo) {
+                    $query->whereDate('created_at', '<=', $dateTo);
+                }
+                break;
+        }
     }
 }

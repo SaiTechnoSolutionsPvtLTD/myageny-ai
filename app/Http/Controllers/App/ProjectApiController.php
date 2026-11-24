@@ -432,64 +432,118 @@ class ProjectApiController extends Controller
         $startOfMonth = $now->copy()->startOfMonth()->toDateString();
         $endOfMonth = $now->copy()->endOfMonth()->toDateString();
 
-        // 1. Resolve role scope
-        if ($user->hasAdminLikeRole()) {
+        // 1. Strict Role Resolution
+        // Determine user's domain/department to prevent cross-module notification leakage:
+        $isCompanyAdmin = $user->isCompanyAdmin() || $user->isCompanyAdminRole() || $user->isSuperAdmin() || $user->isSystemAdmin();
+        $isCbo = $user->isCbo();
+        $isAdminScope = $isCompanyAdmin || $isCbo || ($user->hasAdminLikeRole() && ! $this->hasProjectCoordinatorRole($user) && ! $user->belongsToSalesDepartment());
+
+        $isProjectCoordinator = ! $isAdminScope && $this->hasProjectCoordinatorRole($user);
+        $isDesign = ! $isAdminScope && ! $isProjectCoordinator && (
+            $user->belongsToDesigningDepartment()
+            || $user->hasRole('designer')
+            || str_contains(strtolower($user->getRoleNameAttribute()), 'design')
+        );
+        $isDigitalMarketing = ! $isAdminScope && ! $isProjectCoordinator && ! $isDesign && (
+            $user->belongsToDigitalMarketingDepartment()
+            || str_contains(strtolower($user->getRoleNameAttribute()), 'digital')
+            || str_contains(strtolower($user->getRoleNameAttribute()), 'marketing')
+            || str_contains(strtolower($user->getRoleNameAttribute()), 'dm')
+        );
+        $isSales = ! $isAdminScope && (
+            $user->belongsToSalesDepartment()
+            || $user->hasSalesLikeRole()
+            || ($user->hasExecutiveLikeRole() && ! $user->belongsToDevelopmentDepartment() && ! $isDesign && ! $isDigitalMarketing)
+        );
+        $isDevelopment = ! $isAdminScope && ! $isProjectCoordinator && ! $isDesign && ! $isDigitalMarketing && ! $isSales && (
+            $user->belongsToDevelopmentDepartment()
+            || $user->hasDevelopmentLikeRole()
+            || $this->isUserTl($user)
+            || $user->canAccessMobileProjectsModule()
+        );
+
+        if ($isAdminScope) {
             $roleScope = 'admin';
-        } elseif ($this->hasProjectCoordinatorRole($user)) {
+        } elseif ($isProjectCoordinator) {
             $roleScope = 'project_coordinator';
-        } elseif ($this->isUserTl($user)) {
-            $roleScope = 'team_lead';
-        } elseif ($user->belongsToDesigningDepartment()) {
+        } elseif ($isDesign) {
             $roleScope = 'design';
-        } elseif ($user->belongsToDigitalMarketingDepartment()) {
+        } elseif ($isDigitalMarketing) {
             $roleScope = 'digital_marketing';
-        } else {
+        } elseif ($isDevelopment) {
             $roleScope = 'development';
+        } elseif ($isSales) {
+            $roleScope = 'sales';
+        } else {
+            $roleScope = 'none';
         }
+
+        // Initialize all counts to 0
+        $deliveriesToday = 0;
+        $deliveriesUpcoming = 0;
+        $deliveriesOverdue = 0;
+        $allocationPending = 0;
+        $dmRenewalsToday = 0;
+        $dmCampaignsEndingToday = 0;
+        $dmRenewalsUpcoming = 0;
+        $dmRenewalsOverdue = 0;
+        $productionTasksToday = 0;
+        $designOverdue = 0;
 
         // 2. Deliveries (Development projects)
-        $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
-        $deliveriesQuery = ProductionInitiation::query()
-            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
-            ->where(function ($q) use ($devDeptIds) {
-                if (!empty($devDeptIds)) {
-                    $q->whereIn('department_id', $devDeptIds);
-                }
-                $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']))
-                  ->orWhere(function ($sq) {
-                      $sq->whereNull('department_id')
-                         ->whereHas('product.category', fn ($cq) => $cq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
-                  });
-            })
-            ->whereNotIn('project_execution_status', ['delivered', 'lost']);
+        // Only applicable to admin, project coordinator, and development roles
+        if ($roleScope === 'admin' || $roleScope === 'project_coordinator' || $roleScope === 'development') {
+            $devDeptIds = Department::whereRaw('LOWER(name) LIKE ?', ['%develop%'])->pluck('id')->toArray();
+            $deliveriesQuery = ProductionInitiation::query()
+                ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                ->where(function ($q) use ($devDeptIds) {
+                    if (!empty($devDeptIds)) {
+                        $q->whereIn('department_id', $devDeptIds);
+                    }
+                    $q->orWhereHas('department', fn ($dq) => $dq->whereRaw('LOWER(name) LIKE ?', ['%develop%']))
+                      ->orWhere(function ($sq) {
+                          $sq->whereNull('department_id')
+                             ->whereHas('product.category', fn ($cq) => $cq->whereRaw('LOWER(name) LIKE ?', ['%develop%']));
+                      });
+                })
+                ->whereNotIn('project_execution_status', ['delivered', 'lost', 'cancelled']);
 
-        if (! $user->hasAdminLikeRole()) {
-            if ($this->isUserTl($user)) {
-                $deliveriesQuery->where(function ($q) use ($user) {
-                    $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
-                      ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
-                });
-            } else {
-                $deliveriesQuery->where(function ($q) use ($user) {
-                    $q->whereJsonContains('project_allocated_employee_user_ids', $user->id)
-                      ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%')
-                      ->orWhere('initiated_by', $user->id);
-                });
+            if (! $isAdminScope && ! $isProjectCoordinator) {
+                if ($this->isUserTl($user)) {
+                    $managedUserIds = $user->managedUsers()->where('users.user_status', 'active')->pluck('users.id')->all();
+                    $accessibleDevIds = array_values(array_unique(array_merge([$user->id], $managedUserIds)));
+
+                    $deliveriesQuery->where(function ($q) use ($user, $accessibleDevIds) {
+                        $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
+                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
+                        foreach ($accessibleDevIds as $mId) {
+                            $q->orWhereJsonContains('project_allocated_employee_user_ids', $mId)
+                              ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $mId . '"%')
+                              ->orWhere('initiated_by', $mId);
+                        }
+                    });
+                } else {
+                    $deliveriesQuery->where(function ($q) use ($user) {
+                        $q->whereJsonContains('project_allocated_employee_user_ids', $user->id)
+                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%')
+                          ->orWhere('initiated_by', $user->id);
+                    });
+                }
             }
+
+            $deliveriesToday = (clone $deliveriesQuery)->whereDate('project_delivery_date', $today)->count();
+            $deliveriesUpcoming = (clone $deliveriesQuery)
+                ->whereDate('project_delivery_date', '>', $today)
+                ->whereDate('project_delivery_date', '<=', $upcomingEnd)
+                ->count();
+            $deliveriesOverdue = (clone $deliveriesQuery)
+                ->whereDate('project_delivery_date', '<', $today)
+                ->count();
         }
 
-        $deliveriesToday = (clone $deliveriesQuery)->whereDate('project_delivery_date', $today)->count();
-        $deliveriesUpcoming = (clone $deliveriesQuery)
-            ->whereDate('project_delivery_date', '>', $today)
-            ->whereDate('project_delivery_date', '<=', $upcomingEnd)
-            ->count();
-        $deliveriesOverdue = (clone $deliveriesQuery)
-            ->whereDate('project_delivery_date', '<', $today)
-            ->count();
-
         // 3. Allocation Pending
-        $allocationPending = 0;
-        if ($user->hasAdminLikeRole() || $this->isUserTl($user) || $this->hasProjectCoordinatorRole($user)) {
+        // Company Admin, CBO, and Project Coordinator only; individual TLs and developers must not see company-wide pending counts
+        if ($isAdminScope || $roleScope === 'project_coordinator') {
             $allocationPending = ProductionInitiation::query()
                 ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
                 ->where(function ($q) {
@@ -500,12 +554,8 @@ class ProjectApiController extends Controller
         }
 
         // 4. Digital Marketing Campaigns & Renewals
-        $dmRenewalsToday = 0;
-        $dmCampaignsEndingToday = 0;
-        $dmRenewalsUpcoming = 0;
-        $dmRenewalsOverdue = 0;
-
-        if ($user->hasAdminLikeRole() || $this->isUserTl($user) || $this->hasProjectCoordinatorRole($user) || $user->belongsToDigitalMarketingDepartment()) {
+        // Only applicable to admin, project coordinator, and digital marketing roles
+        if ($roleScope === 'admin' || $roleScope === 'project_coordinator' || $roleScope === 'digital_marketing') {
             $extendedParentIds = CustomerCampaign::whereNotNull('extended_from_id')
                 ->pluck('extended_from_id')
                 ->filter()
@@ -515,7 +565,7 @@ class ProjectApiController extends Controller
             $campaignsBase = CustomerCampaign::query()
                 ->when($user->company_id, fn ($q) => $q->where('customer_campaigns.company_id', $user->company_id));
 
-            if (! $user->hasAdminLikeRole() && ! $this->hasProjectCoordinatorRole($user)) {
+            if (! $isAdminScope && ! $isProjectCoordinator) {
                 if ($this->isUserTl($user)) {
                     $dmDeptIds = Department::where(function ($q) {
                         $q->whereRaw('LOWER(name) LIKE ?', ['%digital%'])
@@ -592,54 +642,63 @@ class ProjectApiController extends Controller
         }
 
         // 5. Production Tasks & Deadlines (Current Calendar Date Only)
-        // Uses the task_date field filtered for the current date only ($today)
-        // following the application's Asia/Kolkata timezone convention. Excludes past & future dates.
-        $productionTasksToday = 0;
-        $designOverdue = 0;
-
-        $tasksTodayQuery = ProductionTask::query()
-            ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
-            ->whereDate('task_date', $today);
-
-        if (! $user->hasAdminLikeRole() && ! $this->hasProjectCoordinatorRole($user)) {
-            if ($this->isUserTl($user)) {
-                $managedUsers = $user->managedUsers()->where('users.user_status', 'active')->pluck('users.id')->all();
-                $accessibleUserIds = array_values(array_unique(array_merge([$user->id], $managedUsers)));
-                $tasksTodayQuery->where(function ($q) use ($accessibleUserIds, $user) {
-                    $q->whereIn('assigned_to', $accessibleUserIds)
-                      ->orWhere('created_by', $user->id);
-                });
-            } else {
-                $tasksTodayQuery->where(function ($q) use ($user) {
-                    $q->where('assigned_to', $user->id)
-                      ->orWhere('created_by', $user->id);
-                });
-            }
-        }
-        $productionTasksToday = $tasksTodayQuery->count();
-
-        $designDeptId = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->value('id');
-        if ($designDeptId && ($user->hasAdminLikeRole() || $this->isUserTl($user) || $this->hasProjectCoordinatorRole($user) || $user->belongsToDesigningDepartment())) {
-            $designOverdueQuery = ProductionInitiation::query()
+        // Applicable to production roles (admin, project coordinator, development, design, digital marketing)
+        // Sales and other non-production roles must not receive production task notifications.
+        if ($roleScope !== 'sales' && $roleScope !== 'none') {
+            $tasksTodayQuery = ProductionTask::query()
                 ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
-                ->where('department_id', $designDeptId)
-                ->whereDate('project_delivery_date', '<', $today)
-                ->whereNotIn('project_execution_status', ['delivered', 'lost']);
+                ->whereDate('task_date', $today);
 
-            if (! $user->hasAdminLikeRole() && ! $this->hasProjectCoordinatorRole($user)) {
+            if (! $isAdminScope && ! $isProjectCoordinator) {
                 if ($this->isUserTl($user)) {
-                    $designOverdueQuery->where(function ($q) use ($user) {
-                        $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
-                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
+                    $managedUsers = $user->managedUsers()->where('users.user_status', 'active')->pluck('users.id')->all();
+                    $accessibleUserIds = array_values(array_unique(array_merge([$user->id], $managedUsers)));
+                    $tasksTodayQuery->where(function ($q) use ($accessibleUserIds, $user) {
+                        $q->whereIn('assigned_to', $accessibleUserIds)
+                          ->orWhere('created_by', $user->id);
                     });
                 } else {
-                    $designOverdueQuery->where(function ($q) use ($user) {
-                        $q->whereJsonContains('project_allocated_employee_user_ids', $user->id)
-                          ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
+                    $tasksTodayQuery->where(function ($q) use ($user) {
+                        $q->where('assigned_to', $user->id)
+                          ->orWhere('created_by', $user->id);
                     });
                 }
             }
-            $designOverdue = $designOverdueQuery->count();
+            $productionTasksToday = $tasksTodayQuery->count();
+        }
+
+        // 6. Design Overdue
+        // Only applicable to admin, project coordinator, and design roles
+        if ($roleScope === 'admin' || $roleScope === 'project_coordinator' || $roleScope === 'design') {
+            $designDeptId = Department::whereRaw('LOWER(name) LIKE ?', ['%design%'])->value('id');
+            if ($designDeptId) {
+                $designOverdueQuery = ProductionInitiation::query()
+                    ->when($user->company_id, fn ($q) => $q->where('company_id', $user->company_id))
+                    ->where('department_id', $designDeptId)
+                    ->whereDate('project_delivery_date', '<', $today)
+                    ->whereNotIn('project_execution_status', ['delivered', 'lost', 'cancelled']);
+
+                if (! $isAdminScope && ! $isProjectCoordinator) {
+                    if ($this->isUserTl($user)) {
+                        $designManagedIds = $user->managedUsers()->where('users.user_status', 'active')->pluck('users.id')->all();
+                        $accessibleDesignIds = array_values(array_unique(array_merge([$user->id], $designManagedIds)));
+                        $designOverdueQuery->where(function ($q) use ($user, $accessibleDesignIds) {
+                            $q->whereJsonContains('project_allocated_tl_user_ids', $user->id)
+                              ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
+                            foreach ($accessibleDesignIds as $mId) {
+                                $q->orWhereJsonContains('project_allocated_employee_user_ids', $mId)
+                                  ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $mId . '"%');
+                            }
+                        });
+                    } else {
+                        $designOverdueQuery->where(function ($q) use ($user) {
+                            $q->whereJsonContains('project_allocated_employee_user_ids', $user->id)
+                              ->orWhere('tl_employee_allocations', 'LIKE', '%"' . $user->id . '"%');
+                        });
+                    }
+                }
+                $designOverdue = $designOverdueQuery->count();
+            }
         }
 
         return response()->json([
@@ -650,20 +709,20 @@ class ProjectApiController extends Controller
                 'current_month'               => $now->format('F Y'),
                 'start_of_month'              => $startOfMonth,
                 'end_of_month'                => $endOfMonth,
-                'deliveries_today'            => $deliveriesToday,
-                'deliveries_upcoming'         => $deliveriesUpcoming,
-                'deliveries_overdue'          => $deliveriesOverdue,
-                'allocation_pending'          => $allocationPending,
-                'renewals_today'              => $dmRenewalsToday,
-                'campaigns_ending_today'      => $dmCampaignsEndingToday,
-                'renewals_upcoming'           => $dmRenewalsUpcoming,
-                'renewals_overdue'            => $dmRenewalsOverdue,
-                'production_tasks_today'      => $productionTasksToday,
-                'tasks_today'                 => $productionTasksToday,
-                'production_tasks_this_month' => $productionTasksToday, // backward-compatibility alias
-                'tasks_this_month'            => $productionTasksToday,
-                'design_tasks_today'          => $productionTasksToday,
-                'design_overdue'              => $designOverdue,
+                'deliveries_today'            => (int) $deliveriesToday,
+                'deliveries_upcoming'         => (int) $deliveriesUpcoming,
+                'deliveries_overdue'          => (int) $deliveriesOverdue,
+                'allocation_pending'          => (int) $allocationPending,
+                'renewals_today'              => (int) $dmRenewalsToday,
+                'campaigns_ending_today'      => (int) $dmCampaignsEndingToday,
+                'renewals_upcoming'           => (int) $dmRenewalsUpcoming,
+                'renewals_overdue'            => (int) $dmRenewalsOverdue,
+                'production_tasks_today'      => (int) $productionTasksToday,
+                'tasks_today'                 => (int) $productionTasksToday,
+                'production_tasks_this_month' => (int) $productionTasksToday, // backward-compatibility alias
+                'tasks_this_month'            => (int) $productionTasksToday,
+                'design_tasks_today'          => (int) $productionTasksToday,
+                'design_overdue'              => (int) $designOverdue,
             ],
         ]);
     }

@@ -58,19 +58,44 @@
                 </div>
                 <div class="eob-field" style="max-width: 180px; min-width: 130px;">
                     <label class="eob-label">Status</label>
-                    <select name="status" class="eob-select">
+                    <select name="status" id="rec-status-filter" class="eob-select">
                         <option value="">All Status</option>
                         @foreach($statuses as $value => $label)
                             <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
                         @endforeach
                     </select>
                 </div>
-                <div class="eob-field" style="max-width: 160px; min-width: 130px;">
-                    <label class="eob-label">From Date</label>
+                @php
+                    $activeStatus = request('status') ?: match(request('bucket')) {
+                        'selected' => 'selected',
+                        'rejected' => 'rejected',
+                        default => null,
+                    };
+                    $dateFromLabel = match ($activeStatus) {
+                        'interview_scheduled' => 'Interview From',
+                        'follow_up' => 'Follow-up From',
+                        'selected' => 'Selected From',
+                        'rejected' => 'Rejected From',
+                        'rnr' => 'Call / RNR From',
+                        'shortlist' => 'Shortlisted From',
+                        default => 'From Date',
+                    };
+                    $dateToLabel = match ($activeStatus) {
+                        'interview_scheduled' => 'Interview To',
+                        'follow_up' => 'Follow-up To',
+                        'selected' => 'Selected To',
+                        'rejected' => 'Rejected To',
+                        'rnr' => 'Call / RNR To',
+                        'shortlist' => 'Shortlisted To',
+                        default => 'To Date',
+                    };
+                @endphp
+                <div class="eob-field" style="max-width: 175px; min-width: 135px;">
+                    <label class="eob-label" id="date-from-label">{{ $dateFromLabel }}</label>
                     <input type="date" name="date_from" class="eob-input" value="{{ request('date_from') }}">
                 </div>
-                <div class="eob-field" style="max-width: 160px; min-width: 130px;">
-                    <label class="eob-label">To Date</label>
+                <div class="eob-field" style="max-width: 175px; min-width: 135px;">
+                    <label class="eob-label" id="date-to-label">{{ $dateToLabel }}</label>
                     <input type="date" name="date_to" class="eob-input" value="{{ request('date_to') }}">
                 </div>
                 <div class="eob-actions">
@@ -87,12 +112,23 @@
                 <div>
                     <div class="eob-card-title">Candidate Pipeline</div>
                     <div class="eob-card-sub">
+                        @php
+                            $dateContext = match ($activeStatus) {
+                                'interview_scheduled' => 'interview scheduled',
+                                'follow_up' => 'follow-up',
+                                'selected' => 'selected',
+                                'rejected' => 'rejected',
+                                'rnr' => 'call / RNR',
+                                'shortlist' => 'shortlisted',
+                                default => 'created',
+                            };
+                        @endphp
                         @if(request('date_from') && request('date_to'))
-                            Showing candidates from <strong>{{ \Carbon\Carbon::parse(request('date_from'))->format('d M Y') }}</strong> to <strong>{{ \Carbon\Carbon::parse(request('date_to'))->format('d M Y') }}</strong>.
+                            Showing candidates with <strong>{{ $dateContext }}</strong> date from <strong>{{ \Carbon\Carbon::parse(request('date_from'))->format('d M Y') }}</strong> to <strong>{{ \Carbon\Carbon::parse(request('date_to'))->format('d M Y') }}</strong>.
                         @elseif(request('date_from'))
-                            Showing candidates from <strong>{{ \Carbon\Carbon::parse(request('date_from'))->format('d M Y') }}</strong> onwards.
+                            Showing candidates with <strong>{{ $dateContext }}</strong> date from <strong>{{ \Carbon\Carbon::parse(request('date_from'))->format('d M Y') }}</strong> onwards.
                         @elseif(request('date_to'))
-                            Showing candidates up to <strong>{{ \Carbon\Carbon::parse(request('date_to'))->format('d M Y') }}</strong>.
+                            Showing candidates with <strong>{{ $dateContext }}</strong> date up to <strong>{{ \Carbon\Carbon::parse(request('date_to'))->format('d M Y') }}</strong>.
                         @else
                             Track applicants from first contact through interview, selection, or rejection.
                         @endif
@@ -149,12 +185,21 @@
                                                 <i class="bi bi-calendar-event" style="color: #fe5f04;"></i>
                                                 {{ $candidate->latestInterview->scheduled_at->format('d M Y, h:i A') }}
                                             </div>
+                                        @elseif($candidate->status === \App\Models\RecruitmentCandidate::STATUS_FOLLOW_UP && $candidate->latestCallUpdate?->next_follow_up_at)
+                                            <div class="eob-cell-sub" style="margin-top: 4px; font-weight: 600; color: #d97706; font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                                                <i class="bi bi-clock-history" style="color: #fe5f04;"></i>
+                                                {{ $candidate->latestCallUpdate->next_follow_up_at->format('d M Y, h:i A') }}
+                                            </div>
+                                        @elseif(in_array($candidate->status, [\App\Models\RecruitmentCandidate::STATUS_SELECTED, \App\Models\RecruitmentCandidate::STATUS_REJECTED]) && $candidate->status_updated_at)
+                                            <div class="eob-cell-sub" style="margin-top: 4px; font-size: 11px; color: #64748b;">
+                                                {{ $candidate->status_updated_at->format('d M Y') }}
+                                            </div>
                                         @endif
                                     </td>
                                     <td>{{ $candidate->created_at->format('d M Y') }}</td>
                                     <td>
                                         <details class="eob-table-dropdown">
-                                            <summary class="eob-table-dropdown-trigger">Actions</summary>
+                                             <summary class="eob-table-dropdown-trigger">Actions</summary>
                                             <div class="eob-table-dropdown-menu">
                                                 <a href="{{ route('recruitment.show', $candidate) }}" class="eob-table-dropdown-item"><i class="bi bi-eye"></i> View</a>
                                                 <a href="{{ route('recruitment.show', [$candidate, 'action' => 'reschedule']) }}" class="eob-table-dropdown-item"><i class="bi bi-arrow-repeat" style="color:#fe5f04;"></i> Reschedule</a>
@@ -175,4 +220,47 @@
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const statusSelect = document.getElementById('rec-status-filter');
+    const fromLabel = document.getElementById('date-from-label');
+    const toLabel = document.getElementById('date-to-label');
+
+    if (statusSelect && fromLabel && toLabel) {
+        const updateLabels = () => {
+            const val = statusSelect.value;
+            let fromText = 'From Date';
+            let toText = 'To Date';
+
+            if (val === 'interview_scheduled') {
+                fromText = 'Interview From';
+                toText = 'Interview To';
+            } else if (val === 'follow_up') {
+                fromText = 'Follow-up From';
+                toText = 'Follow-up To';
+            } else if (val === 'selected') {
+                fromText = 'Selected From';
+                toText = 'Selected To';
+            } else if (val === 'rejected') {
+                fromText = 'Rejected From';
+                toText = 'Rejected To';
+            } else if (val === 'rnr') {
+                fromText = 'Call / RNR From';
+                toText = 'Call / RNR To';
+            } else if (val === 'shortlist') {
+                fromText = 'Shortlisted From';
+                toText = 'Shortlisted To';
+            }
+
+            fromLabel.textContent = fromText;
+            toLabel.textContent = toText;
+        };
+
+        statusSelect.addEventListener('change', updateLabels);
+    }
+});
+</script>
+@endpush
 @endsection

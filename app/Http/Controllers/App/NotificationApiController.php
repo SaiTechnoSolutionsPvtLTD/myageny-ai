@@ -18,6 +18,7 @@ class NotificationApiController extends Controller
 
         $query = $user->notifications();
         $this->applyBranchFilter($query, $user, $targetBranchId);
+        $this->applyRoleModuleFilter($query, $user);
 
         $module = trim((string) $request->query('module', ''));
         if ($module !== '') {
@@ -33,9 +34,10 @@ class NotificationApiController extends Controller
 
         $notifications = $query->latest()->paginate($perPage);
 
-        // Branch-filtered unread count
+        // Branch-filtered and role-filtered unread count
         $unreadQuery = $user->unreadNotifications();
         $this->applyBranchFilter($unreadQuery, $user, $targetBranchId);
+        $this->applyRoleModuleFilter($unreadQuery, $user);
 
         return response()->json([
             'success' => true,
@@ -59,6 +61,7 @@ class NotificationApiController extends Controller
 
         $unreadQuery = $user->unreadNotifications();
         $this->applyBranchFilter($unreadQuery, $user, $targetBranchId);
+        $this->applyRoleModuleFilter($unreadQuery, $user);
 
         return response()->json([
             'success' => true,
@@ -91,10 +94,66 @@ class NotificationApiController extends Controller
 
         $unreadQuery = $user->unreadNotifications();
         $this->applyBranchFilter($unreadQuery, $user, $targetBranchId);
+        $this->applyRoleModuleFilter($unreadQuery, $user);
 
         $unreadQuery->update(['read_at' => now()]);
 
         return response()->json(['success' => true, 'message' => 'All notifications marked as read.']);
+    }
+
+    private function applyRoleModuleFilter($query, $user): void
+    {
+        if ($user->isCompanyAdmin() || $user->isCompanyAdminRole() || $user->isSuperAdmin() || $user->isSystemAdmin() || $user->isCbo() || $user->hasAdminLikeRole()) {
+            return;
+        }
+
+        $unauthorizedModules = [];
+
+        // Check projects / production module access
+        $hasProjectsAccess = $user->canAccessMobileProjectsModule()
+            || $user->belongsToDevelopmentDepartment()
+            || $user->hasDevelopmentLikeRole()
+            || $user->belongsToDesigningDepartment()
+            || $user->belongsToDigitalMarketingDepartment();
+        if (! $hasProjectsAccess) {
+            $unauthorizedModules[] = 'projects';
+            $unauthorizedModules[] = 'production';
+        }
+
+        // Check CRM / leads module access
+        $hasCrmAccess = $user->canAccessMobileCrmModule()
+            || $user->belongsToSalesDepartment()
+            || $user->hasSalesLikeRole()
+            || $user->hasExecutiveLikeRole()
+            || $user->can('modules_menu.crm')
+            || $user->can('leads.view')
+            || $user->can('leads.menuview');
+        if (! $hasCrmAccess) {
+            $unauthorizedModules[] = 'crm';
+            $unauthorizedModules[] = 'leads';
+        }
+
+        // Check CST module access
+        $hasCstAccess = $user->canAccessMobileCstModule()
+            || $user->belongsToCustomerSupportDepartment()
+            || $user->hasCustomerSupportLikeRole();
+        if (! $hasCstAccess) {
+            $unauthorizedModules[] = 'cst';
+        }
+
+        // Check Accounts module access
+        $hasAccountsAccess = $user->canAccessMobileAccountsModule()
+            || $user->canAccessAccountsModule();
+        if (! $hasAccountsAccess) {
+            $unauthorizedModules[] = 'accounts';
+        }
+
+        if (! empty($unauthorizedModules)) {
+            $query->where(function ($q) use ($unauthorizedModules) {
+                $q->whereNotIn('data->module', $unauthorizedModules)
+                  ->orWhereNull('data->module');
+            });
+        }
     }
 
     private function resolveTargetBranchId(Request $request, $user): ?int

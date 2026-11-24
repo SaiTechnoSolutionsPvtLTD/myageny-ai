@@ -133,6 +133,11 @@
             ⚠️ {{ session('error') }}
         </div>
     @endif
+    @if($errors->any())
+        <div style="background:#fee2e2; border:1px solid #fecaca; color:#b91c1c; padding:12px 16px; border-radius:10px; font-size:13px; font-weight:600;">
+            ⚠️ {{ $errors->first() }}
+        </div>
+    @endif
 
     {{-- Stats Cards --}}
     <div class="adb-stats-grid">
@@ -310,6 +315,13 @@
                                 <div style="font-size:11px; color:#64748b;">
                                     {{ $item->adAccount?->platform }} {{ $item->adAccount?->account_id ? '('.$item->adAccount->account_id.')' : '' }}
                                 </div>
+                                @if(!empty($item->attachments) && is_array($item->attachments))
+                                    <div style="margin-top:4px;">
+                                        <span style="display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:6px; background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; font-size:11px; font-weight:700;">
+                                            📎 {{ count($item->attachments) }} {{ \Illuminate\Support\Str::plural('attachment', count($item->attachments)) }}
+                                        </span>
+                                    </div>
+                                @endif
                             </td>
                             <td style="font-weight:700; color:#475569;">
                                 <div>₹{{ number_format($item->amount, 2) }}</div>
@@ -480,6 +492,13 @@
                     <textarea id="remarks" class="form-input" rows="2" placeholder="Campaign goals, target platforms, special instructions…"></textarea>
                 </div>
 
+                <div class="form-group">
+                    <label class="form-label">File Attachments (Optional)</label>
+                    <input type="file" id="raise_attachments" class="form-input" multiple accept="image/*,.pdf,.doc,.docx,.xlsx,.xls,.csv,.txt" onchange="renderRaiseAttachmentsPreview()">
+                    <span style="font-size:11px; color:#64748b;">Attach campaign brief, client approval screenshot, invoice, or supporting document (max 10 MB each).</span>
+                    <div id="raise_attachments_preview" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;"></div>
+                </div>
+
                 <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:10px;">
                     <button type="button" class="adb-btn adb-btn-secondary" onclick="closeRaiseModal()">Cancel</button>
                     <button type="submit" class="adb-btn adb-btn-primary">Proceed to Confirm →</button>
@@ -496,7 +515,7 @@
             <div class="modal-title">Confirm Ad Budget Request</div>
             <button type="button" class="modal-close" onclick="closeConfirmModal()">×</button>
         </div>
-        <form method="POST" action="{{ route('accounts.ad-budget.clients.raise-request') }}" id="finalSubmitForm">
+        <form method="POST" action="{{ route('accounts.ad-budget.clients.raise-request') }}" id="finalSubmitForm" enctype="multipart/form-data">
             @csrf
             <input type="hidden" name="ad_account_id" id="hidden_ad_account_id">
             <input type="hidden" name="amount" id="hidden_amount">
@@ -504,6 +523,7 @@
             <input type="hidden" name="average_per_day_budget" id="hidden_average_per_day_budget">
             <input type="hidden" name="selected_dates" id="hidden_selected_dates">
             <input type="hidden" name="remarks" id="hidden_remarks">
+            <input type="file" name="attachments[]" id="hidden_attachments" multiple style="display:none;">
 
             <div class="modal-body">
                 <div style="font-size:13px; color:#475569;">
@@ -534,6 +554,10 @@
                     <div class="summary-row" id="summary_remarks_row">
                         <span class="summary-label">Remarks:</span>
                         <span class="summary-val" id="summary_remarks"></span>
+                    </div>
+                    <div class="summary-row" style="flex-direction:column; gap:6px;">
+                        <span class="summary-label">Attachments:</span>
+                        <div class="summary-val" id="summary_attachments" style="display:flex; flex-wrap:wrap; gap:4px;"></div>
                     </div>
                 </div>
 
@@ -903,6 +927,27 @@ function closeRaiseModal() {
     document.getElementById('raiseModal').classList.remove('active');
 }
 
+function renderRaiseAttachmentsPreview() {
+    const fileInput = document.getElementById('raise_attachments');
+    const previewEl = document.getElementById('raise_attachments_preview');
+    if (!fileInput || !previewEl) return;
+
+    const files = Array.from(fileInput.files || []);
+    if (files.length === 0) {
+        previewEl.innerHTML = '';
+        return;
+    }
+
+    previewEl.innerHTML = files.map(file => {
+        const sizeKb = (file.size / 1024).toFixed(1);
+        const safeName = String(file.name)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        return `<span class="file-chip" style="margin:0;">📎 ${safeName} <span style="color:#64748b; font-weight:500;">(${sizeKb} KB)</span></span>`;
+    }).join('');
+}
+
 function proceedToConfirm() {
     const accSelect = document.getElementById('ad_account_id');
     const accId = accSelect.value;
@@ -934,6 +979,31 @@ function proceedToConfirm() {
     document.getElementById('hidden_average_per_day_budget').value = avgPerDay;
     document.getElementById('hidden_selected_dates').value = selectedDatesArray.join(',');
     document.getElementById('hidden_remarks').value = remarks;
+
+    const raiseFilesInput = document.getElementById('raise_attachments');
+    const hiddenFilesInput = document.getElementById('hidden_attachments');
+    const summaryAttachmentsEl = document.getElementById('summary_attachments');
+    const files = raiseFilesInput ? Array.from(raiseFilesInput.files || []) : [];
+
+    if (hiddenFilesInput && typeof DataTransfer !== 'undefined') {
+        const dt = new DataTransfer();
+        files.forEach(file => dt.items.add(file));
+        hiddenFilesInput.files = dt.files;
+    }
+
+    if (summaryAttachmentsEl) {
+        if (files.length > 0) {
+            summaryAttachmentsEl.innerHTML = files.map(file => {
+                const safeName = String(file.name)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                return `<span class="file-chip" style="margin:0;">📎 ${safeName}</span>`;
+            }).join('');
+        } else {
+            summaryAttachmentsEl.innerHTML = '<span style="color:#94a3b8; font-weight:500;">None</span>';
+        }
+    }
 
     document.getElementById('summary_ad_account').innerText = accName;
     document.getElementById('summary_amount').innerText = '₹' + parseFloat(amount).toLocaleString('en-IN', {minimumFractionDigits: 2});
@@ -995,6 +1065,10 @@ function openTlActionModal(btnOrItem, action) {
     const avgBudget = item.average_per_day_budget || (numDays > 0 ? (parseFloat(item.amount || 0) / numDays) : 0);
     const formattedAvg = '₹' + parseFloat(avgBudget || 0).toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' / day';
 
+    const tlAttachmentsHtml = (item.attachments && item.attachments.length > 0)
+        ? `<div style="margin-top:4px;"><strong>Attachments:</strong> ${item.attachments.map(att => `<a href="${att.url}" target="_blank" class="file-chip" style="padding:2px 8px; font-size:11px;">📎 ${att.name || 'Attachment'}</a>`).join('')}</div>`
+        : '';
+
     summary.innerHTML = `
         <div style="font-weight:800; color:#0f172a; margin-bottom:6px; font-size:14px;">Request #${item.id} — ${item.ad_account ? item.ad_account.account_name : '—'}</div>
         <div style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:#475569;">
@@ -1003,6 +1077,7 @@ function openTlActionModal(btnOrItem, action) {
             <div><strong>Duration:</strong> <span style="font-weight:700; color:#0f172a;">${numDays} Days</span> (${formattedAvg})</div>
             <div><strong>Selected Dates:</strong> ${datesList || '—'}</div>
             <div><strong>Executive Remarks:</strong> ${item.remarks || 'None'}</div>
+            ${tlAttachmentsHtml}
         </div>
     `;
 

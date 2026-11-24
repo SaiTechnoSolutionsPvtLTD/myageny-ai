@@ -508,7 +508,7 @@ class OdRequestApiController extends Controller
 
         $odRequest->update(['gate_in_time' => $gateIn]);
 
-        // If already approved, update daily attendance records with the new gate in time and working hours
+        // If already approved, ensure daily attendance status is synchronized
         if ($odRequest->status === OdRequest::STATUS_APPROVED) {
             $this->markAttendanceRecords($odRequest);
         }
@@ -890,10 +890,10 @@ class OdRequestApiController extends Controller
      *   standard grace login time (e.g. 09:30:00) to satisfy database NOT NULL constraints.
      * - If the employee already checked in (login_time is present), that login_time,
      *   logout_time (if checked out), location, coordinates, and photos are preserved.
-     * - If the OD request has a gate_in_time and no logout_time exists, logout_time and
-     *   overall_working_hours are updated accordingly.
+     * - OD approval marks attendance status as 'od' and sets check-in time if missing,
+     *   but NEVER sets, updates, or overwrites logout_time or logout_location.
      * - If no attendance record exists for the date, a DailyAttendance record with status
-     *   'od' is created with the resolved check-in time so the employee is credited with attendance.
+     *   'od' is created with the resolved check-in time and null logout_time so the employee is credited with attendance.
      */
     private function markAttendanceRecords(OdRequest $odRequest): void
     {
@@ -914,16 +914,6 @@ class OdRequestApiController extends Controller
 
         // Resolve fallback check-in time from OD gate_out_time
         $fallbackCheckIn = $this->resolveOdCheckInTime($odRequest->gate_out_time, $companyId);
-
-        // Optional check-out time if gate_in_time is recorded on the OD request
-        $odLogoutTime = null;
-        if (! empty($odRequest->gate_in_time)) {
-            try {
-                $odLogoutTime = Carbon::parse($odRequest->gate_in_time)->format('H:i:s');
-            } catch (\Throwable $e) {
-                // Ignore parse error
-            }
-        }
 
         while ($current->lte($end)) {
             $dateStr = $current->format('Y-m-d');
@@ -965,25 +955,8 @@ class OdRequestApiController extends Controller
                     ]);
                 }
 
-                // If existing record has NO logout_time and OD has gate_in_time, set logout_time
-                if (empty($existing->logout_time) && $odLogoutTime) {
-                    $updateData['logout_time'] = $odLogoutTime;
-                    if (empty($existing->logout_location)) {
-                        $updateData['logout_location'] = 'On Duty (OD)';
-                    }
-                    if (empty($existing->overall_working_hours)) {
-                        $effectiveLogin = $existing->login_time ?: $fallbackCheckIn;
-                        try {
-                            if ($odLogoutTime > $effectiveLogin) {
-                                $sec = Carbon::parse($effectiveLogin)->diffInSeconds(Carbon::parse($odLogoutTime));
-                                $hours   = floor($sec / 3600);
-                                $minutes = floor(($sec % 3600) / 60);
-                                $seconds = $sec % 60;
-                                $updateData['overall_working_hours'] = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
-                            }
-                        } catch (\Throwable $e) {}
-                    }
-                }
+                // NOTE: logout_time is NOT modified by OD approval.
+                // Employee can punch out normally at the end of the day.
 
                 if (! empty($updateData)) {
                     $existing->update($updateData);
@@ -991,17 +964,7 @@ class OdRequestApiController extends Controller
             } else {
                 // No attendance record exists for this date.
                 // Create a DailyAttendance record with status 'od' and gate-out time as check-in time.
-                $workingHours = null;
-                if ($odLogoutTime && $odLogoutTime > $fallbackCheckIn) {
-                    try {
-                        $sec = Carbon::parse($fallbackCheckIn)->diffInSeconds(Carbon::parse($odLogoutTime));
-                        $hours   = floor($sec / 3600);
-                        $minutes = floor(($sec % 3600) / 60);
-                        $seconds = $sec % 60;
-                        $workingHours = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
-                    } catch (\Throwable $e) {}
-                }
-
+                // logout_time and overall_working_hours remain null (not set by OD approval).
                 DailyAttendance::create([
                     'company_id'            => $companyId,
                     'branch_id'             => $branchId,
@@ -1013,11 +976,11 @@ class OdRequestApiController extends Controller
                     'login_latitude'        => 0,
                     'login_longitude'       => 0,
                     'login_time'            => $fallbackCheckIn,
-                    'logout_location'       => $odLogoutTime ? 'On Duty (OD)' : null,
+                    'logout_location'       => null,
                     'logout_latitude'       => 0,
                     'logout_longitude'      => 0,
-                    'logout_time'           => $odLogoutTime,
-                    'overall_working_hours' => $workingHours,
+                    'logout_time'           => null,
+                    'overall_working_hours' => null,
                     'attendance_date'       => $dateStr,
                     'attendance_status'     => 'od',
                     'remarks'               => $odRequest->reason ?: $odNote,

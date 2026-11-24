@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mail\LeaveRequestSubmittedHrMail;
 use App\Models\LeaveApproval;
 use App\Models\LeaveRequest;
 use App\Models\OdApproval;
@@ -10,6 +11,7 @@ use App\Models\PermissionApproval;
 use App\Models\PermissionRequest;
 use App\Models\User;
 use App\Notifications\HrmsApprovalFlowNotification;
+use Illuminate\Support\Facades\Mail;
 
 class HrmsApprovalNotificationService
 {
@@ -52,6 +54,8 @@ class HrmsApprovalNotificationService
                 'status' => LeaveRequest::STATUS_PENDING,
             ]);
         }
+
+        $this->sendLeaveSubmittedToHr($leaveRequest);
     }
 
     public function sendLeaveApproved(LeaveRequest $leaveRequest, LeaveApproval $actedApproval, ?LeaveApproval $nextApproval): void
@@ -443,6 +447,23 @@ class HrmsApprovalNotificationService
                 'user_id' => $user->id,
                 'payload' => $payload,
                 'error'   => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function sendLeaveSubmittedToHr(LeaveRequest $leaveRequest): void
+    {
+        $hrEmail = config('hrms.hr_notification_email', 'hr@saitechnosolutions.net');
+        if (empty($hrEmail)) {
+            return;
+        }
+
+        try {
+            Mail::to($hrEmail)->send(new LeaveRequestSubmittedHrMail($leaveRequest));
+        } catch (\Throwable $e) {
+            \Log::error("Failed to send leave request notification to HR ({$hrEmail}): " . $e->getMessage(), [
+                'leave_request_id' => $leaveRequest->id,
+                'error'            => $e->getMessage(),
             ]);
         }
     }

@@ -954,7 +954,9 @@ class ProjectController extends Controller
         $canViewTeamTimesheets = $isAdminLike || $hasMappedUsers || $user->hasTlLikeRole();
 
         $allUsers = $isAdminLike 
-            ? \App\Models\User::where('user_status', 'active')->tap($prodScope)->orderBy('name')->get(['id', 'name']) 
+            ? cache()->remember('timesheets_admin_prod_users', 120, function () use ($prodScope) {
+                return \App\Models\User::where('user_status', 'active')->tap($prodScope)->orderBy('name')->get(['id', 'name']);
+            })
             : ($hasMappedUsers ? collect([$user])->concat($managedUsers)->unique('id')->values() : collect([$user]));
 
         $departments = ($isAdminLike || $user->isDevelopmentProjectCoordinator())
@@ -978,7 +980,11 @@ class ProjectController extends Controller
 
         if ($isAdminLike) {
             $assignedProjectsQuery = ProductionInitiation::query()
-                ->with($this->projectRelations())
+                ->select(['id', 'lead_id', 'department_id', 'company_name', 'client_name', 'product_name', 'project_delivery_date', 'total_working_days', 'production_approval_reviewed_at', 'project_allocated_at', 'created_at'])
+                ->with([
+                    'lead:id,company_name,contact_name',
+                    'department:id,name',
+                ])
                 ->whereIn('production_approval_status', ['approval', 'approved'])
                 ->latest('production_approval_reviewed_at');
         } else {
@@ -993,7 +999,7 @@ class ProjectController extends Controller
             ->get()
             ->map(function (ProductionInitiation $project) {
                 $project->timesheet_delivery_date = $this->projectDeliveryDate($project)?->toDateString();
-                $project->resolved_product_name = $project->product_name ?: ($project->leadProduct?->product_name ?: 'Product');
+                $project->resolved_product_name = $project->product_name ?: 'Product';
                 $project->resolved_company_name = trim($project->company_name ?: ($project->lead?->company_name ?: ($project->client_name ?: ($project->lead?->contact_name ?: 'No Company'))));
 
                 return $project;
@@ -1026,10 +1032,16 @@ class ProjectController extends Controller
 
         $timesheets = ProjectTimesheet::query()
             ->with([
-                'project' => fn ($query) => $query->with($this->projectRelations()),
-                'user.roles.department',
-                'user.employeeOnboarding.department',
-                'user.internJoiningForm.department',
+                'project:id,lead_id,department_id,company_name,client_name,product_name,project_delivery_date,total_working_days,production_approval_reviewed_at,project_allocated_at,created_at',
+                'project.lead:id,company_name,contact_name',
+                'project.department:id,name',
+                'user:id,name,email',
+                'user.roles:id,name,department_id',
+                'user.roles.department:id,name',
+                'user.employeeOnboarding:id,portal_user_id,department_id',
+                'user.employeeOnboarding.department:id,name',
+                'user.internJoiningForm:id,portal_user_id,department_id',
+                'user.internJoiningForm.department:id,name',
             ])
             ->when(!$isAdminLike, function ($query) use ($accessibleUserIds) {
                 $query->whereIn('user_id', $accessibleUserIds);
@@ -1082,8 +1094,13 @@ class ProjectController extends Controller
             'digital_marketing' => 0,
         ];
 
+        $userDeptCache = [];
         foreach ($timesheets as $ts) {
-            $deptSlug = $this->resolveTimesheetDepartmentSlug($ts);
+            $uId = (int) $ts->user_id;
+            if (!isset($userDeptCache[$uId])) {
+                $userDeptCache[$uId] = $this->resolveTimesheetDepartmentSlug($ts);
+            }
+            $deptSlug = $userDeptCache[$uId];
             if (isset($deptCounts[$deptSlug])) {
                 $deptCounts[$deptSlug]++;
             }
@@ -1091,8 +1108,10 @@ class ProjectController extends Controller
 
         // Filter timesheets if department card is clicked
         if (in_array($filterDepartment, ['development', 'designing', 'digital_marketing'], true)) {
-            $timesheets = $timesheets->filter(function ($ts) use ($filterDepartment) {
-                return $this->resolveTimesheetDepartmentSlug($ts) === $filterDepartment;
+            $timesheets = $timesheets->filter(function ($ts) use ($filterDepartment, $userDeptCache) {
+                $uId = (int) $ts->user_id;
+                $slug = $userDeptCache[$uId] ?? $this->resolveTimesheetDepartmentSlug($ts);
+                return $slug === $filterDepartment;
             });
         }
 
@@ -1101,21 +1120,24 @@ class ProjectController extends Controller
 
         $allProductionTasks = (!empty($timesheetUserIds) && !empty($timesheetProjectIds))
             ? \App\Models\ProductionTask::query()
+                ->select(['assigned_to', 'production_initiation_id', 'task_date', 'task_description'])
                 ->whereIn('assigned_to', $timesheetUserIds)
                 ->whereIn('production_initiation_id', $timesheetProjectIds)
                 ->get()
             : collect();
 
-        $timesheets->each(function ($t) use ($allProductionTasks) {
-            $tDateStr = $t->timesheet_date ? $t->timesheet_date->toDateString() : '';
-            $matchingTasks = $allProductionTasks->filter(function ($pt) use ($t, $tDateStr) {
-                return (int)$pt->assigned_to === (int)$t->user_id 
-                    && (int)$pt->production_initiation_id === (int)$t->production_initiation_id
-                    && ($pt->task_date ? $pt->task_date->toDateString() : '') === $tDateStr;
-            });
+        $tasksGrouped = [];
+        foreach ($allProductionTasks as $pt) {
+            $dateKey = $pt->task_date ? (is_string($pt->task_date) ? substr($pt->task_date, 0, 10) : $pt->task_date->toDateString()) : '';
+            $key = "{$pt->assigned_to}_{$pt->production_initiation_id}_{$dateKey}";
+            $tasksGrouped[$key][] = $pt->task_description;
+        }
 
-            if ($matchingTasks->isNotEmpty()) {
-                $t->assigned_task_desc = $matchingTasks->pluck('task_description')->filter()->implode("\n\n");
+        $timesheets->each(function ($t) use ($tasksGrouped) {
+            $tDateStr = $t->timesheet_date ? (is_string($t->timesheet_date) ? substr($t->timesheet_date, 0, 10) : $t->timesheet_date->toDateString()) : '';
+            $key = "{$t->user_id}_{$t->production_initiation_id}_{$tDateStr}";
+            if (!empty($tasksGrouped[$key])) {
+                $t->assigned_task_desc = implode("\n\n", array_filter($tasksGrouped[$key]));
             } else {
                 if (str_starts_with((string)$t->day_closing_update, "Assigned Task:\n")) {
                     $t->assigned_task_desc = trim(substr((string)$t->day_closing_update, strlen("Assigned Task:\n")));
@@ -4141,7 +4163,11 @@ class ProjectController extends Controller
     {
         if ($user->hasAdminLikeRole() || $user->isDevelopmentProjectCoordinator()) {
             return ProductionInitiation::query()
-                ->with($this->projectRelations())
+                ->select(['id', 'lead_id', 'department_id', 'company_name', 'client_name', 'product_name', 'project_delivery_date', 'total_working_days', 'production_approval_reviewed_at', 'project_allocated_at', 'created_at'])
+                ->with([
+                    'lead:id,company_name,contact_name',
+                    'department:id,name',
+                ])
                 ->whereIn('production_approval_status', ['approval', 'approved'])
                 ->latest('production_approval_reviewed_at');
         }
@@ -4152,7 +4178,11 @@ class ProjectController extends Controller
         $allAccessibleIds = $mappedIds->merge($directManagedIds)->push($user->id)->unique()->filter()->map(fn($id) => (int)$id)->values()->all();
 
         return ProductionInitiation::query()
-            ->with($this->projectRelations())
+            ->select(['id', 'lead_id', 'department_id', 'company_name', 'client_name', 'product_name', 'project_delivery_date', 'total_working_days', 'production_approval_reviewed_at', 'project_allocated_at', 'created_at'])
+            ->with([
+                'lead:id,company_name,contact_name',
+                'department:id,name',
+            ])
             ->whereIn('production_approval_status', ['approval', 'approved'])
             ->where(function ($q) use ($user, $allAccessibleIds) {
                 foreach ($allAccessibleIds as $uId) {

@@ -86,6 +86,8 @@ class AdBudgetController extends Controller
             'average_per_day_budget' => 'nullable|numeric|min:0',
             'client_name'            => 'nullable|string|max:255',
             'remarks'                => 'nullable|string',
+            'attachments'            => 'nullable|array',
+            'attachments.*'          => 'nullable|file|mimes:jpeg,png,jpg,webp,gif,pdf,doc,docx,xlsx,xls,csv,txt|max:10240',
         ]);
 
         $dates = [];
@@ -103,6 +105,21 @@ class AdBudgetController extends Controller
         $amount = (float) $validated['amount'];
         $avgPerDay = $numberOfDays > 0 ? round($amount / $numberOfDays, 2) : 0;
 
+        $uploadedPaths = [];
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                if ($file && $file->isValid()) {
+                    $path = $file->store('ad_budget_attachments', 'public');
+                    $uploadedPaths[] = [
+                        'name' => $file->getClientOriginalName(),
+                        'path' => $path,
+                        'url'  => Storage::url($path),
+                        'size' => $file->getSize(),
+                    ];
+                }
+            }
+        }
+
         $user = auth()->user();
         $initialStatus = ($user->hasAdminLikeRole() || $user->hasTlLikeRole()) ? 'accounts_pending' : 'tl_pending';
 
@@ -114,6 +131,7 @@ class AdBudgetController extends Controller
         $validated['company_id']             = $user?->company_id;
         $validated['branch_id']              = $user?->branch_id;
         $validated['status']                 = $initialStatus;
+        $validated['attachments']            = $uploadedPaths;
 
         if ($initialStatus === 'accounts_pending') {
             $validated['tl_approved_by'] = auth()->id();

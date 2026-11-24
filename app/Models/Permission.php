@@ -49,6 +49,7 @@ class Permission extends SpatiePermission
         'dynamic_forms' => ['menuview'],
         'facility_management' => ['menuview'],
         'assets' => ['menuview'],
+        'courier' => ['menuview', 'view', 'create', 'edit', 'delete'],
         'holiday_calendar' => ['menuview'],
         'house_keeping' => ['menuview'],
         'lead_status' => ['menuview', 'view', 'create', 'edit', 'delete'],

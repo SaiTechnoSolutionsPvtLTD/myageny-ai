@@ -280,6 +280,16 @@ Route::middleware(['auth'])->group(function () {
             // Ad Budget Allocation Vs Spent Report route
             Route::get('/allocation-vs-spent', [App\Http\Controllers\AdSpendController::class, 'allocationVsSpent'])->middleware('can:accounts_ad_budget.view')->name('allocation-vs-spent');
             Route::get('/allocation-vs-spent/pdf', [App\Http\Controllers\AdSpendController::class, 'exportPdf'])->middleware('can:accounts_ad_budget.view')->name('allocation-vs-spent.pdf');
+
+            // Spending Meta (Live Meta Graph API Spend Insights)
+            Route::get('/spending-meta', [App\Http\Controllers\MetaAdSpendController::class, 'index'])->middleware('can:accounts_ad_budget.view')->name('spending-meta');
+            Route::post('/spending-meta/settings', [App\Http\Controllers\MetaAdSpendController::class, 'saveSettings'])->middleware('can:accounts_ad_budget.edit')->name('spending-meta.settings');
+            Route::delete('/spending-meta/settings/{id}', [App\Http\Controllers\MetaAdSpendController::class, 'deleteAccount'])->middleware('can:accounts_ad_budget.edit')->name('spending-meta.delete');
+
+            // Meta Payments (Live Meta Graph API Payment History & Billing Activities)
+            Route::get('/meta-payments', [App\Http\Controllers\MetaPaymentController::class, 'index'])->middleware('can:accounts_ad_budget.view')->name('meta-payments');
+            Route::post('/meta-payments/settings', [App\Http\Controllers\MetaPaymentController::class, 'saveSettings'])->middleware('can:accounts_ad_budget.edit')->name('meta-payments.settings');
+            Route::delete('/meta-payments/settings/{id}', [App\Http\Controllers\MetaPaymentController::class, 'deleteAccount'])->middleware('can:accounts_ad_budget.edit')->name('meta-payments.delete');
         });
 
         // Domains & Hosting routes
@@ -975,6 +985,61 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/visitor-management/{visitorEntry}', [VisitorManagementController::class, 'update'])->name('visitor-management.update');
     Route::delete('/visitor-management/{visitorEntry}', [VisitorManagementController::class, 'destroy'])->name('visitor-management.destroy');
     Route::get('/facility-management/qr-code', [FacilityManagementController::class, 'qrCode'])->name('facility-management.qr-code');
+
+    // Courier Module (HRMS)
+    Route::prefix('hrms/couriers')->name('hrms.couriers.')->group(function () {
+        Route::prefix('forms')->name('forms.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\HRMS\CourierFormController::class, 'index'])
+                ->middleware('can:courier.view')
+                ->name('index');
+            Route::get('/create', [\App\Http\Controllers\HRMS\CourierFormController::class, 'create'])
+                ->middleware('can:courier.create')
+                ->name('create');
+            Route::post('/', [\App\Http\Controllers\HRMS\CourierFormController::class, 'store'])
+                ->middleware('can:courier.create')
+                ->name('store');
+            Route::get('/{courierForm}', [\App\Http\Controllers\HRMS\CourierFormController::class, 'show'])
+                ->middleware('can:courier.view')
+                ->name('show');
+            Route::get('/{courierForm}/edit', [\App\Http\Controllers\HRMS\CourierFormController::class, 'edit'])
+                ->middleware('can:courier.edit')
+                ->name('edit');
+            Route::put('/{courierForm}', [\App\Http\Controllers\HRMS\CourierFormController::class, 'update'])
+                ->middleware('can:courier.edit')
+                ->name('update');
+            Route::delete('/{courierForm}', [\App\Http\Controllers\HRMS\CourierFormController::class, 'destroy'])
+                ->middleware('can:courier.delete')
+                ->name('destroy');
+            Route::get('/{courierForm}/fields', [\App\Http\Controllers\HRMS\CourierFormController::class, 'fields'])
+                ->middleware('can:courier.view')
+                ->name('fields');
+        });
+
+        Route::get('/', [\App\Http\Controllers\HRMS\CourierController::class, 'index'])
+            ->middleware('can:courier.view')
+            ->name('index');
+        Route::get('/create', [\App\Http\Controllers\HRMS\CourierController::class, 'create'])
+            ->middleware('can:courier.create')
+            ->name('create');
+        Route::post('/', [\App\Http\Controllers\HRMS\CourierController::class, 'store'])
+            ->middleware('can:courier.create')
+            ->name('store');
+        Route::get('/{courier}', [\App\Http\Controllers\HRMS\CourierController::class, 'show'])
+            ->middleware('can:courier.view')
+            ->name('show');
+        Route::get('/{courier}/edit', [\App\Http\Controllers\HRMS\CourierController::class, 'edit'])
+            ->middleware('can:courier.edit')
+            ->name('edit');
+        Route::put('/{courier}', [\App\Http\Controllers\HRMS\CourierController::class, 'update'])
+            ->middleware('can:courier.edit')
+            ->name('update');
+        Route::delete('/{courier}', [\App\Http\Controllers\HRMS\CourierController::class, 'destroy'])
+            ->middleware('can:courier.delete')
+            ->name('destroy');
+        Route::get('/{courier}/values/{value}/download', [\App\Http\Controllers\HRMS\CourierController::class, 'downloadFile'])
+            ->middleware('can:courier.view')
+            ->name('values.download');
+    });
     Route::get('/lead-price-requests', [LeadProductPriceRequestController::class, 'index'])
         ->middleware('can:price_requests.view')
         ->name('lead-price-requests.index');

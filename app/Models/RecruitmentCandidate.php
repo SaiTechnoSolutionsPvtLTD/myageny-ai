@@ -86,6 +86,11 @@ class RecruitmentCandidate extends Model
         return $this->hasMany(RecruitmentCallUpdate::class)->latest('called_at');
     }
 
+    public function latestCallUpdate(): HasOne
+    {
+        return $this->hasOne(RecruitmentCallUpdate::class)->latestOfMany('called_at');
+    }
+
     public function interviews(): HasMany
     {
         return $this->hasMany(RecruitmentInterview::class)->latest('scheduled_at');

@@ -441,7 +441,7 @@ class DataVisibilityService
 
         $user ??= auth()->user();
         if ($user && $user->isHrOrAdmin()) {
-            return true;
+            return $query;
         }
 
         if ($user && $user->hasCustomerSupportLikeRole() && !$this->isCompanyWideUser($user)) {

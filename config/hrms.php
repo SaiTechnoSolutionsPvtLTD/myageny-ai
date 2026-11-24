@@ -37,4 +37,26 @@ return [
     |
     */
     'checkout_activity_restriction_enabled' => (bool) env('HRMS_CHECKOUT_ACTIVITY_RESTRICTION_ENABLED', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | HR Notification Email
+    |--------------------------------------------------------------------------
+    |
+    | Recipient email address for HR notifications (e.g., leave requests,
+    | early checkout alerts, etc.).
+    |
+    */
+    'hr_notification_email' => env('HRMS_NOTIFICATION_EMAIL', 'hr@saitechnosolutions.net'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Standard Evening Checkout Time
+    |--------------------------------------------------------------------------
+    |
+    | Standard evening checkout threshold (18:30:00 = 6:30 PM). Checkouts
+    | before this time will trigger an early checkout alert to HR.
+    |
+    */
+    'standard_checkout_time' => env('HRMS_STANDARD_CHECKOUT_TIME', '18:30:00'),
 ];

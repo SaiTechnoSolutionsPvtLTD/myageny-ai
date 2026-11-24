@@ -96,6 +96,8 @@ class OdApprovalAttendanceTest extends TestCase
 
         $this->assertNotNull($created);
         $this->assertEquals('10:00:00', $created->login_time);
+        $this->assertNull($created->logout_time);
+        $this->assertNull($created->logout_location);
         $this->assertEquals('od', $created->attendance_status);
         $this->assertEquals('On Duty (OD)', $created->login_location);
         $this->assertEquals('Client Meeting in Namakkal', $created->remarks);

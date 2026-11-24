@@ -963,3 +963,12 @@ Route::middleware('auth:sanctum')->prefix('mobile/support-tickets')->name('mobil
     Route::post('/{id}/status', [\App\Http\Controllers\App\SupportTicketApiController::class, 'updateStatus'])->name('update-status');
 });
 
+// Alias for /mobile/support to ensure backwards compatibility with both endpoint conventions
+Route::middleware('auth:sanctum')->prefix('mobile/support')->name('mobile.support.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\App\SupportTicketApiController::class, 'index']);
+    Route::get('/meta', [\App\Http\Controllers\App\SupportTicketApiController::class, 'meta']);
+    Route::get('/{id}', [\App\Http\Controllers\App\SupportTicketApiController::class, 'show']);
+    Route::post('/', [\App\Http\Controllers\App\SupportTicketApiController::class, 'store']);
+    Route::post('/{id}/status', [\App\Http\Controllers\App\SupportTicketApiController::class, 'updateStatus']);
+});
+

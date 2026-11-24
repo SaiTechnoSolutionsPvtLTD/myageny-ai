@@ -54,6 +54,8 @@ return [
         'client_id' => env( 'FACEBOOK_CLIENT_ID' ),
         'client_secret' => env( 'FACEBOOK_CLIENT_SECRET' ),
         'redirect' => 'https://app.myagenci.ai/settings/auth/facebook/callback',
+        'marketing_access_token' => env('FACEBOOK_MARKETING_ACCESS_TOKEN'),
+        'ad_account_id' => env('FACEBOOK_AD_ACCOUNT_ID'),
     ],
 
 

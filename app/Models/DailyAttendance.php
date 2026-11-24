@@ -59,6 +59,12 @@ class DailyAttendance extends Model
                 }
             }
         });
+
+        static::saved(function (DailyAttendance $attendance) {
+            if (! empty($attendance->logout_time) && ($attendance->wasRecentlyCreated || $attendance->wasChanged('logout_time'))) {
+                app(\App\Services\AttendanceNotificationService::class)->handleCheckoutSaved($attendance);
+            }
+        });
     }
 
     protected $fillable = [

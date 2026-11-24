@@ -23,6 +23,7 @@
         || request()->routeIs('visitor-management.*')
         || request()->routeIs('dynamic-forms.*')
         || request()->routeIs('facility-management.*')
+        || request()->routeIs('hrms.couriers.*')
         || request()->routeIs('settings.departments.*')
         || request()->routeIs('settings.leave-types.*')
         || request()->routeIs('settings.asset-categories.*')
@@ -173,6 +174,12 @@
                     </a>
                     <a href="{{ route('accounts.ad-budget.allocation-vs-spent') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.allocation-vs-spent') ? 'active' : '' }}">
                         Allocation Vs Spend
+                    </a>
+                    <a href="{{ route('accounts.ad-budget.spending-meta') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.spending-meta*') ? 'active' : '' }}">
+                        Spending Meta
+                    </a>
+                    <a href="{{ route('accounts.ad-budget.meta-payments') }}" class="submenu-item {{ request()->routeIs('accounts.ad-budget.meta-payments*') ? 'active' : '' }}">
+                        Meta Payments
                     </a>
                 </div>
                 @endif
@@ -950,6 +957,25 @@
                     </div>
                 </a>
                 @endcan
+                @endif
+
+                @if(! $hrmsSelfService)
+                @if(auth()->user()?->can('courier.menuview') || auth()->user()?->can('courier.view'))
+                <a href="{{ route('hrms.couriers.index') }}" class="nav-item {{ request()->routeIs('hrms.couriers.*') ? 'active' : '' }}">
+                    @if(request()->routeIs('hrms.couriers.*'))
+                        <div class="active-indicator"></div>
+                    @endif
+                    <div class="nav-content">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="1" y="3" width="15" height="13" rx="2"></rect>
+                            <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                            <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                            <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                        </svg>
+                        <span>Courier</span>
+                    </div>
+                </a>
+                @endif
                 @endif
 
                 <a href="{{ route('settings.holiday-calendars.index') }}" class="nav-item {{ request()->routeIs('settings.holiday-calendars.*') ? 'active' : '' }}">
